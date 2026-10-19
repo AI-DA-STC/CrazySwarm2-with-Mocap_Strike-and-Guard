@@ -17,6 +17,7 @@ enough, or before changing code.
 | [troubleshooting.md](troubleshooting.md) | Every known symptom, cause and fix |
 | [known-issues.md](known-issues.md) | The long story behind each silent failure, with evidence |
 | [server-changes.md](server-changes.md) | What this repo changed in the Crazyswarm2 server, and why |
+| [provenance.md](provenance.md) | Who owns each layer (Bitcraze, OptiTrack, IMRCLab, AI-DA-STC, this project), measured against upstream |
 
 **Diagrams:** every diagram in these docs is a slide in
 [`../diagrams/escort-diagrams.pptx`](../diagrams/escort-diagrams.pptx). Edit it in

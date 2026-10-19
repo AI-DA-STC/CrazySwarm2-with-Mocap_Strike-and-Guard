@@ -75,5 +75,5 @@ and [natnet_ros2](https://github.com/L2S-lab/natnet_ros2) (L2S-lab). All three a
 included in `src/` with local fixes, so a clone builds without fetching any other
 repository.
 The escort behaviour, the safety layer and the tools around them are this project's
-own. What changed in the Crazyswarm2 server is listed in
-[docs/details/server-changes.md](docs/details/server-changes.md).
+own. Who owns which layer, measured file by file:
+[docs/details/provenance.md](docs/details/provenance.md).
