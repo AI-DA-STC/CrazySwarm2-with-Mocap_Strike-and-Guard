@@ -72,8 +72,8 @@ This repo documents only the escort.
 Built on [Crazyswarm2](https://github.com/IMRCLab/crazyswarm2) (IMRCLab),
 [motion_capture_tracking](https://github.com/IMRCLab/motion_capture_tracking) (IMRCLab)
 and [natnet_ros2](https://github.com/L2S-lab/natnet_ros2) (L2S-lab). All three are
-included in `src/` with local fixes, so a clone builds without fetching any other
-repository.
+included in `src/` with local fixes. The one thing the first build downloads is
+OptiTrack's NatNet SDK, so build once on a network with internet.
 The escort behaviour, the safety layer and the tools around them are this project's
 own. Who owns which layer, measured file by file:
 [docs/details/provenance.md](docs/details/provenance.md).

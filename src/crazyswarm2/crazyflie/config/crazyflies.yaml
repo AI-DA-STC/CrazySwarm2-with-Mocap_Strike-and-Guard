@@ -47,7 +47,7 @@ robots:
     enabled: true
     uri: radio://0/80/2M/E7E7E7E704
     # Answered at 2M on 2026-10-02 (1 of 3 passes -- the scan is intermittent,
-    # see HANDOVER; it IS alive). It is therefore the drone most likely to
+    # it IS alive). It is therefore the drone most likely to
     # block the server's connect loop, so scan it first:
     # ./scripts/scan_fleet.sh
     # This mark is 1.431 m from cf5's -- clear of the 1 m rig rule, and both

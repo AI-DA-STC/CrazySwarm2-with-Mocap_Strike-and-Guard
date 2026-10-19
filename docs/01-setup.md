@@ -43,7 +43,9 @@ cd ~/escort-demo
 sudo apt install -y python3-scipy
 ```
 
-`setup.sh` installs the dependencies and builds everything. It must finish with a line
+`setup.sh` installs the dependencies and builds everything. Run it on a network with
+internet: the first build also downloads OptiTrack's NatNet SDK, and the Motive network
+has no internet. It must finish with a line
 starting `OK: motion_capture_tracking from .../install/...`. If it prints `ERROR`,
 fix that first (see [troubleshooting](05-troubleshooting.md)).
 
