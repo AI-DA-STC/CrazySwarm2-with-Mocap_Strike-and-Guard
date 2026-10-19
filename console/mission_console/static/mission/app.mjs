@@ -2,7 +2,7 @@
  *
  * The console is the generic tool -- every action, every check. This window
  * is the opposite: one mission spec (missions/<name>.yaml in the show's
- * package, see docs/MISSIONS.md) decides what is on screen, so a new demo
+ * package, see docs/details/mission-window.md) decides what is on screen, so a new demo
  * gets its own controls without anyone editing the console.
  *
  * Where each thing comes from -- nothing here is a second implementation:
@@ -928,7 +928,7 @@ function Picker() {
   return html`<div class="picker">
     <p class="lead">A mission view is a window built for one demo: its own controls, a live 3D view, the
       prompts it waits on as buttons. Each one is a <code>${'missions/<name>.yaml'}</code> in the show's package
-      (docs/MISSIONS.md) -- add a file and it appears here.</p>
+      (docs/details/mission-window.md) -- add a file and it appears here.</p>
     <div class="cards">${s.missions.map((m) => html`<a class=${'mcard ' + (m.error ? 'bad' : '') + (m.build && !m.build.ok ? ' unbuilt' : '')} href=${m.error ? undefined : '/mission?m=' + encodeURIComponent(m.id)}>
       <div class="mt">${m.title}${m.running.length ? html` <span class="st running">running</span>` : ''}
         ${m.build && !m.build.ok ? html` <span class="st failed">${m.build.problems.length ? 'not built' : 'restart console'}</span>` : ''}</div>

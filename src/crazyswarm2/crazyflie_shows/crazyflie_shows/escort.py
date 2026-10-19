@@ -17,7 +17,7 @@ Why rotate the ring instead of reassigning drones to slots
 ----------------------------------------------------------
 Reassignment is the obvious move and it is the wrong one here: two drones
 swapping slots fly through each other, and this rig has no onboard collision
-avoidance (that is the 2026-08-04 collision, HANDOVER.md section 6). Rotating
+avoidance (that is the 2026-08-04 collision, docs/details/known-issues.md). Rotating
 the ring keeps the slot *order* fixed forever -- the drones never exchange
 places, the spacing stays 2*pi/n by construction, and the only thing that
 changes is one angle.
@@ -46,7 +46,7 @@ budget.
 
 Numbers that are still open
 ---------------------------
-See ESCORT.md "Decisions still open". In short: ``ring_radius``, ``height``
+See docs/details/design-notes.md "Decisions still open". In short: ``ring_radius``, ``height``
 and ``v_max`` are defaults inherited from the follow-drone prototype
 (min 1.5 m standoff, 0.6 m/s cap), not measured on this rig, and
 ``v_max = 0.6`` bounds how fast the VIP may walk -- see
@@ -70,7 +70,7 @@ class EscortConfig:
     # -- the ring ---------------------------------------------------------
     n_defenders: int = 3
     #: 1.00 m, down from 1.50 m (inherited from the follow-drone prototype and
-    #: flagged in ESCORT.md as "not measured on this rig") via 1.20 m. Every
+    #: flagged in docs/details/design-notes.md as "not measured on this rig") via 1.20 m. Every
     #: step was paid for by the measured volume: flying cf1 a slow spiral on
     #: 2026-10-01 lost mocap at 2.24 m radius, and the arena a ring needs for a
     #: working approach/retreat cycle is ring + min_adv_sep + 0.3 m of run-up
@@ -634,7 +634,7 @@ def max_vip_speed(cfg):
     0.15 m/s against the script (2026-10-12). Buying more of it means
     raising v_max (a safety decision about flying faster next to a person),
     slowing the ring (a slower block), or shrinking the radius (less room
-    between the drones and the person) -- see ESCORT.md.
+    between the drones and the person) -- see docs/details/design-notes.md.
     """
     return cfg.v_max - cfg.ring_radius * cfg.phase_rate
 
@@ -698,7 +698,7 @@ def check_config(cfg, moving_vip=True):
         bad.append(f'max_vip_speed {max_vip_speed(cfg):.2f} m/s: after turning '
                    'the ring there is no speed budget left to follow a moving '
                    'VIP. Fine for the static-point stage, not for a walking '
-                   'person -- see ESCORT.md "Decisions still open"')
+                   'person -- see docs/details/design-notes.md "Decisions still open"')
     return bad
 
 
@@ -1058,7 +1058,7 @@ def check_gather(src, dst, labels, cfg, min_sep=None):
     2026-09-24 the gather happens to clear at 1.27 m. "Happens to" is not a
     safety argument: the drones move to the ring TOGETHER, the firmware has no
     collision avoidance, and wrong-corner placement is the 2026-08-04 collision
-    (HANDOVER.md section 6). ``src``/``dst`` include the adversary when it is
+    (docs/details/known-issues.md). ``src``/``dst`` include the adversary when it is
     one of ours, because it flies the same leg at the same time.
     """
     min_sep = safety.PLAN_SEPARATION if min_sep is None else min_sep

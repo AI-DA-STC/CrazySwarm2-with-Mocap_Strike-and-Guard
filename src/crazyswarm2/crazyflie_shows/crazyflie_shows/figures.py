@@ -355,7 +355,7 @@ def fit_trajectory(pos_fn, duration, n_pieces=6, degree=PIECE_DEGREE,
     ``yaw`` is the 4th channel. Every figure in this package leaves it at 0:
     the drones keep a fixed heading and translate, which keeps the mocap
     rigid-body solve well conditioned and avoids the yaw-offset fly-away
-    described in HANDOVER.md section 6.
+    described in docs/details/known-issues.md.
     """
     if boundaries is None:
         boundaries = np.linspace(0.0, duration, n_pieces + 1)

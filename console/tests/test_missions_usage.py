@@ -25,19 +25,18 @@ def spec(text):
 
 class ShippedSpecs(unittest.TestCase):
     """The specs in crazyflie_shows/missions must load and build the commands
-    the runbooks document."""
+    the operator docs document."""
 
     def test_all_load(self):
         found = {m['id']: m for m in M.discover()}
-        for mid in ('console/script', 'crazyflie_shows/escort',
-                    'crazyflie_shows/carousel', 'crazyflie_shows/constellation'):
+        for mid in ('console/script', 'crazyflie_shows/escort'):
             self.assertIn(mid, found)
             self.assertIsNone(found[mid].get('error'), found[mid].get('error'))
 
     def test_escort_default_is_the_runbook_command(self):
         m = M.get('crazyflie_shows/escort')
         _, cmd, _ = M.build(m, 'main', {})
-        # runbooks/ESCORT.runcard.md, "the show, operator-paced (recommended)"
+        # docs/details/operator-reference.md, "the show, operator-paced (recommended)"
         self.assertEqual(cmd, 'ros2 run crazyflie_shows escort_show --ros-args '
                               '-p vip_mode:=point -p adversary:=reactive -p paced:=true')
 

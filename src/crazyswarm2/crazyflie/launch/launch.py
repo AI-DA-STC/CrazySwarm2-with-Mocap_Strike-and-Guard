@@ -154,7 +154,7 @@ def parse_yaml(context):
     # Packet tracing, off unless asked for:  trace_cf:=all   or  trace_cf:=cf1,cf3
     # `ros2 launch` has no --ros-args, so this has to be a launch argument that is
     # folded into the server's parameters here. Read at connect by design (this
-    # rig's same-process /parameter_events never loop back -- see CLAUDE.md).
+    # rig's same-process /parameter_events never loop back -- see docs/details/known-issues.md).
     server_params[1]['debug.trace_cf'] = \
         LaunchConfiguration('trace_cf').perform(context)
 

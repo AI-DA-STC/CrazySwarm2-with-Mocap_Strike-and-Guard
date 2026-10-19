@@ -112,7 +112,7 @@ class Teleop(Node):
         topic = self._p('topic', VIP_TOPIC if is_vip else ADVERSARY_TOPIC)
         # A VIP is a person on the floor; the adversary is a drone at the
         # defenders' altitude -- never above them, or its downwash lands on a
-        # drone that cannot spare the thrust (ESCORT.md).
+        # drone that cannot spare the thrust (docs/details/design-notes.md).
         home = escort.vip_home(self.cfg)
         if is_vip:
             start = np.array([self._p('x', float(home[0])),

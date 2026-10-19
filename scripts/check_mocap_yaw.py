@@ -17,7 +17,7 @@ fused into each drone's estimator**. A rigid body whose X axis does not lie
 along the airframe's nose therefore tells the drone it is facing somewhere it
 is not, and its position corrections push the wrong way: destabilisation and
 drift within a second or two of takeoff. At rest it looks perfect, which is
-what makes it dangerous (CLAUDE.md, "Rigid-body orientation").
+what makes it dangerous (docs/details/known-issues.md, "Rigid-body orientation").
 
 How to use it
 -------------
@@ -41,7 +41,7 @@ import sys
 
 import numpy as np
 
-TOL_GOOD = 5.0     # deg -- CLAUDE.md: within 5 is flyable
+TOL_GOOD = 5.0     # deg -- docs/details/known-issues.md: within 5 is flyable
 TOL_FIX = 15.0     # deg -- 5..15 fix first; beyond 15, do not fly
 
 

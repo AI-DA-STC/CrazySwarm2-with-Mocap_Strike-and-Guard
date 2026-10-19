@@ -246,7 +246,7 @@ p = strip_empty(p)
 yaml.safe_dump({'/motion_capture_tracking': {'ros__parameters': p}}, open(sys.argv[2], 'w'))
 PY
   # The workspace's VENDORED driver, never the apt one: apt 1.0.9 hard-codes a
-  # foreign interface IP and is not installed on this rig (see CLAUDE.md). The
+  # foreign interface IP and is not installed on this rig (see docs/details/known-issues.md). The
   # workspace root is four levels above this package's config dir.
   WS="$(cd "$PKG_CFG/../../../.." 2>/dev/null && pwd)"
   NODE="$WS/install/motion_capture_tracking/lib/motion_capture_tracking/motion_capture_tracking_node"

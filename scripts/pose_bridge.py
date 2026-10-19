@@ -43,7 +43,7 @@ from rclpy.qos import (QoSDurabilityPolicy, QoSHistoryPolicy, QoSProfile,
 
 #: Hz. Must match what Motive streams (50 Hz on this rig) -- publishing faster
 #: than the data arrives just repeats samples, and the server's own pose age
-#: checks then never see a dropout. docs/MOCAP.md quoted this constant for a
+#: checks then never see a dropout. docs/details/mocap.md quoted this constant for a
 #: while before it existed; the file hardcoded 240 in two places.
 PUBLISH_HZ = 50.0
 
