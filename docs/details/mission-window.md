@@ -115,6 +115,8 @@ helpers:                        # extra processes that go with the mission
 topics:
   markers: [/escort/markers]    # visualization_msgs/MarkerArray topics to draw
 
+arena: room                     # the boundary the 3D view draws -- see below
+
 gate:                           # `gate: false` for a show that never waits
   prompt: '^\s*>>>\s*(?P<text>.+)$'   # a line that opens a gate; group `text` is shown
   until: '\[q\]\s*land'         # the line that ends the prompt block (lines between = details)
@@ -136,6 +138,30 @@ layout:                         # which widgets, where. Defaults shown.
   bottom: [events, output]
 view: escort_view.mjs           # optional custom module next to the spec (section 5)
 ```
+
+**The boundary (`arena:`).** What the 3D (and 2D) view draws as the edge of
+the flight area. It is a picture: nothing reads it to enforce anything, so draw
+what the show's own checks use.
+
+```yaml
+arena: room                     # the measured room in arena.yaml (what safety.py and
+                                #   the escort planner check)
+arena: none                     # nothing; grid and axes only
+arena:                          # a boundary of the mission's own
+  rect: [-2.0, -2.0, 2.0, 2.0]  # x0, y0, x1, y1 in metres, world frame
+  label: STL game square 4 x 4 m
+arena:                          # or several, drawn together
+  - room
+  - {circle: [0.0, 0.0, 1.5], label: inner zone, color: '#58a6ff', dashed: true, ceiling: 2.0}
+```
+
+A `rect` or `circle` takes an optional `label`, `ceiling` (m; draws the cage
+top), `color` (`'#rrggbb'`, default the room's amber) and `dashed`. A spec
+**without** `arena:` gets `missions.DEFAULT_ARENA`, which is `none`: a window draws
+the measured room only when its spec asks. `escort.yaml` says `arena: room`;
+`stl.yaml` draws its game square. A custom boundary's numbers are written in the
+spec, since a spec cannot import the show; say in a comment where they come from
+and keep the two in step.
 
 **Regexes.** The patterns run in the browser (JavaScript), and are validated by
 the console (Python) when the spec loads. Write named groups either way —
