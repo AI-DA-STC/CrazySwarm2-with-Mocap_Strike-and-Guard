@@ -14,10 +14,6 @@ __pycache__/
 *.egg-info/
 .venv/
 
-# ---- media source files (keep the small web-friendly derivatives, not the raw exports) ----
-# The README embeds the compressed video/*.mp4; the large raw .mov exports stay local.
-video/*.mov
-
 # ---- crazyflie firmware TOC caches ----
 # cflib also writes a cache/ directory of per-firmware param/log TOC JSON into
 # the working directory (cache/<firmware-hash>.json). Same story as the csv

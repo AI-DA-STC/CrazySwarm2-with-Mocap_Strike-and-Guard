@@ -48,11 +48,11 @@ call takeoff/arm/estop; you only assess. The human runs the buttons.
 - **err position** steady offset → frame/marker config issue (**config-editor**);
   **diverging** error → kalman not fusing mocap (**mocap-doctor**).
 
-## Flowdeck vs no-flowdeck (from the reference images in `Pics/`)
+## Flowdeck vs no-flowdeck (from the reference images in `docs/img/`)
 
 - **With a Flow deck**, `range.zrange` and `motion.deltaX/deltaY` carry real optical-flow
-  / height data (healthy_preflight_with_flowdeck, healthy_after_flying_w_Flowdeck).
-- **Without a Flow deck** (healthy_readings_without_flowdeck), flow/range channels sit
+  / height data (`preflight-healthy-flowdeck.png`, `preflight-during-flight.png`).
+- **Without a Flow deck** (`preflight-healthy-no-flowdeck.png`), flow/range channels sit
   flat/idle — that is expected, NOT a fault. Judge such a drone on mocap + battery + yaw,
   not on flow.
 

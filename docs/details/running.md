@@ -139,7 +139,7 @@ cause on this rig). See [troubleshooting.md](troubleshooting.md#mocap-pipeline).
 > **Alternative (open NatNet driver).** If you stream via the open-source
 > `natnet_ros2` driver instead of the closed-source direct client, start it and
 > the bridge separately: `ros2 launch natnet_ros2 natnet_ros2.launch.py` then
-> `python3 ~/CrazySwarm2-with-Mocap/scripts/pose_bridge.py` (republishes per-body poses to `/poses`
+> `python3 scripts/pose_bridge.py` from the repo root (republishes per-body poses to `/poses`
 > at 50 Hz). The flight steps above are otherwise identical.
 
 ## F. Useful checks
