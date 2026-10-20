@@ -7,14 +7,14 @@
 # the show's own markers. Delete this file and escort_show is unchanged; it is
 # a description of how to RUN the show, not part of it.
 #
-# The format is documented in docs/MISSIONS.md.
+# The format is documented in docs/details/mission-window.md.
 mission: 1
 title: Escort demo
 summary: >
   Three defenders hold a ring round a VIP and rotate it so one stands on the
   VIP-adversary bearing; a fourth drone probes. Operator-paced by default:
   every leg waits for Continue, and Land ends it.
-docs: runbooks/ESCORT.runcard.md
+docs: docs/details/escort-reference.md
 run: escort_show
 flight: true
 # escort_show calls abort.take_signals(): one SIGINT = land where they are.
@@ -65,7 +65,7 @@ helpers:
     when: {vip_mode: manual}
     autostart: true
     teleop: planar
-    # ESCORT.runcard.md: "Start the teleop, then touch nothing until ESCORT
+    # docs/details/escort-reference.md: "Start the teleop, then touch nothing until ESCORT
     # LIVE appears" -- a target already moving makes the gather refuse.
     enable_after: 'ESCORT LIVE'
   adversary_keys:
@@ -79,6 +79,10 @@ helpers:
 
 topics:
   markers: [/escort/markers]
+
+# The measured room (arena.yaml): escort.py and plan_escort check the plan against it, so this
+# window draws it. Without this line a window draws nothing (DEFAULT_ARENA).
+arena: room
 
 gate:
   # operator_gate() and every paced leg print ">>> ..." then CONTINUE_HINT

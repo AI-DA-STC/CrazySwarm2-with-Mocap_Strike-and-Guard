@@ -90,7 +90,7 @@ PRECURSOR_S = 60.0
 #: runs. eadcda1 edited this file AFTER the watchdog landed, saying the
 #: recorder would now "show the outage itself", while leaving the trigger
 #: unable to see it. Absence of stall dumps then reads as absence of stalls --
-#: exactly the trap CLAUDE.md records being burned by on 2026-10-02.
+#: exactly the trap docs/details/known-issues.md records being burned by on 2026-10-02.
 #:
 #: A gap is also the right measurement: it is what the drone's own firmware
 #: times out on (1 s without receiving anything -> logReset + crtpReset).

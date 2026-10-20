@@ -74,7 +74,7 @@ from collections import defaultdict
 DEFAULT_SAMPLES = 50           # ~1 s at the rig's 50 Hz streaming rate
 DEFAULT_TIMEOUT = 10.0         # s to wait for that many samples
 JITTER_ABORT_M = 0.010         # 10 mm: body moving / tracking unstable -> refuse
-MIN_SEPARATION_M = 1.0         # CLAUDE.md rig rule: enabled drones >= 1 m apart
+MIN_SEPARATION_M = 1.0         # docs/details/known-issues.md rig rule: enabled drones >= 1 m apart
 Z_SANITY_M = 0.5               # a grounded drone should not be this high
 
 DEFAULT_YAML = os.path.join(

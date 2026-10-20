@@ -81,7 +81,7 @@
           cf_cameras:      # names of crazyflies with cameras on them if enabled in `crazyflies.yaml`
             # cf231 is an UPSTREAM PLACEHOLDER, not a drone on this rig -- it
             # exists nowhere in crazyflies.yaml. Harmless while blender is
-            # disabled above; it is listed in docs/TROUBLESHOOTING.md so the
+            # disabled above; it is listed in docs/details/troubleshooting.md so the
             # name does not send anyone hunting for a sixth drone.
             cf231:
               calibration:

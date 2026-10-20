@@ -275,11 +275,11 @@ def build_catalog(fleet):
         'launch.stack', 'Launch', 'Start the stack', launch_build,
         why='Starts everything in one process tree: mocap tracking, the crazyflie '
             'server (which owns the Crazyradio), RViz, the preflight GUI and the '
-            'Foxglove bridge. This is "terminal 1" in docs/RUNNING.md section B.',
+            'Foxglove bridge. This is "terminal 1" in docs/details/running.md section B.',
         teaches='`ros2 launch <package> <file>` runs a launch file. Everything after '
                 'it is a launch ARGUMENT in name:=value form -- that is launch syntax, '
                 'not shell syntax, so there are no spaces around :=.',
-        kind='service', requires='stack_stopped', docs='docs/RUNNING.md',
+        kind='service', requires='stack_stopped', docs='docs/details/running.md',
         params=stack_params))
 
     def mocap_only_build(v):
@@ -298,7 +298,7 @@ def build_catalog(fleet):
             'with "Restart with the server".',
         teaches='server:=False is a launch argument of crazyflie/launch.py. The preflight GUI '
                 'is left off: with no server there is nothing for it to show.',
-        kind='service', requires='stack_stopped', docs='docs/MOCAP.md#2b-setting-initial_position-from-poses',
+        kind='service', requires='stack_stopped', docs='docs/details/mocap.md#2b-setting-initial_position-from-poses',
         params=[q for q in stack_params if q['name'] in ('rviz', 'foxglove', 'mocap_hostname')]))
 
     acts.append(action(
@@ -314,7 +314,7 @@ def build_catalog(fleet):
                 'the launch, so Stop on this process signals the launch itself.',
         kind='service', requires='any', danger='flight',
         confirm='Restart the stack? Anything flying loses its commander -- land first.',
-        docs='docs/RUNNING.md', params=stack_params))
+        docs='docs/details/running.md', params=stack_params))
 
     acts.append(action(
         'launch.sim', 'Launch', 'Start the simulator stack',
@@ -324,7 +324,7 @@ def build_catalog(fleet):
         teaches='Same launch file, one argument different. Flight scripts then need '
                 '--ros-args -p use_sim_time:=true, because the sim clock runs ~4x '
                 'slower than wall time.',
-        kind='service', requires='stack_stopped', docs='docs/RUNNING.md#a-simulation-no-hardware-no-mocap'))
+        kind='service', requires='stack_stopped', docs='docs/details/running.md#a-simulation-no-hardware-no-mocap'))
 
     acts.append(action(
         'launch.stop', 'Launch', 'Stop the stack', 
@@ -339,7 +339,7 @@ def build_catalog(fleet):
                 'started. Signal the processes themselves, then confirm the port is '
                 'free -- `ss -uanp | grep :1511` is the check that matters, because a '
                 'leftover there breaks the NEXT run, not this one.',
-        requires='any', danger='flight', docs='docs/TROUBLESHOOTING.md',
+        requires='any', danger='flight', docs='docs/details/troubleshooting.md',
         confirm='Stop the stack? If drones are in the air this removes their commander '
                 '-- land them first.',
         params=[
@@ -372,7 +372,7 @@ def build_catalog(fleet):
                 'scan sweeps channels/datarates at one address and prints the URIs that '
                 'answered -- which is also how you discover a datarate mismatch (a 2M URI '
                 'on a 1M drone hangs the server forever).',
-        requires='server_stopped', docs='docs/TROUBLESHOOTING.md#crazyradio--drones'))
+        requires='server_stopped', docs='docs/details/troubleshooting.md#crazyradio--drones'))
 
     acts.append(action(
         'check.scan_one', 'Preflight', 'Scan one address',
@@ -403,7 +403,7 @@ def build_catalog(fleet):
             'NatNet datagram to only ONE of them, so the mocap node starves and hangs '
             'silently inside connect(). Two sockets here = that bug.',
         teaches='ss -uanp = UDP, all sockets, numeric, with the owning process.',
-        docs='docs/TROUBLESHOOTING.md#mocap-pipeline'))
+        docs='docs/details/troubleshooting.md#mocap-pipeline'))
 
     acts.append(action(
         'check.mocap_procs', 'Preflight', 'Leftover mocap processes?',
@@ -509,7 +509,7 @@ def build_catalog(fleet):
         teaches='initial_position seeds the onboard estimate at connect. It must come '
                 'from /poses (the mocap\'s view), never from /cfX/pose -- the onboard '
                 'estimate was seeded by this same yaml, so copying it back is circular.',
-        docs='docs/MOCAP.md#2b-setting-initial_position-from-poses'))
+        docs='docs/details/mocap.md#2b-setting-initial_position-from-poses'))
 
     acts.append(action(
         'pos.sync_apply', 'Fleet position', 'Apply initial_position sync',
@@ -520,7 +520,7 @@ def build_catalog(fleet):
             'read only at launch. Re-run the show\'s planner after every sync.',
         requires='mocap_running',
         confirm='This rewrites crazyflies.yaml from the live mocap. Continue?',
-        docs='docs/MOCAP.md#2b-setting-initial_position-from-poses'))
+        docs='docs/details/mocap.md#2b-setting-initial_position-from-poses'))
 
     # ---------------------------------------------------------------- flight
     # One card per KIND of run, not per script: the script is a dropdown filled
@@ -575,7 +575,7 @@ def build_catalog(fleet):
                        '(shown above) for what it accepts -- escort_show does '
                        'nothing useful without these.'),
             ],
-            docs='docs/RUNNING.md#multi-drone-trajectory-demos'))
+            docs='docs/details/running.md'))
 
     if grounds:
         acts.append(action(
@@ -691,7 +691,7 @@ def build_catalog(fleet):
         teaches='`ros2 param set <node> <name> <value>`. The server maps '
                 'all.params.<group>.<name> to a firmware parameter broadcast; '
                 'cf1.params.<group>.<name> targets one drone.',
-        requires='server_running', docs='docs/RUNNING.md#runtime-firmware-parameters'))
+        requires='server_running', docs='docs/details/running.md#runtime-firmware-parameters'))
 
     acts.append(action(
         'param.reset_kalman_off', 'Parameters', 'Clear the Kalman reset flag',
@@ -738,7 +738,7 @@ def build_catalog(fleet):
         params=[p('color', 'colour', 'select', '1',
                   ['0', '1', '2', '3', '4', '5', '9'],
                   '0 off, 1 green, 2 red, 3 yellow, 4 blue, 5 purple, 9 white')],
-        docs='docs/RUNNING.md#color-led-deck--status-convention-and-manual-control'))
+        docs='docs/details/running.md#color-led-deck--status-convention-and-manual-control'))
 
     # ------------------------------------------------------------- recovery
     acts.append(action(

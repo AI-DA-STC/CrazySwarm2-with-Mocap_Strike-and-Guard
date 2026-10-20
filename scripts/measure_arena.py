@@ -241,7 +241,7 @@ def report(a, cfg_radius=2.5, cfg_ceiling=2.0, cfg_floor=0.3):
     if found_edge and suggest_r > cfg_radius:
         print(f'  The volume is bigger than the configured {cfg_radius:.2f} m. '
               'For the escort\n  that buys keep-in radius for a piloted VIP '
-              'one-for-one (ESCORT.md).\n')
+              'one-for-one (docs/details/escort-design-notes.md).\n')
     elif found_edge and suggest_r < cfg_radius:
         print(f'  *** The volume is SMALLER than the configured '
               f'{cfg_radius:.2f} m. Anything planned\n      against the old '

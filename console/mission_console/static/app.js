@@ -1124,7 +1124,7 @@ function renderMissions() {
   const sig = JSON.stringify([S.missions.map((m) => [m.id, m.error, m.build && m.build.ok]), [...running]]);
   if (el.dataset.sig === sig) return;
   el.dataset.sig = sig;
-  el.innerHTML = `<span class="dm-label" title="Each one is missions/<name>.yaml in a show package (docs/MISSIONS.md)">Missions</span>` +
+  el.innerHTML = `<span class="dm-label" title="Each one is missions/<name>.yaml in a show package (docs/details/mission-window.md)">Missions</span>` +
     S.missions.map((m) => {
       const nb = m.build && !m.build.ok;
       const why = nb ? (m.build.problems.length ? 'NOT BUILT: ' + m.build.problems.join('; ') + '\nfix: ' + m.build.build_cmd

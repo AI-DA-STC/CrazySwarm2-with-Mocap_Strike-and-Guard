@@ -1,6 +1,6 @@
 """Constellation -- the second show. Five drones are five points; draw with them.
 
-Built from the research dossier in ``reference/complex-shows-report.html``
+Built from the research dossier ``complex-shows-report.html`` (not shipped in this repo)
 ("Beyond the Carousel"). ``swarm_show`` is rings: every figure is a variation
 on a regular n-gon. This show is **shapes** -- the ring, a pyramid, an arrow,
 a spiral staircase -- joined by morphs, with the vertical axis finally in use.

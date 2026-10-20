@@ -25,19 +25,18 @@ def spec(text):
 
 class ShippedSpecs(unittest.TestCase):
     """The specs in crazyflie_shows/missions must load and build the commands
-    the runbooks document."""
+    the operator docs document."""
 
     def test_all_load(self):
         found = {m['id']: m for m in M.discover()}
-        for mid in ('console/script', 'crazyflie_shows/escort',
-                    'crazyflie_shows/carousel', 'crazyflie_shows/constellation'):
+        for mid in ('console/script', 'crazyflie_shows/escort'):
             self.assertIn(mid, found)
             self.assertIsNone(found[mid].get('error'), found[mid].get('error'))
 
     def test_escort_default_is_the_runbook_command(self):
         m = M.get('crazyflie_shows/escort')
         _, cmd, _ = M.build(m, 'main', {})
-        # runbooks/ESCORT.runcard.md, "the show, operator-paced (recommended)"
+        # docs/details/escort-reference.md, "the show, operator-paced (recommended)"
         self.assertEqual(cmd, 'ros2 run crazyflie_shows escort_show --ros-args '
                               '-p vip_mode:=point -p adversary:=reactive -p paced:=true')
 
@@ -109,6 +108,33 @@ class SpecValidation(unittest.TestCase):
         for bad in (r'a(?i)b', r'(?m)^x', r'(?s:.)'):
             with self.assertRaises(M.SpecError):
                 M._regex(bad, 'x')
+
+    def test_arena(self):
+        # absent -> DEFAULT_ARENA; the shipped shows that plan against
+        # arena.yaml say so explicitly, so they never depend on the default
+        self.assertEqual(M._arena(None), M._arena(M.DEFAULT_ARENA))
+        self.assertEqual(M._arena('room'), [{'kind': 'room'}])
+        self.assertEqual(M._arena('none'), [])
+        self.assertEqual(M._arena(False), [])
+        two = M._arena(['room', {'circle': [0, 0, 1.5], 'label': 'c', 'ceiling': 2}])
+        self.assertEqual([e['kind'] for e in two], ['room', 'circle'])
+        self.assertEqual(two[1]['circle'], [0.0, 0.0, 1.5])
+        self.assertEqual(two[1]['ceiling'], 2.0)
+        for bad in ({'rect': [1, 0, 0, 1]}, {'rect': [0, 0, 1]}, {'rect': [0, 0, 'a', 1]},
+                    {'circle': [0, 0, 0]}, {'rect': [0, 0, 1, 1], 'circle': [0, 0, 1]},
+                    {'rect': [0, 0, 1, 1], 'color': 'red'}, {'rect': [0, 0, 1, 1], 'oops': 1},
+                    {'rect': [0, 0, 1, 1], 'ceiling': -1}, {'rect': [0, 0, True, 1]}, 'roomy'):
+            with self.assertRaises(M.SpecError, msg=repr(bad)):
+                M._arena(bad)
+
+    def test_shipped_arenas(self):
+        d = os.path.join(os.path.dirname(__file__), '..', '..', 'src', 'crazyswarm2',
+                         'crazyflie_shows', 'missions')
+        for name in ('escort',):
+            m = M.load(os.path.join(d, name + '.yaml'), 'crazyflie_shows', name)
+            self.assertEqual(m['arena'], [{'kind': 'room'}], name)
+        stl = M.load(os.path.join(d, 'stl.yaml'), 'crazyflie_shows', 'stl')
+        self.assertEqual([e['rect'] for e in stl['arena']], [[-2.0, -2.0, 2.0, 2.0]])
 
     def test_asset_path_stays_in_the_spec_dir(self):
         with tempfile.TemporaryDirectory() as d:

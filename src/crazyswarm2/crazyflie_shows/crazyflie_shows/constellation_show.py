@@ -2,7 +2,7 @@
 """Fly the constellation show: five drones drawing shapes, on a beat, with lights.
 
 A ~76 s arch through a pentagon, an arrow, a pyramid and a spiral staircase
-and back, built from the research in reference/complex-shows-report.html.
+and back, built from the research in complex-shows-report.html (not shipped in this repo).
 Every leg is verified in plan view before anything is armed.
 
     ros2 launch crazyflie_shows show_launch.py backend:=sim

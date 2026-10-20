@@ -94,7 +94,7 @@ class ShowConfig:
     #: from ``crazyflies.yaml``, which is usually right and is self-correcting
     #: if you move the fleet. Set it explicitly to the hand-measured room
     #: centre if the drones do not start symmetrically about it.
-    #: HANDOVER.md section 3 records ``(0.0467, -0.1037)`` as the hand-measured
+    #: the retired HANDOVER.md (git history), section 3, records ``(0.0467, -0.1037)`` as the hand-measured
     #: value, next to a computed centroid of ``(0.068, -0.109)``.
     room_center: tuple = None
 

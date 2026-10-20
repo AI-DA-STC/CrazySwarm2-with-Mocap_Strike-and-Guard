@@ -78,7 +78,7 @@ def wait_for_poses(node, cfs, timeout=25.0, report_every=5.0):
     estimate is the Kalman filter with the mocap position fused in, so a drone
     publishing a sane pose has proved the whole chain -- Motive, the multicast
     join, the server, the radio link -- end to end. A drone that publishes
-    nothing has proved none of it, and per HANDOVER.md section 6 flying it is
+    nothing has proved none of it, and per docs/details/known-issues.md flying it is
     the fly-away case.
     """
     t0 = node.get_clock().now().nanoseconds
@@ -183,8 +183,9 @@ def wait_for_mocap(node, names, timeout=MOCAP_WAIT_S, fresh=MOCAP_FRESH_S):
 def check_placement(node, cfs, names, plan, tol, **kwargs):
     """Refuse to fly if any drone is not where its ``initial_position`` says.
 
-    This is the check that the 2026-08-04 collision needed (HANDOVER.md
-    section 6: "Wrong-corner placement produced the real collision"). The whole
+    This is the check that the 2026-08-04 collision needed
+    (docs/details/known-issues.md: wrong-corner placement produced the real
+    collision). The whole
     plan -- slot assignment, gather leg, every separation number -- is derived
     from the yaml positions. A drone in the wrong corner does not make the
     plan wrong on paper; it makes the paper irrelevant.
@@ -203,7 +204,7 @@ def check_placement(node, cfs, names, plan, tol, **kwargs):
             f'\n  NO POSE from: {", ".join(silent)}\n'
             '  These drones have never published /cfX/pose, so nothing has\n'
             '  confirmed they are being tracked. Flying an untracked drone is\n'
-            '  the fly-away case (HANDOVER.md 6). Check, in this order:\n'
+            '  the fly-away case (docs/details/known-issues.md). Check, in this order:\n'
             f'  Nothing arrived in {POSE_WAIT_S:.0f} s, which is longer than this '
             'radio\'s usual dropouts. Check, in this order:\n'
             '    ros2 topic hz /poses                  # is the mocap stream alive?\n'
@@ -237,7 +238,7 @@ def check_placement(node, cfs, names, plan, tol, **kwargs):
             + f'\n  (tolerance {tol:.2f} m)\n'
             '  Either move the drone to its initial_position, or update\n'
             '  initial_position in crazyflie/config/crazyflies.yaml from /poses (never\n'
-            '  from /cfX/pose - HANDOVER.md 6), rebuild, and re-run plan_show.\n')
+            '  from /cfX/pose - docs/details/known-issues.md), rebuild, and re-run the planner.\n')
 
 
 def main():

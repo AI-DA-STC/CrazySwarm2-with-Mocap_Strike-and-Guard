@@ -99,6 +99,6 @@ cat <<EOF
    ./scripts/setup_sim_firmware.sh        # builds the cffirmware bindings
    ros2 launch crazyflie launch.py backend:=sim rviz:=True
 
- Hardware: see docs/RUNNING.md.
+ Next: docs/02-flight-day.md.
 ==================================================================
 EOF

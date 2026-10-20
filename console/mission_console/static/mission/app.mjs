@@ -2,7 +2,7 @@
  *
  * The console is the generic tool -- every action, every check. This window
  * is the opposite: one mission spec (missions/<name>.yaml in the show's
- * package, see docs/MISSIONS.md) decides what is on screen, so a new demo
+ * package, see docs/details/mission-window.md) decides what is on screen, so a new demo
  * gets its own controls without anyone editing the console.
  *
  * Where each thing comes from -- nothing here is a second implementation:
@@ -24,6 +24,7 @@ import { h, html, render, Component, useState, useEffect, useRef, useMemo, useCa
 import { Bridge } from './ros.mjs';
 import { createScene } from './scene.mjs';
 import { createPlan2D } from './plan2d.mjs';
+import { resolveBoundaries } from './boundary.mjs';
 
 /* ================================================================ store */
 const Q = new URLSearchParams(location.search);
@@ -364,11 +365,16 @@ function Scene() {
     window.__scene = sc.current;          // for a custom view, and for debugging
     return () => sc.current.dispose();
   }, []);
+  // The boundary is the mission's own `arena:` (missions._arena); a window
+  // with no spec uses the server's default, so both follow DEFAULT_ARENA.
+  const shapes = useMemo(() => (s.arena
+    ? resolveBoundaries(s.mission ? s.mission.arena : s.arena.default_arena, s.arena.arena)
+    : []), [s.arena, s.mission]);
   useEffect(() => {
     if (!sc.current || !s.arena) return;
-    sc.current.setArena(s.arena.arena);
+    sc.current.setArena(shapes);
     sc.current.setMarks(s.arena.fleet);
-  }, [s.arena]);
+  }, [shapes]);
   useEffect(() => { sc.current && sc.current.setView(view); try { localStorage.setItem('mw_view', view); } catch (e) { /* */ } }, [view]);
   useEffect(() => { sc.current && sc.current.setTrails(trails); }, [trails]);
 
@@ -438,8 +444,10 @@ function Scene() {
     </div>
     <div class="legend">
       <span><i class="sw drone"></i>drone (mocap)</span><span><i class="sw est"></i>onboard estimate</span>
-      <span><i class="sw tgt"></i>other rigid body</span><span><i class="sw tested"></i>radius_tested</span>
-      <span><i class="sw lost"></i>radius_lost</span><span><i class="sw mark"></i>parking mark</span>
+      <span><i class="sw tgt"></i>other rigid body</span>
+      ${shapes.some((x) => x.kind === 'room') && html`<span><i class="sw tested"></i>radius_tested</span><span><i class="sw lost"></i>radius_lost</span>`}
+      ${shapes.filter((x) => x.kind !== 'room').map((x) => html`<span><i class="sw tested" style=${'background:' + x.color}></i>${x.label || (x.kind === 'rect' ? 'boundary' : 'circle')}</span>`)}
+      <span><i class="sw mark"></i>parking mark</span>
     </div>
     ${note && html`<div class="scenenote">${note}</div>`}
   </div>`;
@@ -928,7 +936,7 @@ function Picker() {
   return html`<div class="picker">
     <p class="lead">A mission view is a window built for one demo: its own controls, a live 3D view, the
       prompts it waits on as buttons. Each one is a <code>${'missions/<name>.yaml'}</code> in the show's package
-      (docs/MISSIONS.md) -- add a file and it appears here.</p>
+      (docs/details/mission-window.md) -- add a file and it appears here.</p>
     <div class="cards">${s.missions.map((m) => html`<a class=${'mcard ' + (m.error ? 'bad' : '') + (m.build && !m.build.ok ? ' unbuilt' : '')} href=${m.error ? undefined : '/mission?m=' + encodeURIComponent(m.id)}>
       <div class="mt">${m.title}${m.running.length ? html` <span class="st running">running</span>` : ''}
         ${m.build && !m.build.ok ? html` <span class="st failed">${m.build.problems.length ? 'not built' : 'restart console'}</span>` : ''}</div>

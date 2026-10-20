@@ -178,7 +178,7 @@ def main():
 
     # Take the signals back from rclpy: it installs its own SIGINT handler that
     # shuts the context down before KeyboardInterrupt reaches us, so a Ctrl-C
-    # abort would otherwise fail exactly when it is needed (CLAUDE.md).
+    # abort would otherwise fail exactly when it is needed (docs/details/known-issues.md).
     def take(sig, _frm):
         signal.signal(sig, signal.SIG_DFL)      # a second one kills us outright
         raise Aborted(f'signal {sig}')

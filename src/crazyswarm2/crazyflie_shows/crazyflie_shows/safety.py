@@ -647,7 +647,7 @@ def check_show(sample_fn, total_time, n_drones, rate=CHECK_RATE,
 #   0.30 m vertically. A pair is clear when || E^-1 (p - q) || >= 2 with
 #   E = diag(r_xy, r_xy, r_z). Reported, not enforced: it is the headroom a
 #   denser show could spend once the tracking lag has been re-measured on
-#   hardware (see crazyflie_shows/reference/complex-shows-report.html).
+#   hardware (research dossier complex-shows-report.html, not shipped in this repo).
 # ------------------------------------------------------------------------
 
 #: Measured downwash ellipsoid radii for a Crazyflie, metres.

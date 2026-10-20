@@ -37,7 +37,7 @@ def check_supervisor(node, names, timeout=6.0):
     old firmware does not publish it -- but see the caveat below.
 
     CAVEAT, and why callers should also check altitude after takeoff: a silent
-    ``/status`` is exactly what the telemetry stall produces (CLAUDE.md, "Link
+    ``/status`` is exactly what the telemetry stall produces (docs/details/known-issues.md, "Link
     alive, log data dead"), so a stalled drone passes this check by saying
     nothing. ``arm()`` is fire-and-forget on the client side -- the service
     response is never inspected -- so a refused arm is invisible. The only
