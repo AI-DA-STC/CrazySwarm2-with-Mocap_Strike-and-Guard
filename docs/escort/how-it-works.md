@@ -1,11 +1,13 @@
-# 3. How it works
+# Escort: how it works
+
+![The escort demo seen from above](../diagrams/01-at-a-glance.png)
 
 This page uses no maths. The maths, and the reason behind every design choice, are in
-[details/theory.md](details/theory.md).
+[details/escort-theory.md](../details/escort-theory.md).
 
 ## The pieces
 
-![How the pieces connect](diagrams/02-system.png)
+![How the pieces connect](../diagrams/02-system.png)
 
 - **Cameras** around the room see reflective markers on every drone and on the DJI,
   and report all positions 50 times a second.
@@ -20,7 +22,7 @@ on the laptop, before a command is sent.**
 
 ## One decision, 20 times a second
 
-![The decision loop](diagrams/03-decision-loop.png)
+![The decision loop](../diagrams/03-decision-loop.png)
 
 Each step answers one question. Because the steps are separate, the safety check works
 the same whatever the formation decided. The same split lets one program,
@@ -28,7 +30,7 @@ the same whatever the formation decided. The same split lets one program,
 
 ## The ring turns; the drones never swap
 
-![Turn the ring, never swap drones](diagrams/04-rotate-not-swap.png)
+![Turn the ring, never swap drones](../diagrams/04-rotate-not-swap.png)
 
 The obvious way to get a defender in front of the attacker is to send the best-placed
 drone there. But then two drones cross paths, right next to the VIP, with nothing to
@@ -41,7 +43,7 @@ the ring never has to turn more than 60°.
 
 ## Blocking
 
-![Resting ring vs. blocking wall](diagrams/05-rest-vs-blocking.png)
+![Resting ring vs. blocking wall](../diagrams/05-rest-vs-blocking.png)
 
 At rest the defenders sit 120° apart, with 1.73 m gaps between them. When the attacker
 comes close, the blocker moves onto the line between attacker and VIP, and the other two
@@ -50,7 +52,7 @@ seconds, never switched instantly, so no drone is ever asked to jump.
 
 ## When blocking starts and stops
 
-![When does the ring start blocking?](diagrams/06-when-to-block.png)
+![When does the ring start blocking?](../diagrams/06-when-to-block.png)
 
 Blocking starts when the attacker comes within 2.10 m of the VIP. It only stops once the
 attacker is back beyond 2.22 m. With a single line, an attacker hovering on it would
@@ -61,7 +63,7 @@ position: doing that made it swing back and forth with the attacker.
 
 ## The speed budget
 
-![The speed budget](diagrams/07-speed-budget.png)
+![The speed budget](../diagrams/07-speed-budget.png)
 
 A defender's speed is shared between two jobs: going round the ring, and following the
 VIP. While blocking, turning the ring takes almost all of it. **That is why the pilot
@@ -69,7 +71,7 @@ holds the DJI still while the attacker is pressing.**
 
 ## Why the defenders can win
 
-![The inside track](diagrams/08-inside-track.png)
+![The inside track](../diagrams/08-inside-track.png)
 
 The attacker is no faster than a defender. The defenders win because they are on the
 inside track: to get round the VIP by the same angle, the attacker has to fly almost
@@ -83,11 +85,11 @@ while, it gives up on its own. Run the demo ten times and you get ten different 
 
 The attacker also obeys the safety rules: it keeps away from the VIP and the defenders,
 and its speed is capped like theirs. The defenders hold their line, and the attacker is
-the one that gives way. Details: [details/theory.md, part 8](details/theory.md#8-the-adversary-a-deliberately-beatable-opponent).
+the one that gives way. Details: [details/escort-theory.md, part 8](../details/escort-theory.md#8-the-adversary-a-deliberately-beatable-opponent).
 
 ## Layers of safety
 
-![Layers of safety](diagrams/09-safety-layers.png)
+![Layers of safety](../diagrams/09-safety-layers.png)
 
 No single check is trusted. Some highlights:
 
@@ -102,7 +104,7 @@ No single check is trusted. Some highlights:
 
 ## What the lights mean
 
-![What the lights mean](diagrams/11-light-legend.png)
+![What the lights mean](../diagrams/11-light-legend.png)
 
 The lights tell the operator, from across the room, that the drones and the script agree
 on what is happening.
@@ -111,6 +113,6 @@ on what is happening.
 
 | You want | Read |
 |---|---|
-| The maths and the design reasons | [details/theory.md](details/theory.md) |
-| What was tried, what broke, what is still open | [details/design-notes.md](details/design-notes.md) |
-| Every setting and number | [details/operator-reference.md](details/operator-reference.md) |
+| The maths and the design reasons | [details/escort-theory.md](../details/escort-theory.md) |
+| What was tried, what broke, what is still open | [details/escort-design-notes.md](../details/escort-design-notes.md) |
+| Every setting and number | [details/escort-reference.md](../details/escort-reference.md) |

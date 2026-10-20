@@ -1,7 +1,7 @@
-# Design notes: what was decided, what broke, what is open
+# Escort: design notes (what was decided, what broke, what is open)
 
 The engineering record of the escort. For the ideas and the maths, read
-[theory.md](theory.md) first; this page is the history and the open decisions.
+[escort-theory.md](escort-theory.md) first; this page is the history and the open decisions.
 
 Built for the area-denial demo of **8 Oct 2026**, which took place: see
 [What flew, and what broke](#what-flew-and-what-broke-as-of-2026-10-08).
@@ -156,7 +156,7 @@ Added after this document's first draft; the code comments in `escort.py` and
   it stays `track_error_m` off its own command for `track_error_s`. It
   covers the adversary and an `adversary:=external` drone too.
 * **Lights.** Colours are `LED_*` constants in `escort_show.py`; the legend an
-  audience is told is in [04-presenting.md](../04-presenting.md). Cyan is reserved for
+  audience is told is in [escort/presenting.md](../escort/presenting.md). Cyan is reserved for
   the geofence hold. Cues are sent after motion commands, may never stop the
   show, and are off under `use_sim_time`.
 * **Monitoring.** `scripts/watch_escort.py` is read-only by construction

@@ -155,7 +155,7 @@ copy it: `python3 -c "from crazyflie_shows import safety as s; print(s.ARENA_CEN
   marks (2b); transform every world-frame number in the escort config *by its kind*
   (a point is rotated and translated, an offset is rotated, an absolute bearing
   has the angle added; the escort got this wrong three ways on 2026-10-08, see
-  [design-notes.md](design-notes.md#what-flew-and-what-broke-as-of-2026-10-08)); re-run the planner.
+  [escort-design-notes.md](escort-design-notes.md#what-flew-and-what-broke-as-of-2026-10-08)); re-run the planner.
 
 ## 3. Frequency / bandwidth tuning (240 → 50 Hz)
 

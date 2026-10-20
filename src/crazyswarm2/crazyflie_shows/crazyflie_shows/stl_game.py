@@ -4,7 +4,7 @@
 A COPY, refactored, of a colleague's script, which stays unchanged where it
 arrived (``crazyflie_examples/stl_pursuit_evasion_game_v3.py``, delivered
 over Slack, not git). This module is what ``stl_show`` flies and
-``plan_stl`` checks. Design and the v4 procedure: ``crazyflie_shows/STL.md`` (package root).
+``plan_stl`` checks. Design and the v4 procedure: ``docs/details/stl-design-notes.md``.
 
 The game in one paragraph: 5 defenders (Goalkeeper / Interceptor / Chaser
 roles from a fixed accuracy ranking) chase 5 intruders using the analytic
@@ -23,8 +23,8 @@ own internal model, and its only randomness is one unseeded generator. So
 for a given seed the whole flight -- every ``goTo``, ``land`` and LED cue, at
 every tick -- is fixed before takeoff. :func:`play` computes that table and
 :func:`verify` checks it; ``stl_show`` then streams the very table that was
-checked. That is this package's planner contract (WRITING-A-SHOW.md
-section 2) at no cost to the algorithm. A future version that closes the loop
+checked. That is the planner contract every show here meets (check the
+flight before arming) at no cost to the algorithm. A future version that closes the loop
 on mocap breaks this property, and with it the pre-flight proof.
 
 Faithfulness
@@ -337,7 +337,7 @@ ROLE_STR = {1: 'Goalkeeper', 2: 'Interceptor', 3: 'Chaser'}
 # W left at 0. The game only decides WHICH colour and WHEN (Frame.events);
 # stl_show sends it. Set False to skip LED control entirely.
 # NOTE LED_REACHED is green, which is also the rig's "connected, ready" colour
-# (CLAUDE.md, LED convention) -- kept because it is the original's choice.
+# (docs/details/known-issues.md, LED convention) -- kept because it is the original's choice.
 ENABLE_LEDS = True
 LED_DEFENDER = '#0000FF'      # blue, set once after takeoff
 LED_INTRUDER = '#FF00DD'      # Magenta, set once after takeoff (default/active state)
@@ -1210,7 +1210,7 @@ def fly(game, def_cfs, intr_cfs, timeHelper, say=print):
     intruders, walks the defenders home, lands them and disarms -- the
     original's ``main()`` from the arm loop on, call for call. The caller
     owns the abort: it must set its ``armed`` flag BEFORE calling this
-    (WRITING-A-SHOW.md 1.1 rule 2), because the first thing this does is arm.
+    (docs/details/known-issues.md, the Ctrl-C entry), because the first thing this does is arm.
 
     Ticks are paced to ``t0 + k * DT`` rather than "DT after the last
     sleep", so per-tick command latency cannot accumulate over a game; with

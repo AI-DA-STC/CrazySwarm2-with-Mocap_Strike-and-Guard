@@ -37,8 +37,8 @@ source /opt/ros/${ROS_DISTRO}/setup.bash
 ## Step 2: get the code and build it
 
 ```bash
-git clone https://github.com/AI-DA-STC/CrazySwarm2-with-Mocap_Escort-Demo.git ~/escort-demo
-cd ~/escort-demo
+git clone https://github.com/AI-DA-STC/CrazySwarm2-with-Mocap_Strike-and-Guard.git ~/strike-and-guard
+cd ~/strike-and-guard
 ./scripts/setup.sh
 sudo apt install -y python3-scipy
 ```
@@ -47,7 +47,7 @@ sudo apt install -y python3-scipy
 internet: the first build also downloads OptiTrack's NatNet SDK, and the Motive network
 has no internet. It must finish with a line
 starting `OK: motion_capture_tracking from .../install/...`. If it prints `ERROR`,
-fix that first (see [troubleshooting](05-troubleshooting.md)).
+fix that first (see [troubleshooting](troubleshooting.md)).
 
 > **Never** `apt install ros-<distro>-motion-capture-tracking`. This repo carries its
 > own fixed copy of that camera driver. The apt version silently receives no camera
@@ -85,7 +85,7 @@ Every terminal you use for this project needs these lines first. Add the last on
 `~/.bashrc` if you like.
 
 ```bash
-cd ~/escort-demo
+cd ~/strike-and-guard
 source /opt/ros/$ROS_DISTRO/setup.bash
 source install/setup.bash
 export ROS_DOMAIN_ID=42      # any number 1-100 nobody else in the lab uses
@@ -97,10 +97,10 @@ laptop hears other people's drone commands, and they hear yours.
 Check it worked:
 
 ```bash
-ros2 pkg prefix motion_capture_tracking   # must print a path inside ~/escort-demo/install
+ros2 pkg prefix motion_capture_tracking   # must print a path inside ~/strike-and-guard/install
 ```
 
-Next: [run the demo](02-run-the-demo.md).
+Next: [the flight-day routine](02-flight-day.md), then pick a demo: [escort](escort/run.md) or [STL game](stl/run.md).
 
 ---
 

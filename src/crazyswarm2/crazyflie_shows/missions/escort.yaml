@@ -14,7 +14,7 @@ summary: >
   Three defenders hold a ring round a VIP and rotate it so one stands on the
   VIP-adversary bearing; a fourth drone probes. Operator-paced by default:
   every leg waits for Continue, and Land ends it.
-docs: docs/details/operator-reference.md
+docs: docs/details/escort-reference.md
 run: escort_show
 flight: true
 # escort_show calls abort.take_signals(): one SIGINT = land where they are.
@@ -65,7 +65,7 @@ helpers:
     when: {vip_mode: manual}
     autostart: true
     teleop: planar
-    # docs/details/operator-reference.md: "Start the teleop, then touch nothing until ESCORT
+    # docs/details/escort-reference.md: "Start the teleop, then touch nothing until ESCORT
     # LIVE appears" -- a target already moving makes the gather refuse.
     enable_after: 'ESCORT LIVE'
   adversary_keys:

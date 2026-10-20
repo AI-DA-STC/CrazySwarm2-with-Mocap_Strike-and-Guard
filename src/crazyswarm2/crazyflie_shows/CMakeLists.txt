@@ -19,7 +19,7 @@ install(DIRECTORY
   DESTINATION share/${PROJECT_NAME}/
 )
 
-# Mission-console views (one YAML per show; docs/MISSIONS.md). Nothing in the
+# Mission-console views (one YAML per show; docs/details/mission-window.md). Nothing in the
 # shows reads them. The console prefers the source copy when the install is a
 # --symlink-install, so editing a spec needs no rebuild; this copy is for an
 # install that is not.

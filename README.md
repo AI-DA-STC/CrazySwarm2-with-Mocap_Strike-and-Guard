@@ -1,41 +1,39 @@
-# Escort Demo
+# Strike and Guard
 
-Three small drones guard a larger one from an attacker.
+Small drones defending something against attackers, in two demos.
 
-![The escort demo seen from above](docs/diagrams/01-at-a-glance.png)
+![Strike and guard: one problem, two demos](docs/diagrams/21-two-demos.png)
 
-Three **Crazyflie** drones hold a ring around a **VIP**, a DJI flown by hand. A
-fourth Crazyflie, the **attacker**, tries to reach it. The ring turns on its own so
-that one defender is always between the attacker and the VIP.
+The drones are **Crazyflies**: palm-sized, about 30 g each, with no sensors to see one
+another. Motion-capture cameras on the walls track every drone. One laptop decides where
+each drone goes, and the safety rules are enforced there, before any command is sent.
 
-The drones cannot see each other. Motion-capture cameras on the walls track every
-drone, and one laptop decides where each one goes, 20 times a second. Nothing is
-pre-recorded: the attacker improvises, and the pilot moves the VIP wherever they like.
+| Demo | The problem | Read |
+|---|---|---|
+| **Escort** | Three defenders hold a ring around a VIP (a hand-flown DJI) and turn it so one is always between the VIP and an attacker. Reacts live. Flown for guests on 8 October 2026. | [run](docs/escort/run.md) · [how it works](docs/escort/how-it-works.md) · [presenting](docs/escort/presenting.md) |
+| **STL game** | Five defenders stop five intruders from reaching a goal line. The whole flight is planned and checked before take-off. Simulator-tested with this repo's show. | [run](docs/stl/run.md) · [how it works](docs/stl/how-it-works.md) |
 
-The demo was flown for guests on 8 October 2026. It runs on ROS 2 with
-[Crazyswarm2](https://github.com/IMRCLab/crazyswarm2) and OptiTrack motion capture.
+It runs on ROS 2 with [Crazyswarm2](https://github.com/IMRCLab/crazyswarm2) and OptiTrack
+motion capture.
 
 ## What you need
 
-| | For the simulator | For real flights |
-|---|---|---|
-| Ubuntu 22.04 + ROS 2 Humble (24.04 + Jazzy also works) | yes | yes |
-| 4 × Crazyflie 2.1 with mocap markers | | yes |
-| Crazyradio USB dongle (PA or 2.0) | | yes |
-| OptiTrack cameras + a Windows PC running Motive | | yes |
-| A DJI (or any tracked object) as the VIP, with a pilot | | optional; a fixed point works too |
-| Color LED deck on each Crazyflie | | optional; it shows the lights |
+| | Simulator | Escort | STL game |
+|---|---|---|---|
+| Ubuntu 22.04 + ROS 2 Humble (24.04 + Jazzy also works) | yes | yes | yes |
+| Crazyflie 2.1 with mocap markers | | 4 | 10 |
+| Crazyradio USB dongle (PA or 2.0) | | 1 | 2 |
+| OptiTrack cameras + a Windows PC running Motive | | yes | yes |
+| A DJI (or any tracked object) as the VIP, with a pilot | | optional | |
+| Color LED deck on each Crazyflie (shows the lights) | | optional | optional |
 
 ## Start here
 
 1. **Install** everything once: [docs/01-setup.md](docs/01-setup.md).
-2. **Try it in the simulator** (no drones, no cameras):
-   [docs/02-run-the-demo.md, part 1](docs/02-run-the-demo.md#part-1-the-simulator).
-3. **Fly it** for real: [docs/02-run-the-demo.md, part 2](docs/02-run-the-demo.md#part-2-real-drones).
-4. **Understand it**, in plain language: [docs/03-how-it-works.md](docs/03-how-it-works.md).
-5. **Show it to guests**, with a script and answers: [docs/04-presenting.md](docs/04-presenting.md).
+2. **Learn the flight-day routine** both demos share: [docs/02-flight-day.md](docs/02-flight-day.md).
+3. **Pick a demo** from the table above. Run it in the simulator first.
 
-Something not working? See [docs/05-troubleshooting.md](docs/05-troubleshooting.md).
+Something not working? See [docs/troubleshooting.md](docs/troubleshooting.md).
 Want the full detail? [docs/details/](docs/details/README.md).
 
 ## Safety first
@@ -44,10 +42,10 @@ Want the full detail? [docs/details/](docs/details/README.md).
   the drones drop. You can trigger it with the `e` key in the preflight window, the
   E-STOP button in the web console, or this command:
   `ros2 service call /all/emergency std_srvs/srv/Empty '{}'`.
-- **Ctrl-C lands the drones.** The show catches it and lands every drone under control.
+- **Ctrl-C lands the drones.** Both shows catch it and land every drone under control.
 - **Nobody walks into the flight area while drones are up.**
-- **Never skip the checks.** The show refuses to fly a plan that does not fit the room,
-  and each refusal has prevented a real problem.
+- **Never skip the checks.** Both shows refuse to fly a plan that fails them, and each
+  refusal so far has prevented a real problem.
 
 ## What is in this repo
 
@@ -57,15 +55,15 @@ docs/                    the guides above, plus docs/details/ for the deep dives
 scripts/                 setup, build, radio scan, drone placement helpers
 console/                 optional web GUI (start it with ./console/run.sh)
 src/crazyswarm2/
-  crazyflie_shows/       THE ESCORT: escort.py (the brain), escort_show.py (flies it),
-                         plan_escort.py (checks it before flight)
+  crazyflie_shows/       the demos: escort*.py and plan_escort.py, stl_*.py and plan_stl.py,
+                         plus the shared safety code (abort, preflight, safety)
   crazyflie/config/      crazyflies.yaml (the drones), arena.yaml (the room)
 src/motion_capture_tracking/, src/natnet_ros2/   camera drivers
 ```
 
 The show package also contains code for two older choreographed shows (carousel and
 constellation). The escort shares some helpers with them, so that code is still here.
-This repo documents only the escort.
+This repo documents only the two demos.
 
 ## Credits
 
@@ -74,6 +72,7 @@ Built on [Crazyswarm2](https://github.com/IMRCLab/crazyswarm2) (IMRCLab),
 and [natnet_ros2](https://github.com/L2S-lab/natnet_ros2) (L2S-lab). All three are
 included in `src/` with local fixes. The one thing the first build downloads is
 OptiTrack's NatNet SDK, so build once on a network with internet.
-The escort behaviour, the safety layer and the tools around them are this project's
-own. Who owns which layer, measured file by file:
+The STL game's algorithm is a colleague's, used with permission; its original script is
+kept unchanged in `crazyflie_examples`. The escort, the safety layer and the tools are
+this project's own. Who owns which layer, measured file by file:
 [docs/details/provenance.md](docs/details/provenance.md).

@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Re-export every slide of escort-diagrams.pptx as the PNG the docs embed.
+# Re-export every slide of strike-and-guard-diagrams.pptx as the PNG the docs embed.
 #
 #   ./docs/diagrams/export_png.sh
 #
-# escort-diagrams.pptx is the SOURCE of every diagram in docs/. Edit it in
+# strike-and-guard-diagrams.pptx is the SOURCE of every diagram in docs/. Edit it in
 # PowerPoint (or LibreOffice Impress), save, then run this. One slide = one
 # diagram; the file names below are in slide order, so if you add, remove or
 # reorder slides, update NAMES to match.
@@ -18,13 +18,14 @@ NAMES=(
   09-safety-layers 10-show-sequence 11-light-legend 12-flight-day
   13-safety-filter 14-command-modes 15-attacker 16-controller-step
   17-control-tick 18-verification 19-lessons 20-lab-network
+  21-two-demos 22-stl-at-a-glance 23-stl-plan-then-fly 24-stl-sequence 25-stl-lights
 )
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
-soffice --headless --convert-to pdf --outdir "$TMP" "$HERE/escort-diagrams.pptx" >/dev/null
-pdftoppm -png -r 120 "$TMP/escort-diagrams.pdf" "$TMP/slide"
+soffice --headless --convert-to pdf --outdir "$TMP" "$HERE/strike-and-guard-diagrams.pptx" >/dev/null
+pdftoppm -png -r 120 "$TMP/strike-and-guard-diagrams.pdf" "$TMP/slide"
 
 shopt -s nullglob
 slides=("$TMP"/slide-*.png)

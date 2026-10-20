@@ -1,13 +1,15 @@
-# STL pursuit-evasion show
+# STL game: design notes
 
 5 defenders vs 5 intruders: a colleague's Signal-Temporal-Logic game, flown
-on ten Crazyflies. Added 2026-10-13.
+on ten Crazyflies. Added 2026-10-13. The plain-language version is
+[../stl/how-it-works.md](../stl/how-it-works.md); code is under
+`src/crazyswarm2/crazyflie_shows/` and `src/crazyswarm2/crazyflie_examples/`.
 
 | File | What it is |
 |---|---|
 | `crazyflie_examples/.../stl_pursuit_evasion_game_v3.py` | **The original.** The colleague's work, kept unchanged and still runnable (`ros2 run crazyflie_examples stl_pursuit_evasion_game_v3`). Arrives over Slack, not git. |
 | `crazyflie_shows/stl_game.py` | The algorithm, copied: constants and helpers line for line, `main()` split into `play()` (no ROS) and `fly()` (the command sequence). Plus `verify()`, which is ours. |
-| `crazyflie_shows/stl_show.py` | Flies it under this package's contract (WRITING-A-SHOW.md section 1). |
+| `crazyflie_shows/stl_show.py` | Flies it with the checks every show here makes before arming (abort, preflight, placement). |
 | `crazyflie_shows/plan_stl.py` | Offline check of any seed, and the drift check against the original. |
 | `missions/stl.yaml` | The console's mission window. |
 
@@ -25,7 +27,7 @@ its seed, and `seed:=N` replays it.
 
 If a later version closes the loop on mocap, this property is gone, and with
 it the pre-flight proof. The port would then need the escort's approach
-(clamp at flight time, ESCORT.md).
+(clamp at flight time, [escort-design-notes.md](escort-design-notes.md)).
 
 ## What the show adds, and what it deliberately does not
 
@@ -72,6 +74,20 @@ Not changed:
 - **Simulator** (`backend:=sim`, seed 0, `min_sep:=0.04`): flew takeoff to
   disarm. `kill -INT` mid-game landed all ten and disarmed (exit 130).
   Hardware has not been flown with `stl_show` yet.
+
+## Measured 2026-10-20 (this repo, v3)
+
+- **The game square is not the measured room.** `stl_game` centres its 4 m x 4 m square
+  on the world origin; `arena.yaml`'s tracked volume is centred at `ARENA_CENTRE`
+  (-0.213, -0.072), tested clean to 2.00 m and lost at 2.24 m. Distances from that
+  centre: intruder goals 2.14 / 2.33 / 2.29 / 2.62 / 2.71 m (four beyond the lost
+  radius), defender start slots 1.41-2.19 m, square corners 2.63-3.03 m. Neither
+  `verify()` nor `plan_stl` checks the room, by design ("Not changed" above). Fly the
+  edges in a test before trusting them, or ask the colleague to shrink or move the
+  square.
+- **Simulator, ten drones, seed 0, `min_sep:=0.04`, drones on their start slots:**
+  takeoff to disarm, 5 BLOCKED, exit 0. On the committed marks instead, the show
+  correctly refused (cf10-cf11 start move 0.010 m).
 
 ## Running it
 

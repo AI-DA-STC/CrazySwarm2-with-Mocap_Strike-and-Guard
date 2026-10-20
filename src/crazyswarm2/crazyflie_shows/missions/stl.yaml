@@ -1,5 +1,5 @@
 # Mission view for the STL pursuit-evasion game (stl_show) -- read by the
-# mission console, never by the show. Format: docs/MISSIONS.md.
+# mission console, never by the show. Format: docs/details/mission-window.md.
 #
 # Not choreographed, but not reactive either: the game runs in its own model
 # (it never reads mocap), so the whole flight is fixed by the seed before
@@ -12,7 +12,7 @@ summary: >
   5 defenders vs 5 intruders, the colleague's STL-gradient game (10 drones).
   The seed fixes the flight: every run prints it, and seed:=N replays it.
   plan_stl checks seeds offline.
-docs: src/crazyswarm2/crazyflie_shows/STL.md
+docs: docs/stl/run.md
 run: stl_show
 flight: true
 abort: sigint

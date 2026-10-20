@@ -8,11 +8,11 @@
 
 The algorithm is ``stl_game`` (a copy of the colleague's v3 script, which
 stays unchanged in crazyflie_examples). This file adds what every show in this
-package must do before it arms (docs/WRITING-A-SHOW.md section 1): play the
+package must do before it arms: play the
 game for the chosen seed and check the table that will fly, prove mocap
 tracks every drone and that each sits on its ``initial_position``, ask the
 firmware supervisor, and land on Ctrl-C / the console's Stop instead of
-leaving ten drones on their last setpoint. Design: crazyflie_shows/STL.md (package root).
+leaving ten drones on their last setpoint. Design: docs/details/stl-design-notes.md.
 
 Every run prints its seed. The game is open loop, so the same seed is the
 same flight: ``plan_stl --seed N`` checks it offline, ``seed:=N`` flies it.

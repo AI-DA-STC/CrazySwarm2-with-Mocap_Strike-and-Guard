@@ -1,12 +1,12 @@
-# Operator reference
+# Escort: operator reference
 
 Three defenders ring a VIP; a fourth drone attacks; the ring rotates so a
 defender sits on the threat bearing. **Reactive, not choreographed** — the
 only show here whose path is not known before takeoff.
 
 Every command, argument and number, on one page, for an operator who has done the
-[step-by-step guide](../02-run-the-demo.md) once. Why any of it is the way it is:
-[design-notes.md](design-notes.md).
+[step-by-step guide](../escort/run.md) once. Why any of it is the way it is:
+[escort-design-notes.md](escort-design-notes.md).
 
 ---
 

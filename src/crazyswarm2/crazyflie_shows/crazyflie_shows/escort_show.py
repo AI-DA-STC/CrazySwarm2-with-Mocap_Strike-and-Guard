@@ -77,7 +77,7 @@ two 10 cm airframes is not a collision -- but it is the number to watch, and
 clamping the pair apart as well is an open decision, not a settled one.
 
 0.80 m is a reused constant, not a measurement of what a DJI's prop wash does
-to a 30 g Crazyflie (docs/details/design-notes.md, "A DJI standoff is still unset"). Treat it as
+to a 30 g Crazyflie (docs/details/escort-design-notes.md, "A DJI standoff is still unset"). Treat it as
 a floor that stops a collision, not as a safe hovering distance.
 
 Parameters (``--ros-args -p name:=value``)
@@ -486,7 +486,7 @@ def main():
     cfg_default = escort.EscortConfig()
     # The static VIP mark is room centre plus vip_offset, NOT room centre: a
     # centred VIP leaves the adversary no room to approach through (see
-    # EscortConfig.vip_offset and docs/details/design-notes.md).
+    # EscortConfig.vip_offset and docs/details/escort-design-notes.md).
     vip_point = list(_param(node, 'vip_point',
                             escort.vip_home(cfg_default)[:2].tolist()))
     adv_mode = str(_param(node, 'adversary', 'reactive'))
@@ -963,7 +963,7 @@ def main():
         # fly its own path to a fixed point in the room; it still ATTACKS where
         # the VIP was when it committed, so a pilot who moves genuinely evades
         # it instead of towing it. (The real answer is a reactive policy that
-        # re-plans -- docs/details/design-notes.md; this is the part that fits before Thursday.)
+        # re-plans -- docs/details/escort-design-notes.md; this is the part that fits before Thursday.)
         leg_anchor = {'p': None}
         p_track = None               # fenced VIP; set at the end of each loop
         # FIRST IN, LAST OUT. The Crazyflies are already up and holding a ring;
@@ -1145,7 +1145,7 @@ def main():
                 # nothing -- stopping it at 1.80 m would look identical with no
                 # defenders flying at all. 0.80 m lets it through the ring and
                 # still cannot reach the DJI. It is a reused constant, not a
-                # measurement against a DJI's prop wash (docs/details/design-notes.md).
+                # measurement against a DJI's prop wash (docs/details/escort-design-notes.md).
                 # Backstop for both UNVERIFIED modes. A scripted adversary
                 # is proven offline and needs none; a manual or reactive one
                 # has no proof, and the sweep that tuned the reactive gains

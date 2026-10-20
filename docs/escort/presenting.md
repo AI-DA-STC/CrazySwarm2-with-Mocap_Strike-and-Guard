@@ -1,4 +1,4 @@
-# 4. Presenting to guests
+# Escort: presenting to guests
 
 The show is operator-paced, so you can talk for as long as you need at each stage.
 Nothing moves on until Enter is pressed. A full run takes about 4 to 6 minutes.
@@ -23,7 +23,7 @@ The key line, if you only get one: **the attacker is as fast as the defenders, b
 fly a tighter circle, so they cover the same angle in less distance. They win on
 geometry, not speed.**
 
-![What the lights mean](diagrams/11-light-legend.png)
+![What the lights mean](../diagrams/11-light-legend.png)
 
 If the whole fleet goes **amber**, the show is waiting for someone. If the defenders go
 **cyan**, the DJI left its box: the pilot flies back toward the middle and they resume.
@@ -49,7 +49,7 @@ over is the behaviour: turning the ring, picking the blocker, and the safety rul
 **"How does it know where everything is?"** Motion-capture cameras track reflective
 markers. All decisions are made on this laptop and sent out over one radio.
 
-More answers, sorted by audience: [details/qna.md](details/qna.md).
+More answers, sorted by audience: [details/escort-qna.md](../details/escort-qna.md).
 
 ## When something goes wrong, live
 

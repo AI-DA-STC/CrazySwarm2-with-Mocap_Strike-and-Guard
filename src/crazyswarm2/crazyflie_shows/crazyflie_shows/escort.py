@@ -46,7 +46,7 @@ budget.
 
 Numbers that are still open
 ---------------------------
-See docs/details/design-notes.md "Decisions still open". In short: ``ring_radius``, ``height``
+See docs/details/escort-design-notes.md "Decisions still open". In short: ``ring_radius``, ``height``
 and ``v_max`` are defaults inherited from the follow-drone prototype
 (min 1.5 m standoff, 0.6 m/s cap), not measured on this rig, and
 ``v_max = 0.6`` bounds how fast the VIP may walk -- see
@@ -70,7 +70,7 @@ class EscortConfig:
     # -- the ring ---------------------------------------------------------
     n_defenders: int = 3
     #: 1.00 m, down from 1.50 m (inherited from the follow-drone prototype and
-    #: flagged in docs/details/design-notes.md as "not measured on this rig") via 1.20 m. Every
+    #: flagged in docs/details/escort-design-notes.md as "not measured on this rig") via 1.20 m. Every
     #: step was paid for by the measured volume: flying cf1 a slow spiral on
     #: 2026-10-01 lost mocap at 2.24 m radius, and the arena a ring needs for a
     #: working approach/retreat cycle is ring + min_adv_sep + 0.3 m of run-up
@@ -634,7 +634,7 @@ def max_vip_speed(cfg):
     0.15 m/s against the script (2026-10-12). Buying more of it means
     raising v_max (a safety decision about flying faster next to a person),
     slowing the ring (a slower block), or shrinking the radius (less room
-    between the drones and the person) -- see docs/details/design-notes.md.
+    between the drones and the person) -- see docs/details/escort-design-notes.md.
     """
     return cfg.v_max - cfg.ring_radius * cfg.phase_rate
 
@@ -698,7 +698,7 @@ def check_config(cfg, moving_vip=True):
         bad.append(f'max_vip_speed {max_vip_speed(cfg):.2f} m/s: after turning '
                    'the ring there is no speed budget left to follow a moving '
                    'VIP. Fine for the static-point stage, not for a walking '
-                   'person -- see docs/details/design-notes.md "Decisions still open"')
+                   'person -- see docs/details/escort-design-notes.md "Decisions still open"')
     return bad
 
 

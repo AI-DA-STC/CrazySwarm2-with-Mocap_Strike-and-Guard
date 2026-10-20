@@ -1,8 +1,9 @@
 # Launching, checks and LEDs
 
-General rig commands that are not specific to the escort: the launch, a one-drone
-test flight, health checks, LEDs and every launch argument. The escort itself is in
-[../02-run-the-demo.md](../02-run-the-demo.md).
+General rig commands that belong to neither demo: the launch, a one-drone test flight,
+health checks, LEDs and every launch argument. The demos are in
+[../02-flight-day.md](../02-flight-day.md), [../escort/run.md](../escort/run.md) and
+[../stl/run.md](../stl/run.md).
 
 Activate the workspace in every terminal first:
 

@@ -1,7 +1,7 @@
 # Troubleshooting: the full list
 
 Symptom, cause and fix for everything this rig is known to do. The short version is
-[05-troubleshooting.md](../05-troubleshooting.md); the evidence behind each entry is in
+[troubleshooting.md](../troubleshooting.md); the evidence behind each entry is in
 [known-issues.md](known-issues.md).
 
 ## Setup / build

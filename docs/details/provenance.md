@@ -13,7 +13,7 @@ maintaining a divergent copy of upstream.
 | Motive, NatNet | **OptiTrack** | How poses leave the Motive PC. |
 | ROS 2 architecture | **IMRCLab**: [crazyswarm2](https://github.com/IMRCLab/crazyswarm2), [motion_capture_tracking](https://github.com/IMRCLab/motion_capture_tracking) | Package layout; Motive → `/poses` → server → poses broadcast to every drone; the `crazyflie_py` API; the three config files; the simulator. |
 | Rig tooling | **AI-DA-STC** team repo ([CrazySwarm2-with-Mocap](https://github.com/AI-DA-STC/CrazySwarm2-with-Mocap)) | Preflight GUI, three examples, RViz/Foxglove in the launch, live parameter pushes, LED on connect. |
-| Hardening and the demo | **This project** | Server and radio-library robustness, Motive auto-discovery, the mocap driver patches, the escort (`crazyflie_shows`), `console/`. |
+| Hardening and the demos | **This project** | Server and radio-library robustness, Motive auto-discovery, the mocap driver patches, the escort and the STL show wrapper (`crazyflie_shows`), `console/`. |
 
 ## The measurements
 
@@ -21,7 +21,7 @@ Files compared with line endings ignored. "Diff lines" counts added plus removed
 
 | Tree | Upstream commit | Identical | Changed | Notes |
 |---|---|---|---|---|
-| `src/crazyswarm2` (excluding `crazyflie/deps`) | IMRCLab `ae23edc` | 333 | 18 | 41 removed (upstream's Sphinx manual); added: `crazyflie_shows/`, `arena.yaml`, 6 AI-DA-STC files |
+| `src/crazyswarm2` (excluding `crazyflie/deps`) | IMRCLab `ae23edc` | 333 | 18 | 41 removed (upstream's Sphinx manual); added: `crazyflie_shows/`, `arena.yaml`, 6 AI-DA-STC files, the STL original |
 | `src/crazyswarm2/crazyflie/deps` (crazyflie_cpp, crazyflie-link-cpp) | submodules of `ae23edc` | 528 | 8 | |
 | `src/motion_capture_tracking` | IMRCLab `ros2@64d3af2`, libmotioncapture `24321e4` | 1828 | 4 | 3 patches + `VENDORED.md` added |
 | `src/natnet_ros2` | L2S-lab `883b095` | 30 | 2 | the NatNet SDK is NOT committed: `install_sdk.sh` downloads it at build time |
@@ -33,14 +33,14 @@ Who changed the 26 changed Crazyswarm2 files (diff lines):
 | `crazyflie_server.cpp` | 216 | 546 |
 | `launch.py` | 171 | 29 |
 | `crazyflie_cpp` + `crazyflie-link-cpp` | 62 | 655 |
-| Configs (`crazyflies.yaml`, `server.yaml`, `motion_capture.yaml`, rviz) | 139 | 135 |
-| Examples, `crazyflie_py`, simulator, build files, `UploadTrajectory.srv` | 251 | 78 |
+| Configs (`crazyflies.yaml`, `server.yaml`, `motion_capture.yaml`, rviz) | 139 | 174 |
+| Examples, `crazyflie_py`, simulator, build files, `UploadTrajectory.srv` | 251 | 79 |
 
 This project's server and library changes are itemised, with reasons, in
 [server-changes.md](server-changes.md). The mocap driver's patches are in
 [`src/motion_capture_tracking/VENDORED.md`](../../src/motion_capture_tracking/VENDORED.md).
 
-Wholly our own code (lines): the escort, 4,209; the shared show safety code (`abort`,
+Wholly our own code (lines): the escort, 4,209; the STL port, show and planner (`stl_game`, `stl_show`, `plan_stl`), 1,721, around a colleague's algorithm (his original, 1,246 lines, is kept unchanged in `crazyflie_examples`); the shared show safety code (`abort`,
 `preflight`, `safety`), 893; the older carousel and constellation shows, 3,108;
 `console/`, 10,484; `scripts/`, 4,328.
 

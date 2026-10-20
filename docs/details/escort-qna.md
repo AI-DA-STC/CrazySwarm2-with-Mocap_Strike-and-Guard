@@ -1,6 +1,6 @@
-# Questions and answers, by audience
+# Escort: questions and answers, by audience
 
-The full version of the questions in [04-presenting.md](../04-presenting.md): what to
+The full version of the questions in [escort/presenting.md](../escort/presenting.md): what to
 say when someone asks something the script does not cover.
 
 **How to use it.** Each entry has a **short answer** you can say standing up,
@@ -70,7 +70,7 @@ walking pace. It looks faster than it is because the room is small.
 Colours are status, not decoration — role and stage. Red is the attacker,
 white is whichever defender is currently blocking, violet the other two, deep
 blue a ring with nothing to do. Cyan means the ring has parked itself and is
-waiting for the pilot. (Full table in [04-presenting.md](../04-presenting.md).)
+waiting for the pilot. (Full table in [escort/presenting.md](../escort/presenting.md).)
 
 **"How long did this take?"**
 Be honest and specific — it lands better than a round number, and it is the

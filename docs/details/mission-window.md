@@ -1,12 +1,12 @@
-# The escort mission window
+# Mission windows
 
-The web console's own screen for the escort. Start the console with `./console/run.sh`,
-open http://localhost:8077, then **Dashboard → Missions → Escort demo** (it opens in its
-own browser window, at `/mission?m=crazyflie_shows/escort`).
+Each demo's own screen in the web console. Start the console with `./console/run.sh`,
+open http://localhost:8077, then pick the demo under **Dashboard → Missions** (it opens in
+its own browser window, e.g. `/mission?m=crazyflie_shows/escort`).
 
-Everything on it is defined by one file,
-`src/crazyswarm2/crazyflie_shows/missions/escort.yaml`: the choices offered, the prompts
-that become buttons, the status tiles, the teleop pad. The show itself never reads that
+Everything on a window is defined by one file per demo,
+`src/crazyswarm2/crazyflie_shows/missions/<demo>.yaml` (`escort.yaml`, `stl.yaml`): the
+choices offered, the prompts that become buttons, the status tiles, the teleop pad. The show itself never reads that
 file; it only describes how to *run* the show. The rest of the console is described in
 [console.md](console.md).
 
@@ -65,7 +65,7 @@ keyboard mode, so the physical keys drive it; the pad stays **locked** until the
 script prints the spec's `enable_after` line (for the escort, `ESCORT LIVE` —
 the operator rule "start the teleop, then touch nothing until the show is live").
 
-## Editing escort.yaml: the spec format
+## Editing a mission file: the spec format
 
 One YAML file per mission. Everything except `title` and `run` is optional. The
 shipped `crazyflie_shows/missions/escort.yaml` (gates, two teleop helpers,
@@ -77,7 +77,7 @@ mission: 1                      # spec version; the console refuses others
 title: Escort demo
 summary: >                      # shown on the mission card
   One paragraph: what it is, what to check first.
-docs: docs/details/operator-reference.md   # shown as a pointer, nothing reads it
+docs: docs/details/escort-reference.md   # shown as a pointer, nothing reads it
 run: escort_show                # executable in THIS package, or "pkg exe"
 flight: true                    # moves drones -> confirm step shows the commands
 abort: sigint                   # how "Abort & land" ends it: sigint | q

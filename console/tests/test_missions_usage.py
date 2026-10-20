@@ -36,7 +36,7 @@ class ShippedSpecs(unittest.TestCase):
     def test_escort_default_is_the_runbook_command(self):
         m = M.get('crazyflie_shows/escort')
         _, cmd, _ = M.build(m, 'main', {})
-        # docs/details/operator-reference.md, "the show, operator-paced (recommended)"
+        # docs/details/escort-reference.md, "the show, operator-paced (recommended)"
         self.assertEqual(cmd, 'ros2 run crazyflie_shows escort_show --ros-args '
                               '-p vip_mode:=point -p adversary:=reactive -p paced:=true')
 

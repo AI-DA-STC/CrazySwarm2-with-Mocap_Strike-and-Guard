@@ -1,12 +1,12 @@
-# The escort demo: theory and design
+# Escort: theory and design
 
 The ideas behind each algorithm, and why each design decision was taken. The plain-language
-version is [03-how-it-works.md](../03-how-it-works.md); this page adds the maths. For exact
+version is [escort/how-it-works.md](../escort/how-it-works.md); this page adds the maths. For exact
 numbers, run `ros2 run crazyflie_shows plan_escort`, which reads the live config.
 
 The plots (ring geometry, potential field, angular race, one encounter) are computed by
 calling the real escort code ([`escort_figures.py`](escort_figures.py)), so they show what
-flies. The block diagrams are in [`../diagrams/escort-diagrams.pptx`](../diagrams/escort-diagrams.pptx).
+flies. The block diagrams are in [`../diagrams/strike-and-guard-diagrams.pptx`](../diagrams/strike-and-guard-diagrams.pptx).
 
 ---
 

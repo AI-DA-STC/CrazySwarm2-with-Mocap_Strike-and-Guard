@@ -58,7 +58,7 @@ robots:
     initial_position: [-0.1326, -1.509, 0.0]
     type: cf21  # see robot_types
 
-  # cf10-cf14: the STL show's intruders (crazyflie_shows/STL.md), on a SECOND
+  # cf10-cf14: the STL show's intruders (docs/stl/run.md), on a SECOND
   # Crazyradio -- radio://1, channel 90, 2M. 90 is 10 channels clear of the
   # first dongle's 80 (two dongles need >= 2 at 2M, see CLAUDE.md). 2M, not
   # the 1M the historical two-dongle cf11 used: these answered at 2M when the

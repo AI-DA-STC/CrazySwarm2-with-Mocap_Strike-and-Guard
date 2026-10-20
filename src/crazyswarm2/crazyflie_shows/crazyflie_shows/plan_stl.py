@@ -18,7 +18,7 @@ colleague's script. It loads the original FILE (never imported as a package)
 with stub drones, runs it and ``stl_game.fly`` on the same seeds, and diffs
 every arm / takeoff / goTo / land / LED call and its time. Run it on every new
 version before porting it, and on the old one after any edit to stl_game.
-crazyflie_shows/STL.md (package root) has the procedure.
+docs/details/stl-design-notes.md has the procedure.
 
 Exit status 0 = every seed passes (and, with ``--against``, both agree).
 """
