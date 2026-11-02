@@ -87,6 +87,17 @@ def setpoint_at(start, end, t0, dur, now):
     return tuple(s + (e - s) * f for s, e in zip(start, end))
 
 
+def descent_duration(dz, rate, minimum):
+    """Seconds for a descent of ``dz`` metres at an AVERAGE ``rate`` m/s.
+
+    Landing and recovery used fixed 4 s / 3 s, sized for the old room's
+    2.3 m cap. From 6 m that is a 1.5 m/s average descent -- the goTo profile
+    peaks at about twice its average -- straight into the floor, or blind
+    during a recovery. Scale with height instead.
+    """
+    return max(minimum, abs(dz) / rate)
+
+
 def battery_low(v, thr, low_since, now, grace):
     """(land_now, new_low_since) for the low-battery watchdog.
 
@@ -219,6 +230,13 @@ def selftest():
     fail += not never
     print(f'  {"PASS" if never else "FAIL"}  following: a long glide flown as '
           'commanded never aborts (the 2026-11-02 false abort)')
+
+    good = (descent_duration(1.2, 0.4, 4.0) == 4.0
+            and abs(descent_duration(6.0, 0.4, 4.0) - 15.0) < 1e-9
+            and descent_duration(-4.8, 1.0, 3.0) == 4.8)
+    fail += not good
+    print(f'  {"PASS" if good else "FAIL"}  descent_duration: low landings keep '
+          '4 s, a 6 m landing takes 15 s')
 
     # low battery: one sagging sample is forgiven, a sustained one lands
     land1, s = battery_low(3.20, 3.30, None, 0.0, 2.0)
@@ -498,12 +516,16 @@ def main():
         print(f'\n  *** {why} -- dropping to {args.z_safe:.2f} m to recover ***', flush=True)
         try:
             here = seen['p'] or (cx, cy, args.z_safe)
-            cf.goTo(np.array([here[0], here[1], args.z_safe]), 0.0, 3.0)
+            # ~1 m/s average: quick enough not to free-run on the IMU for
+            # long, slow enough not to arrive at z_safe with a dive
+            t_down = descent_duration(here[2] - args.z_safe, 1.0, 3.0)
+            cf.goTo(np.array([here[0], here[1], args.z_safe]), 0.0, t_down)
         except Exception as e:                              # noqa: BLE001
+            t_down = 3.0
             print(f'  could not command the descent ({e!r})')
         t_rec = time.time()
         back = False
-        while time.time() - t_rec < 4.0:
+        while time.time() - t_rec < t_down + 1.0:
             rclpy.spin_once(node, timeout_sec=0.0)
             timeHelper.sleep(0.05)
             if time.time() - seen['t'] < 0.2:
@@ -612,8 +634,10 @@ def main():
     finally:
         if flying:
             try:
-                cf.land(targetHeight=0.04, duration=4.0)
-                timeHelper.sleep(4.5)
+                z_now = seen['p'][2] if seen['p'] else args.height
+                t_land = descent_duration(z_now, 0.4, 4.0)
+                cf.land(targetHeight=0.04, duration=t_land)
+                timeHelper.sleep(t_land + 0.5)
             except Exception as e:                          # noqa: BLE001
                 print(f'  could not land cleanly ({e!r}) -- use the E-STOP')
         try:
