@@ -97,6 +97,30 @@ def ray_legs(cx, cy, bearing_deg, r_min, r_max, r_step):
             for r in (r_min + (r_max - r_min) * k / n for k in range(n + 1))]
 
 
+def parse_polygon(text):
+    """'x,y; x,y; ...' -> [(x, y), ...]; at least three vertices."""
+    pts = [tuple(float(v) for v in pair.split(',')) for pair in text.split(';')
+           if pair.strip()]
+    if len(pts) < 3 or any(len(p) != 2 for p in pts):
+        raise SystemExit(f'  --polygon needs at least 3 "x,y" pairs, got {text!r}')
+    return pts
+
+
+def tour_legs(cx, cy, poly, spacing, start_vertex):
+    """Waypoints along the polygon's edges, at most ``spacing`` apart, from
+    vertex ``start_vertex`` all the way round and back to it. Same tuple shape
+    as the spiral's: (x, y, r from centre, bearing from centre)."""
+    n = len(poly)
+    order = [poly[(start_vertex + i) % n] for i in range(n)] + [poly[start_vertex % n]]
+    pts = []
+    for (ax, ay), (bx, by) in zip(order, order[1:]):
+        k = max(1, math.ceil(math.hypot(bx - ax, by - ay) / spacing - 1e-9))
+        pts += [(ax + (bx - ax) * j / k, ay + (by - ay) * j / k) for j in range(k)]
+    pts.append(order[-1])
+    return [(x, y, math.hypot(x - cx, y - cy),
+             math.degrees(math.atan2(y - cy, x - cx)) % 360) for x, y in pts]
+
+
 def inward_point(x, y, cx, cy, back):
     """``back`` metres from (x, y) towards (cx, cy)."""
     dx, dy = cx - x, cy - y
@@ -135,7 +159,8 @@ def battery_low(v, thr, low_since, now, grace):
 #: What makes two runs "the same path". Speed, dwell and the watchdog limits
 #: are deliberately absent: changing them on a resume is fine.
 _PATH_KEYS = ('mode', 'centre', 'r_min', 'r_max', 'turns', 'height', 'levels',
-              'z_step', 'z_max', 'bearing', 'r_step')
+              'z_step', 'z_max', 'bearing', 'r_step', 'polygon', 'spacing',
+              'start_vertex')
 
 
 def path_signature(args):
@@ -240,6 +265,16 @@ def selftest():
     print(f'  {"PASS" if good else "FAIL"}  ray: straight out in <=10 cm steps, '
           'retreat point is towards the centre')
 
+    # tour: closed, evenly spaced, starts and ends on the chosen vertex
+    sq = [(0.0, 0.0), (2.0, 0.0), (2.0, 2.0), (0.0, 2.0)]
+    tl = tour_legs(1.0, 1.0, sq, 0.25, 2)
+    steps = [math.dist(a[:2], b[:2]) for a, b in zip(tl, tl[1:])]
+    good = (tl[0][:2] == (2.0, 2.0) and tl[-1][:2] == (2.0, 2.0)
+            and len(tl) == 33 and max(steps) <= 0.25 + 1e-9)
+    fail += not good
+    print(f'  {"PASS" if good else "FAIL"}  tour: closed loop from the start vertex, '
+          '<=25 cm steps')
+
     # the goTo profile: ends pinned, symmetric, monotonic
     prof = [goto_progress(k / 100) for k in range(101)]
     good = (prof[0] == 0.0 and abs(prof[-1] - 1.0) < 1e-12
@@ -286,7 +321,8 @@ def selftest():
     from types import SimpleNamespace
     a = SimpleNamespace(mode='spiral', centre=(-0.213, -0.072), r_min=3.3,
                         r_max=3.85, turns=1.0, height=1.2, levels='',
-                        z_step=0.1, z_max=3.0, bearing=0.0, r_step=0.1)
+                        z_step=0.1, z_max=3.0, bearing=0.0, r_step=0.1,
+                        polygon='', spacing=0.25, start_vertex=0)
     with tempfile.TemporaryDirectory() as d:
         p = pathlib.Path(d) / 'p.json'
         save_progress(p, path_signature(a), level=0, leg=7, done=False)
@@ -325,11 +361,19 @@ def main():
     ap.add_argument('--height', type=float, default=1.2)
     ap.add_argument('--speed', type=float, default=0.10, help='m/s, ground speed')
     ap.add_argument('--turns', type=float, default=2.0)
-    ap.add_argument('--mode', choices=('spiral', 'climb', 'ray'), default='spiral',
+    ap.add_argument('--mode', choices=('spiral', 'climb', 'ray', 'tour'), default='spiral',
                     help='spiral = radius sweep at one height; '
                          'climb = height sweep near the volume centre; '
                          'ray = straight out along --bearing, r-min -> r-max, '
-                         'to find a horizontal edge')
+                         'to find a horizontal edge; '
+                         'tour = once round the edges of --polygon')
+    ap.add_argument('--polygon', default='',
+                    help='--mode tour: CCW vertices "x,y; x,y; ..." (ROS frame)')
+    ap.add_argument('--spacing', type=float, default=0.25,
+                    help='m, --mode tour: distance between waypoints')
+    ap.add_argument('--start-vertex', type=int, default=0,
+                    help='--mode tour: the vertex to start and end at. Part of '
+                         'the path, so a --resume must give the same one')
     ap.add_argument('--bearing', type=float, default=0.0,
                     help='deg, --mode ray only: 0 = +x, 90 = +y (ROS frame)')
     ap.add_argument('--r-step', type=float, default=0.10,
@@ -509,6 +553,9 @@ def main():
 
     if args.mode == 'ray':
         legs = ray_legs(cx, cy, args.bearing, args.r_min, args.r_max, args.r_step)
+    elif args.mode == 'tour':
+        legs = tour_legs(cx, cy, parse_polygon(args.polygon), args.spacing,
+                         args.start_vertex)
     else:
         # the spiral: constant angular step, radius growing linearly
         legs = []
@@ -678,14 +725,15 @@ def main():
                 leg = math.dist(prev, (x, y))
                 dur = max(1.0, leg / args.speed)
                 go(x, y, z, dur)
-                if args.mode == 'ray':
+                if args.mode in ('ray', 'tour'):
                     try:
                         pump(dur)
                     except LowBattery:
                         raise
                     except Aborted as e:
                         recover_inward(str(e))
-                        print(f'\n  tracking lost going out through r = {r:.2f} m '
+                        print(f'\n  tracking lost at waypoint {k} (r = {r:.2f} m, '
+                              f'({x:+.2f}, {y:+.2f})) -- going out through r = {r:.2f} m '
                               f'(bearing {a:.0f} deg); last tracked waypoint '
                               f'r = {path[k - 1][2]:.2f} m')
                         save_progress(prog_path, sig, level=li, leg=k - 1,
