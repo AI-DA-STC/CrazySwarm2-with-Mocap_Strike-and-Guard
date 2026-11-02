@@ -165,9 +165,11 @@ copy it: `python3 -c "from crazyflie_shows import safety as s; print(s.ARENA_CEN
     day.
   - **Streaming:** Motive's *Local Interface* (Data Streaming pane) was unset after
     the move, so nothing answered discovery. It must name the wired adapter.
-  - **arena.yaml was not re-surveyed.** It still holds the old room's numbers as
-    a conservative geofence (see the note at the top of the file). Park the drones
-    inside it, or survey the new room before using more of it.
+  - **arena.yaml was re-surveyed the same day:** a carried walk, then a flown
+    climb and edge loops (the header of the file has the details and the data
+    files). Tracking held everywhere it was tested. The radius is limited by
+    furniture, not by the cameras, so it is a circle that stops at the nearest
+    obstacle; the ceiling is a flown lower bound.
 - **After any Motive recalibration or rigid-body rename:** do not fly; re-sync the
   marks (2b); transform every world-frame number in the escort config *by its kind*
   (a point is rotated and translated, an offset is rotated, an absolute bearing

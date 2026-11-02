@@ -42,3 +42,6 @@ params*.csv
 .idea/
 *.swp
 .DS_Store
+
+# arena_flight_sweep.py resume state: per-run, not data
+data/arena/*.progress.json

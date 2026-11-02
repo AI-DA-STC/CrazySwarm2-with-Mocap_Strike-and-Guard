@@ -639,7 +639,7 @@ def main():
         print(f'  {len(arr)} samples, max radius flown {rad.max():.2f} m, '
               f'max pose age {arr[:, 3].max():.2f} s')
         print(f"\n  {'radius band':>14} {'samples':>8} {'worst pose age':>15}")
-        for lo in np.arange(0.5, args.r_max + 0.25, 0.25):
+        for lo in np.arange(0.5, max(args.r_max, float(rad.max())) + 0.25, 0.25):
             m = (rad >= lo) & (rad < lo + 0.25)
             if m.any():
                 print(f'  {lo:5.2f}-{lo+0.25:5.2f} m {int(m.sum()):>8} '

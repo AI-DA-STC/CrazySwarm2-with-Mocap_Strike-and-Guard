@@ -21,9 +21,18 @@ arena:
   #
   # !! 2026-11-02: THE RIG MOVED TO THE BIG ARENA (new cameras, new calibration,
   # !! new world frame). The `arena:` numbers below were RE-MEASURED there by a
-  # !! CARRIED survey only (scripts/measure_arena.py, cf5 walked by hand for
-  # !! 240 s, 11999 samples, raw data data/arena/bigarena_carried_cf5_2026-11-02.csv).
-  # !! No flown sweep yet. The old room's survey is git tag `pre-big-arena`.
+  # !! CARRIED survey (scripts/measure_arena.py, cf5 walked by hand for 240 s,
+  # !! 11999 samples, data/arena/bigarena_carried_cf5_2026-11-02.csv), then a
+  # !! FLOWN sweep the same day (scripts/arena_flight_sweep.py, cf5, data/arena/
+  # !! bigarena_{climb_edge,band1.2,band2.0}_cf5_2026-11-02.csv):
+  # !!   - climb at 3.36 m out (+x) from 1.2 m to the 3.00 m cap: tracked all
+  # !!     the way, worst pose age 0.02 s. The ceiling is ABOVE 3.00 m, unmeasured.
+  # !!   - one full loop of the band 3.32 -> 3.85 m at 1.2 m and again at 2.0 m:
+  # !!     every waypoint tracked, worst pose age 0.02 s. The loop is a spiral, so
+  # !!     each bearing was flown at ONE radius (3.44 m at +y, the bearing closest
+  # !!     to the furniture; 3.85 m at +x).
+  # !!   - a drone landed at 3.88 m (+x) stayed tracked on the floor.
+  # !! The old room's survey is git tag `pre-big-arena`.
   # !!   - Tracking held EVERYWHERE the body went: no dropout at all, largest
   # !!     gap between samples 25 ms. So tracking is not what limits the arena;
   # !!     the ROOM is. The floor is not a square: furniture leaves a chamfer at
@@ -37,20 +46,22 @@ arena:
   # !!     maxima measure_arena.py prints as a radius: the maximum within a wide
   # !!     sector hides the furniture (this file briefly said 4.70 m because of
   # !!     exactly that).
-  # !!   - Height covered: 0.76 .. 2.13 m at the edges (as high as a person can
-  # !!     reach). Nothing above that was measured, so both ceilings are that,
-  # !!     rounded down; the old room's truncated cone does not apply.
-  # !!   - NOT covered: floor level away from the centre. On 2026-11-02, four
-  # !!     drones parked on the floor at the room's corners were not tracked at all
-  # !!     while the carried body was. Check that a parked drone is streaming
-  # !!     before trusting a mark near the edge.
+  # !!   - Ceilings: FLOWN to the 3.00 m cap at 3.36 m out with no loss, so both
+  # !!     are 3.00 m. No pinch was seen; the old room's truncated cone does not
+  # !!     apply. (The carried walk reached 2.13 m, as high as a person can reach.)
+  # !!   - Floor level: tracked at the centre and at 3.88 m (+x). Four drones
+  # !!     parked at the room's far corners (outside this arena) were not tracked
+  # !!     at all. Check that a parked drone is streaming before trusting a mark
+  # !!     near the edge.
   # !!   - centre was kept, not re-derived: it is where the shows are anchored, and
   # !!     the survey measured radii FROM it. The 2026-10-08 frame history and the
   # !!     per-sector bearings in the comments below describe the OLD room.
   # !!   - The ground plane is gravity-level and the floor is not: grounded
   # !!     drones read z of about -0.03..+0.06 depending on where they stand.
-  # !! To raise the radius further, walk out until Motive drops the body, then
-  # !! fly scripts/arena_flight_sweep.py (pass --centre; its default is stale).
+  # !! The radius is limited by the FURNITURE, not by tracking: a circle about
+  # !! this centre cannot grow past the closest obstacle. Using the open sides
+  # !! (to ~7 m at -y) needs a non-circular arena, which the shows do not support.
+  # !! Pass --centre to arena_flight_sweep.py; its default is the old room's.
   measured: true
 
   #: Centroid of the TRACKED VOLUME -- not the room's geometric centre, and not
@@ -116,8 +127,8 @@ arena:
   #: The volume is a truncated cone -- wide through the flight band, pinching
   #: near the ceiling. A single "ceiling" number is meaningless without saying
   #: at what radius, which is why there are three.
-  ceiling_tested: 2.10          # m  big arena, carried to 2.13 m beyond 4 m out (old room: 1.95, flown)
-  ceiling_centre_tested: 2.10   # m  big arena, carried; nothing higher measured (old room: 2.42, flown)
+  ceiling_tested: 3.00          # m  big arena, FLOWN to the 3.00 m cap at 3.36 m out, no loss (old room: 1.95)
+  ceiling_centre_tested: 3.00   # m  big arena: the edge climb's 3.00 m; the centre was not climbed separately (old room: 2.42)
   ceiling_pinch_radius: 3.75    # m  big arena: no pinch seen; set to radius_tested (old room: 2.00)
 
 separation:
