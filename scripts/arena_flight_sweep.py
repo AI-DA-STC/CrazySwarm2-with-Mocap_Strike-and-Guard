@@ -87,6 +87,26 @@ def setpoint_at(start, end, t0, dur, now):
     return tuple(s + (e - s) * f for s, e in zip(start, end))
 
 
+def ray_legs(cx, cy, bearing_deg, r_min, r_max, r_step):
+    """Waypoints straight out from (cx, cy) along ``bearing_deg`` (0 = +x,
+    90 = +y), r_min -> r_max in steps of at most ``r_step``. Same tuple shape
+    as the spiral's: (x, y, r, bearing)."""
+    b = math.radians(bearing_deg)
+    n = max(1, math.ceil((r_max - r_min) / r_step - 1e-9))
+    return [(cx + r * math.cos(b), cy + r * math.sin(b), r, bearing_deg % 360)
+            for r in (r_min + (r_max - r_min) * k / n for k in range(n + 1))]
+
+
+def inward_point(x, y, cx, cy, back):
+    """``back`` metres from (x, y) towards (cx, cy)."""
+    dx, dy = cx - x, cy - y
+    d = math.hypot(dx, dy)
+    if d < 1e-9:
+        return x, y
+    f = min(back, d) / d
+    return x + dx * f, y + dy * f
+
+
 def descent_duration(dz, rate, minimum):
     """Seconds for a descent of ``dz`` metres at an AVERAGE ``rate`` m/s.
 
@@ -115,7 +135,7 @@ def battery_low(v, thr, low_since, now, grace):
 #: What makes two runs "the same path". Speed, dwell and the watchdog limits
 #: are deliberately absent: changing them on a resume is fine.
 _PATH_KEYS = ('mode', 'centre', 'r_min', 'r_max', 'turns', 'height', 'levels',
-              'z_step', 'z_max')
+              'z_step', 'z_max', 'bearing', 'r_step')
 
 
 def path_signature(args):
@@ -209,6 +229,17 @@ def selftest():
     print(f'  {"PASS" if forgiven else "FAIL"}  following: a brief excursion is '
           'forgiven and the clock restarts')
 
+    # ray mode geometry
+    rl = ray_legs(0.0, 0.0, 90.0, 3.3, 4.6, 0.10)
+    good = (abs(rl[0][2] - 3.3) < 1e-9 and abs(rl[-1][2] - 4.6) < 1e-9
+            and all(abs(x) < 1e-9 for x, _, _, _ in rl)
+            and max(b[2] - a[2] for a, b in zip(rl, rl[1:])) <= 0.10 + 1e-9)
+    ix, iy = inward_point(4.0, 0.0, 0.0, 0.0, 0.6)
+    good = good and abs(ix - 3.4) < 1e-9 and abs(iy) < 1e-9
+    fail += not good
+    print(f'  {"PASS" if good else "FAIL"}  ray: straight out in <=10 cm steps, '
+          'retreat point is towards the centre')
+
     # the goTo profile: ends pinned, symmetric, monotonic
     prof = [goto_progress(k / 100) for k in range(101)]
     good = (prof[0] == 0.0 and abs(prof[-1] - 1.0) < 1e-12
@@ -255,7 +286,7 @@ def selftest():
     from types import SimpleNamespace
     a = SimpleNamespace(mode='spiral', centre=(-0.213, -0.072), r_min=3.3,
                         r_max=3.85, turns=1.0, height=1.2, levels='',
-                        z_step=0.1, z_max=3.0)
+                        z_step=0.1, z_max=3.0, bearing=0.0, r_step=0.1)
     with tempfile.TemporaryDirectory() as d:
         p = pathlib.Path(d) / 'p.json'
         save_progress(p, path_signature(a), level=0, leg=7, done=False)
@@ -294,9 +325,18 @@ def main():
     ap.add_argument('--height', type=float, default=1.2)
     ap.add_argument('--speed', type=float, default=0.10, help='m/s, ground speed')
     ap.add_argument('--turns', type=float, default=2.0)
-    ap.add_argument('--mode', choices=('spiral', 'climb'), default='spiral',
+    ap.add_argument('--mode', choices=('spiral', 'climb', 'ray'), default='spiral',
                     help='spiral = radius sweep at one height; '
-                         'climb = height sweep near the volume centre')
+                         'climb = height sweep near the volume centre; '
+                         'ray = straight out along --bearing, r-min -> r-max, '
+                         'to find a horizontal edge')
+    ap.add_argument('--bearing', type=float, default=0.0,
+                    help='deg, --mode ray only: 0 = +x, 90 = +y (ROS frame)')
+    ap.add_argument('--r-step', type=float, default=0.10,
+                    help='m, --mode ray only: distance between waypoints')
+    ap.add_argument('--back-off', type=float, default=0.6,
+                    help='m, --mode ray only: how far to retreat towards the '
+                         'centre when tracking is lost, before landing')
     ap.add_argument('--z-max', type=float, default=2.40,
                     help='HARD ceiling for --mode climb. Hand-carried tracking '
                          'died at 2.33 m; this stops just above that.')
@@ -467,14 +507,17 @@ def main():
               f'{args.land_voltage:.2f} V (in flight, sustained '
               f'{args.land_voltage_s:.0f} s)')
 
-    # the spiral: constant angular step, radius growing linearly
-    legs = []
-    n = max(24, int(args.turns * 24))
-    for k in range(n + 1):
-        f = k / n
-        r = args.r_min + (args.r_max - args.r_min) * f
-        a = 2 * math.pi * args.turns * f
-        legs.append((cx + r * math.cos(a), cy + r * math.sin(a), r, math.degrees(a) % 360))
+    if args.mode == 'ray':
+        legs = ray_legs(cx, cy, args.bearing, args.r_min, args.r_max, args.r_step)
+    else:
+        # the spiral: constant angular step, radius growing linearly
+        legs = []
+        n = max(24, int(args.turns * 24))
+        for k in range(n + 1):
+            f = k / n
+            r = args.r_min + (args.r_max - args.r_min) * f
+            a = 2 * math.pi * args.turns * f
+            legs.append((cx + r * math.cos(a), cy + r * math.sin(a), r, math.degrees(a) % 360))
 
     levels = ([float(v) for v in args.levels.split(',') if v.strip()]
               or [args.height])
@@ -508,6 +551,30 @@ def main():
         except ValueError:
             pass
     x0, y0 = path_for(start_li)[start_k][:2]
+
+    def recover_inward(why):
+        """Lost at a HORIZONTAL edge: dropping does not bring tracking back,
+        going back in does. Retreat --back-off towards the centre at the same
+        height, briefly, then let the caller land."""
+        print(f'\n  *** {why} -- backing {args.back_off:.1f} m towards the centre ***',
+              flush=True)
+        here = seen['p'] or (prev_ok[0], prev_ok[1], args.height)
+        tx, ty = inward_point(here[0], here[1], cx, cy, args.back_off)
+        try:
+            cf.goTo(np.array([tx, ty, here[2]]), 0.0, 2.0)
+        except Exception as e:                              # noqa: BLE001
+            print(f'  could not command the retreat ({e!r})')
+        t_rec, back = time.time(), False
+        while time.time() - t_rec < 3.0:
+            rclpy.spin_once(node, timeout_sec=0.0)
+            timeHelper.sleep(0.05)
+            if time.time() - seen['t'] < 0.2:
+                back = True
+        print(f'  tracking {"RECOVERED" if back else "did NOT recover"} after '
+              'backing in', flush=True)
+        return back
+
+    prev_ok = (cx, cy)
 
     def recover_and_land(why):
         """Stale at height is worse than stale low down: come DOWN into volume
@@ -611,8 +678,23 @@ def main():
                 leg = math.dist(prev, (x, y))
                 dur = max(1.0, leg / args.speed)
                 go(x, y, z, dur)
-                pump(dur)
+                if args.mode == 'ray':
+                    try:
+                        pump(dur)
+                    except LowBattery:
+                        raise
+                    except Aborted as e:
+                        recover_inward(str(e))
+                        print(f'\n  tracking lost going out through r = {r:.2f} m '
+                              f'(bearing {a:.0f} deg); last tracked waypoint '
+                              f'r = {path[k - 1][2]:.2f} m')
+                        save_progress(prog_path, sig, level=li, leg=k - 1,
+                                      lost_at=r, done=True)
+                        raise _Done()
+                else:
+                    pump(dur)
                 prev = (x, y)
+                prev_ok = (x, y)
                 age = time.time() - seen['t']
                 print(f'  {z:>5.2f}m {r:>6.2f} {a:>7.0f}d '
                       f'{"ok" if age < args.stale else "STALE":>8} {vstr():>8} '
