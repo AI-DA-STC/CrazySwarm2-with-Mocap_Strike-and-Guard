@@ -102,10 +102,22 @@ def command(allcfs, cfs, cfg, ph):
 
 
 def main():
+    return run('constellation_show', constellation.ConstellationConfig,
+               constellation.build_plan, constellation.report_extras)
+
+
+def run(label, cfg_cls, build_plan, report_extras=None):
+    """Plan, check and fly any beat-gridded show built like the constellation.
+
+    ``build_plan(names, starts, cfg)`` must return a verified
+    :class:`choreography.Plan` whose phases carry ``slot`` (and optionally
+    ``lights``) and whose report has ``beat``, ``wall`` and ``pieces``. The
+    serpent show (serpent_show) flies through here unchanged.
+    """
     # The room must have been MEASURED before anything plans or flies.
     # No-op on this rig; the gate exists so a copy of this package in an
     # unsurveyed room refuses instead of inheriting our geofence.
-    safety.require_measured_arena('constellation_show')
+    safety.require_measured_arena(label)
     swarm = Crazyswarm()
     timeHelper = swarm.timeHelper
     allcfs = swarm.allcfs
@@ -121,7 +133,7 @@ def main():
     names = [cf.prefix.lstrip('/') for cf in cfs]
     starts = [np.array(cf.initialPosition, float) for cf in cfs]
 
-    cfg = constellation.ConstellationConfig()
+    cfg = cfg_cls()
     cfg.bpm = float(_param(node, 'bpm', cfg.bpm))
     cfg.scale = float(_param(node, 'scale', cfg.scale))
     cfg.arena_radius = float(_param(node, 'arena_radius', cfg.arena_radius))
@@ -129,9 +141,10 @@ def main():
 
     # build_plan verifies as it builds and raises on any violation, so there is
     # no path from here to an armed drone flying an unchecked plan.
-    plan = constellation.build_plan(names, starts, cfg)
+    plan = build_plan(names, starts, cfg)
     plan_show.report(plan, cfg, names)
-    constellation.report_extras(plan, cfg, names)
+    if report_extras:
+        report_extras(plan, cfg, names)
 
     # ------------------------------------------------------------ preflight
     if want_placement and not sim:

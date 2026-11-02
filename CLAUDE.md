@@ -36,6 +36,8 @@ Motive ──NatNet multicast 50 Hz──► motion_capture_tracking ──/pose
   - `abort.py`, `preflight.py`, `safety.py` are the shared safety machinery.
   - `swarm_show`, `constellation*`, `choreography`, `figures`, `demo_show`, `plan_show`
     belong to two older shows; the demos import a few helpers from them, so they stay.
+  - `serpent.py` / `serpent_show.py` / `plan_serpent`: the one-minute big-arena show
+    (docs/details/serpent-show.md). It flies through `constellation_show.run()`.
 - `src/crazyswarm2/crazyflie/config/`: `crazyflies.yaml` is the ONLY fleet roster
   (cf10-cf14 committed `enabled: false`); `arena.yaml` is the measured room
   (`measured: false` makes the escort planner refuse; the STL game ignores it).

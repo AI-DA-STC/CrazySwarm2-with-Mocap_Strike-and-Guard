@@ -28,13 +28,14 @@ import sys
 import numpy as np
 import yaml
 
-from crazyflie_shows import choreography, constellation, figures, safety
+from crazyflie_shows import choreography, constellation, figures, safety, serpent
 
 #: Every show the package can plan: name -> (config class, builder, extra report).
 SHOWS = {
     'swarm': (choreography.ShowConfig, choreography.build_plan, None),
     'constellation': (constellation.ConstellationConfig, constellation.build_plan,
                       constellation.report_extras),
+    'serpent': (serpent.SerpentConfig, serpent.build_plan, serpent.report_extras),
 }
 
 
@@ -359,3 +360,9 @@ def main_constellation():
     safety.require_measured_arena('plan_show (main_constellation)')
     """Entry point ``plan_constellation``: plan_show preset to the constellation."""
     return main(default_show='constellation')
+
+
+def main_serpent():
+    """Entry point ``plan_serpent``: plan_show preset to the serpent show."""
+    safety.require_measured_arena('plan_show (main_serpent)')
+    return main(default_show='serpent')

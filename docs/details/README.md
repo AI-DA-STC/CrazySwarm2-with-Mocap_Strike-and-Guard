@@ -24,6 +24,7 @@ before changing code.
 |---|---|
 | [preflight-gui.md](preflight-gui.md) | The preflight window: checklist, screenshots of good and bad, drone and room axes |
 | [mocap.md](mocap.md) | OptiTrack: calibration, rigid bodies, the measured arena, the lab network |
+| [serpent-show.md](serpent-show.md) | The one-minute serpent show for the big arena: what it does, how it stays safe at speed, how to fly it |
 | [running.md](running.md) | General rig commands: one-drone test flight, health checks, LEDs, launch arguments |
 | [console.md](console.md) | The web console: every button and the command it runs |
 | [mission-window.md](mission-window.md) | Each demo's own screen in the web console, and the spec file behind it |
