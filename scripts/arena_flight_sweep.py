@@ -66,6 +66,27 @@ def following(err, tol, bad_since, now, grace):
     return (now - bad_since) <= grace, bad_since
 
 
+def goto_progress(tau):
+    """Fraction of a firmware goTo() covered at normalised time ``tau``.
+
+    The high-level commander flies goTo as a 7th-order polynomial with zero
+    velocity, acceleration and jerk at both ends. The following watchdog
+    must compare the drone with THIS moving setpoint, not with the goTo's end
+    point: on 2026-11-02 a 3.4 m, 34 s glide to the edge of the big arena was
+    aborted 3 s in for being "3.16 m from its setpoint". It was flying
+    exactly as commanded. In the old room every move was under the 0.6 m
+    tolerance, which hid the bug.
+    """
+    t = min(max(tau, 0.0), 1.0)
+    return t ** 4 * (35 - 84 * t + 70 * t ** 2 - 20 * t ** 3)
+
+
+def setpoint_at(start, end, t0, dur, now):
+    """Where the commander's setpoint is ``now`` along a goTo start->end."""
+    f = goto_progress((now - t0) / dur if dur > 0 else 1.0)
+    return tuple(s + (e - s) * f for s, e in zip(start, end))
+
+
 def battery_low(v, thr, low_since, now, grace):
     """(land_now, new_low_since) for the low-battery watchdog.
 
@@ -176,6 +197,28 @@ def selftest():
     fail += not forgiven
     print(f'  {"PASS" if forgiven else "FAIL"}  following: a brief excursion is '
           'forgiven and the clock restarts')
+
+    # the goTo profile: ends pinned, symmetric, monotonic
+    prof = [goto_progress(k / 100) for k in range(101)]
+    good = (prof[0] == 0.0 and abs(prof[-1] - 1.0) < 1e-12
+            and abs(prof[50] - 0.5) < 1e-12
+            and all(b >= a for a, b in zip(prof, prof[1:])))
+    fail += not good
+    print(f'  {"PASS" if good else "FAIL"}  goto_progress: 0 -> 1, half way at '
+          'half time, never backwards')
+
+    # the 2026-11-02 abort, replayed: a drone flying a 3.4 m / 34 s glide
+    # exactly as commanded (plus 0.1 m of lag) must never trip the watchdog
+    bad, never = None, True
+    for step in range(69):
+        t = step * 0.5
+        sp = setpoint_at((0.0, 0.0, 1.2), (3.4, 0.0, 1.2), 0.0, 34.0, t)
+        drone = (max(sp[0] - 0.10, 0.0), 0.0, 1.2)
+        ok, bad = following(math.dist(drone, sp), 0.60, bad, t, 3.0)
+        never &= ok
+    fail += not never
+    print(f'  {"PASS" if never else "FAIL"}  following: a long glide flown as '
+          'commanded never aborts (the 2026-11-02 false abort)')
 
     # low battery: one sagging sample is forgiven, a sustained one lands
     land1, s = battery_low(3.20, 3.30, None, 0.0, 2.0)
@@ -352,7 +395,8 @@ def main():
                 raise LowBattery(f'battery {batt["v"]:.2f} V, below '
                                  f'{args.land_voltage:.2f} V for '
                                  f'>{args.land_voltage_s:.0f} s')
-            want = cmd['p']
+            want = (setpoint_at(cmd['from'], cmd['p'], cmd['t0'], cmd['dur'],
+                                time.time()) if cmd['p'] is not None else None)
             if want is not None and seen['p'] is not None:
                 err = math.dist(seen['p'], want)
                 ok, cmd['bad'] = following(err, args.follow_tol, cmd['bad'],
@@ -362,10 +406,15 @@ def main():
                         f'{args.drone} is {err:.2f} m from its setpoint for '
                         f'>{args.follow_s:.0f} s -- it is not following')
 
-    cmd = {'p': None, 'bad': None}
+    cmd = {'p': None, 'from': None, 't0': 0.0, 'dur': 0.0, 'bad': None}
 
     def go(x, y, z, dur):
+        # the commander starts from its current setpoint: the previous goTo's
+        # end, or (right after takeoff) where the drone actually is
+        start = cmd['p'] if cmd['p'] is not None else (seen['p'] or (x, y, z))
+        cmd['from'] = tuple(float(v) for v in start)
         cmd['p'] = (float(x), float(y), float(z))
+        cmd['t0'], cmd['dur'] = time.time(), float(dur)
         cmd['bad'] = None
         cf.goTo(np.array([x, y, z]), 0.0, dur)
 
