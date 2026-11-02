@@ -565,16 +565,17 @@ def main():
             if start_z is not None and start_z > z:
                 # straight back up to the last height that held, slowly
                 dz = start_z - z
-                here = seen['p'] or (x0, y0, z)
-                go(here[0], here[1], start_z, max(2.0, dz / args.speed))
+                go(x0, y0, start_z, max(2.0, dz / args.speed))
                 pump(max(2.0, dz / args.speed) + 1.0)
                 z = start_z
                 print(f'  back at {z:.2f} m, carrying on', flush=True)
             lost_at = None
             while z < args.z_max:
                 z = min(z + args.z_step, args.z_max)
-                here = seen['p'] or (cx, cy, z)
-                go(here[0], here[1], z, max(1.5, args.z_step / args.speed))
+                # climb a FIXED column over the start point. Taking x, y from
+                # the current pose let drift add up: 18 cm outward over a
+                # 4.6 m climb on 2026-11-02, which is ~0.5 m by 12 m.
+                go(x0, y0, z, max(1.5, args.z_step / args.speed))
                 try:
                     pump(max(1.5, args.z_step / args.speed) + args.dwell)
                 except LowBattery:
