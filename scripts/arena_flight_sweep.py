@@ -29,6 +29,7 @@ bearing, at flight height", which is what the escort geometry actually needs.
 """
 
 import argparse
+import json
 import math
 import pathlib
 import signal
@@ -65,8 +66,66 @@ def following(err, tol, bad_since, now, grace):
     return (now - bad_since) <= grace, bad_since
 
 
+def battery_low(v, thr, low_since, now, grace):
+    """(land_now, new_low_since) for the low-battery watchdog.
+
+    True once the voltage has stayed below ``thr`` for longer than ``grace``:
+    a climb sags the voltage for a moment, and one low sample must not end a
+    run. ``v is None`` means no /status has arrived, so the check cannot fire.
+    """
+    if v is None or v >= thr:
+        return False, None
+    if low_since is None:
+        return False, now
+    return (now - low_since) > grace, low_since
+
+
+#: What makes two runs "the same path". Speed, dwell and the watchdog limits
+#: are deliberately absent: changing them on a resume is fine.
+_PATH_KEYS = ('mode', 'centre', 'r_min', 'r_max', 'turns', 'height', 'levels',
+              'z_step', 'z_max')
+
+
+def path_signature(args):
+    return {k: (list(getattr(args, k)) if k == 'centre' else getattr(args, k))
+            for k in _PATH_KEYS}
+
+
+def save_progress(path, sig, **where):
+    """Record the last waypoint the drone REACHED, atomically: a run that dies
+    while writing must not leave a half-file that a resume then trusts."""
+    path = pathlib.Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + '.tmp')
+    tmp.write_text(json.dumps({'path': sig, **where}, indent=1))
+    tmp.replace(path)
+
+
+def load_progress(path, sig):
+    """The progress of an unfinished run on THIS path, or SystemExit saying why not."""
+    path = pathlib.Path(path)
+    if not path.exists():
+        raise SystemExit(f'  no progress file {path} -- nothing to resume; '
+                         'run without --resume')
+    prog = json.loads(path.read_text())
+    if prog.get('done'):
+        raise SystemExit(f'  {path}: that sweep already finished -- nothing to resume')
+    diff = [k for k in _PATH_KEYS if prog['path'].get(k) != sig.get(k)]
+    if diff:
+        raise SystemExit(
+            f'  {path} was recorded on a different path ({", ".join(diff)} differ:\n'
+            + ''.join(f'    {k}: was {prog["path"].get(k)!r}, now {sig.get(k)!r}\n'
+                      for k in diff)
+            + '  ) -- resume with the same path arguments, or run without --resume')
+    return prog
+
+
 class Aborted(Exception):
     pass
+
+
+class LowBattery(Aborted):
+    """Land now, and say how to carry on. Not a tracking failure."""
 
 
 class _Done(Exception):
@@ -118,6 +177,46 @@ def selftest():
     print(f'  {"PASS" if forgiven else "FAIL"}  following: a brief excursion is '
           'forgiven and the clock restarts')
 
+    # low battery: one sagging sample is forgiven, a sustained one lands
+    land1, s = battery_low(3.20, 3.30, None, 0.0, 2.0)
+    land2, s = battery_low(3.20, 3.30, s, 1.0, 2.0)
+    land3, s2 = battery_low(3.60, 3.30, s, 1.5, 2.0)       # recovers
+    land4, s = battery_low(3.20, 3.30, s, 2.5, 2.0)
+    land5, _ = battery_low(None, 3.30, None, 9.0, 2.0)     # no /status yet
+    good = (not land1 and not land2 and not land3 and s2 is None
+            and land4 and not land5)
+    fail += not good
+    print(f'  {"PASS" if good else "FAIL"}  battery_low: a sag is forgiven, '
+          'a sustained low lands, no reading never lands')
+
+    # progress: round trip, finished run, and a different path all behave
+    import tempfile
+    from types import SimpleNamespace
+    a = SimpleNamespace(mode='spiral', centre=(-0.213, -0.072), r_min=3.3,
+                        r_max=3.85, turns=1.0, height=1.2, levels='',
+                        z_step=0.1, z_max=3.0)
+    with tempfile.TemporaryDirectory() as d:
+        p = pathlib.Path(d) / 'p.json'
+        save_progress(p, path_signature(a), level=0, leg=7, done=False)
+        back = load_progress(p, path_signature(a))
+        rt = back['level'] == 0 and back['leg'] == 7
+        b = SimpleNamespace(**{**vars(a), 'r_max': 4.0})
+        try:
+            load_progress(p, path_signature(b))
+            other = False
+        except SystemExit:
+            other = True
+        save_progress(p, path_signature(a), done=True)
+        try:
+            load_progress(p, path_signature(a))
+            fin = False
+        except SystemExit:
+            fin = True
+    good = rt and other and fin
+    fail += not good
+    print(f'  {"PASS" if good else "FAIL"}  progress: round trip, a changed path '
+          'refuses, a finished run refuses')
+
     print(f'\n  {"selftest OK" if not fail else f"{fail} FAILURE(S)"}')
     return 1 if fail else 0
 
@@ -165,6 +264,26 @@ def main():
                          'to a cleared scratchpad.')
     ap.add_argument('--stale', type=float, default=0.4,
                     help='s without a pose before the sweep lands itself')
+    ap.add_argument('--resume', action='store_true',
+                    help='carry on an unfinished run (e.g. one that landed on '
+                         'low battery) from the last waypoint it reached. Give '
+                         'the SAME path arguments; samples are appended to --save')
+    ap.add_argument('--progress', metavar='JSON',
+                    help='where the last reached waypoint is recorded '
+                         '(default: <--save>.progress.json)')
+    ap.add_argument('--land-voltage', type=float, default=3.30,
+                    help='V. Below this for --land-voltage-s the run lands and '
+                         'can be resumed. Under load, so lower than the at-rest '
+                         'warning in crazyflies.yaml')
+    ap.add_argument('--land-voltage-s', type=float, default=3.0,
+                    help='s the voltage must stay low before landing. Every '
+                         'climb step sags the pack for a moment; that must '
+                         'not end a run')
+    ap.add_argument('--min-start-voltage', type=float, default=3.80,
+                    help='V AT REST (before arming, no load). Below this the '
+                         'run will not arm: same as voltage_warning in '
+                         'crazyflies.yaml. Flying sags the pack ~0.3-0.4 V, '
+                         'which is why this and --land-voltage differ')
     ap.add_argument('--selftest', action='store_true',
                     help='exercise the watchdogs on the ground and exit')
     args = ap.parse_args()
@@ -197,6 +316,16 @@ def main():
                 seen['p'] = (np_.pose.position.x, np_.pose.position.y, np_.pose.position.z)
     node.create_subscription(NamedPoseArray, '/poses', on_poses, qos)
 
+    # battery, from the server's 1 Hz /<drone>/status
+    from crazyflie_interfaces.msg import Status
+    from rclpy.qos import qos_profile_sensor_data
+    batt = {'v': None, 'low': None}
+
+    def on_status(msg):
+        batt['v'] = float(msg.battery_voltage)
+    node.create_subscription(Status, f'/{args.drone}/status', on_status,
+                             qos_profile_sensor_data)
+
     def pump(seconds):
         """Spin, sample, and enforce BOTH watchdogs.
 
@@ -216,6 +345,13 @@ def main():
                 samples.append((time.time(), x, y, z, age))
             if seen['t'] and age > args.stale:
                 raise Aborted(f'{args.drone} pose stale for {age:.2f} s')
+            low, batt['low'] = battery_low(batt['v'], args.land_voltage,
+                                           batt['low'], time.time(),
+                                           args.land_voltage_s)
+            if low:
+                raise LowBattery(f'battery {batt["v"]:.2f} V, below '
+                                 f'{args.land_voltage:.2f} V for '
+                                 f'>{args.land_voltage_s:.0f} s')
             want = cmd['p']
             if want is not None and seen['p'] is not None:
                 err = math.dist(seen['p'], want)
@@ -248,6 +384,22 @@ def main():
         raise SystemExit(f'  no /poses for {args.drone}; not arming')
     print(f'  {args.drone} tracked at ({seen["p"][0]:+.2f},{seen["p"][1]:+.2f})')
 
+    # battery AT REST, before any load: a resume on a half-empty pack would
+    # only land again a minute later
+    t0 = time.time()
+    while batt['v'] is None and time.time() - t0 < 3.0:
+        rclpy.spin_once(node, timeout_sec=0.1)
+    if batt['v'] is None:
+        print(f'  WARNING: no /{args.drone}/status -- battery unknown, the '
+              'low-battery landing CANNOT fire. Watch it yourself.')
+    elif batt['v'] < args.min_start_voltage:
+        raise SystemExit(f'  battery {batt["v"]:.2f} V at rest, below '
+                         f'{args.min_start_voltage:.2f} V -- charge or swap it; not arming')
+    else:
+        print(f'  battery {batt["v"]:.2f} V at rest; lands below '
+              f'{args.land_voltage:.2f} V (in flight, sustained '
+              f'{args.land_voltage_s:.0f} s)')
+
     # the spiral: constant angular step, radius growing linearly
     legs = []
     n = max(24, int(args.turns * 24))
@@ -256,6 +408,39 @@ def main():
         r = args.r_min + (args.r_max - args.r_min) * f
         a = 2 * math.pi * args.turns * f
         legs.append((cx + r * math.cos(a), cy + r * math.sin(a), r, math.degrees(a) % 360))
+
+    levels = ([float(v) for v in args.levels.split(',') if v.strip()]
+              or [args.height])
+
+    def path_for(li):
+        # alternate direction: out at one height, back in at the next, so
+        # the climb between levels is the only non-measuring travel
+        return legs if li % 2 == 0 else list(reversed(legs))
+
+    # progress: the last waypoint REACHED, so a run that lands on low battery
+    # (or is aborted) can be carried on with --resume instead of re-flown
+    prog_path = pathlib.Path(args.progress or (args.save + '.progress.json'))
+    sig = path_signature(args)
+    start_li, start_k, start_z = 0, 0, None
+    if args.resume:
+        prog = load_progress(prog_path, sig)
+        if args.mode == 'climb':
+            start_z = float(prog['z'])
+            print(f'  RESUMING the climb from {start_z:.2f} m ({prog_path})')
+        else:
+            start_li, start_k = int(prog['level']), int(prog['leg'])
+            _, _, r_, a_ = path_for(start_li)[start_k]
+            print(f'  RESUMING level {start_li + 1}/{len(levels)} '
+                  f'({levels[start_li]:.2f} m) at waypoint {start_k}/{len(legs) - 1} '
+                  f'(r {r_:.2f} m, bearing {a_:.0f} deg) ({prog_path})')
+    elif prog_path.exists():
+        try:
+            if not json.loads(prog_path.read_text()).get('done'):
+                print(f'  NOTE: {prog_path} holds an UNFINISHED run; starting '
+                      'over overwrites it (Ctrl-C now and add --resume to carry it on)')
+        except ValueError:
+            pass
+    x0, y0 = path_for(start_li)[start_k][:2]
 
     def recover_and_land(why):
         """Stale at height is worse than stale low down: come DOWN into volume
@@ -293,16 +478,27 @@ def main():
             raise Aborted(f'takeoff did not happen -- {args.drone} is at '
                           f'{z_now:.2f} m, wanted {args.height:.2f} m')
         print(f'  airborne at {z_now:.2f} m', flush=True)
-        # ease onto the start of the spiral
-        x0, y0 = legs[0][0], legs[0][1]
+        # ease onto the start of the spiral (or the resume point), at the
+        # takeoff height -- inside volume the takeoff just proved
         here = seen['p']
         d = math.dist((here[0], here[1]), (x0, y0))
         go(x0, y0, args.height, max(4.0, d / args.speed))
         pump(max(4.0, d / args.speed) + 1.0)
 
+        def vstr():
+            return f'{batt["v"]:.2f}V' if batt['v'] is not None else '  ?V'
+
         if args.mode == 'climb':
-            print(f"\n  {'height':>7} {'pose age':>9} {'radius':>7}  state")
+            print(f"\n  {'height':>7} {'pose age':>9} {'radius':>7} {'battery':>8}  state")
             z = args.height
+            if start_z is not None and start_z > z:
+                # straight back up to the last height that held, slowly
+                dz = start_z - z
+                here = seen['p'] or (x0, y0, z)
+                go(here[0], here[1], start_z, max(2.0, dz / args.speed))
+                pump(max(2.0, dz / args.speed) + 1.0)
+                z = start_z
+                print(f'  back at {z:.2f} m, carrying on', flush=True)
             lost_at = None
             while z < args.z_max:
                 z = min(z + args.z_step, args.z_max)
@@ -310,32 +506,36 @@ def main():
                 go(here[0], here[1], z, max(1.5, args.z_step / args.speed))
                 try:
                     pump(max(1.5, args.z_step / args.speed) + args.dwell)
+                except LowBattery:
+                    raise                   # not a tracking result: land, resume later
                 except Aborted as e:
                     lost_at = z
                     recover_and_land(str(e))
                     break
                 p = seen['p']
                 r = math.hypot(p[0] - cx, p[1] - cy) if p else float('nan')
-                print(f'  {z:>6.2f}m {time.time()-seen["t"]:>8.2f}s {r:>6.2f}m  ok', flush=True)
+                print(f'  {z:>6.2f}m {time.time()-seen["t"]:>8.2f}s {r:>6.2f}m '
+                      f'{vstr():>8}  ok', flush=True)
+                save_progress(prog_path, sig, z=z, done=False)
             if lost_at is None:
                 print(f'\n  reached the {args.z_max:.2f} m cap with tracking intact '
                       '-- the ceiling is above this, not measured')
             else:
                 print(f'\n  tracking lost climbing through {lost_at:.2f} m')
+            save_progress(prog_path, sig, z=z, lost_at=lost_at, done=True)
             raise _Done()
 
-        levels = ([float(v) for v in args.levels.split(',') if v.strip()]
-                  or [args.height])
-        print(f"  {'z':>6} {'r':>6} {'bearing':>8} {'tracked':>8}")
+        print(f"  {'z':>6} {'r':>6} {'bearing':>8} {'tracked':>8} {'battery':>8} {'waypoint':>9}")
         prev = (x0, y0)
-        for li, z in enumerate(levels):
-            # alternate direction: out at one height, back in at the next, so
-            # the climb between levels is the only non-measuring travel
-            path = legs if li % 2 == 0 else list(reversed(legs))
-            if abs(z - args.height) > 1e-3 or li:
+        for li in range(start_li, len(levels)):
+            z = levels[li]
+            path = path_for(li)
+            k0 = start_k if li == start_li else 0
+            if abs(z - args.height) > 1e-3 or li != start_li:
                 go(prev[0], prev[1], z, 3.0)
                 pump(3.5)
-            for (x, y, r, a) in path[1:]:
+            for k in range(k0 + 1, len(path)):
+                x, y, r, a = path[k]
                 leg = math.dist(prev, (x, y))
                 dur = max(1.0, leg / args.speed)
                 go(x, y, z, dur)
@@ -343,10 +543,19 @@ def main():
                 prev = (x, y)
                 age = time.time() - seen['t']
                 print(f'  {z:>5.2f}m {r:>6.2f} {a:>7.0f}d '
-                      f'{"ok" if age < args.stale else "STALE":>8}')
+                      f'{"ok" if age < args.stale else "STALE":>8} {vstr():>8} '
+                      f'{k:>4}/{len(path) - 1}', flush=True)
+                save_progress(prog_path, sig, level=li, leg=k, done=False)
+        save_progress(prog_path, sig, level=len(levels) - 1, leg=len(legs) - 1,
+                      done=True)
         raise _Done()
     except _Done:
         pass
+    except LowBattery as e:
+        print(f'\n  *** LOW BATTERY: {e} -- landing where it is ***\n'
+              f'  Progress is in {prog_path}. Swap the battery, put {args.drone} '
+              'back on its takeoff spot, and run the SAME command with --resume.',
+              flush=True)
     except Aborted as e:
         print(f'\n  *** ABORT: {e} -- landing where it is ***', flush=True)
     except Exception as e:                                  # noqa: BLE001
@@ -367,8 +576,11 @@ def main():
     if samples and args.save:
         out = pathlib.Path(args.save)
         out.parent.mkdir(parents=True, exist_ok=True)
-        with out.open('w') as fh:
-            fh.write('# t,x,y,z,pose_age\n')
+        # a resumed run APPENDS, so the CSV ends up as the whole path
+        append = args.resume and out.exists()
+        with out.open('a' if append else 'w') as fh:
+            if not append:
+                fh.write('# t,x,y,z,pose_age\n')
             for row in samples:
                 fh.write(','.join(f'{v:.4f}' for v in row) + '\n')
         print(f'  wrote {len(samples)} samples to {out}')
