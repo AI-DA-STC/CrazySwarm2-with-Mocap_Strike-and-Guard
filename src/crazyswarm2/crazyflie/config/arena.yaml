@@ -18,6 +18,24 @@
 
 arena:
   # true only when the numbers below were measured in THIS room.
+  #
+  # !! 2026-11-02: THE RIG MOVED TO THE BIG ARENA AND NOTHING BELOW WAS
+  # !! MEASURED THERE. Every number in `arena:` is the OLD room's survey (git tag
+  # !! `pre-big-arena`), carried over on purpose as a small, conservative
+  # !! geofence inside a much larger tracked volume, so the shows can fly without
+  # !! a survey. `measured: true` is kept so they are not blocked; read it as
+  # !! "deliberately inherited", not "surveyed here". What that means:
+  # !!   - centre is just a point in the NEW world frame (new cameras, new
+  # !!     calibration). It sits near the new origin; it is not the new room's
+  # !!     tracked-volume centroid. The 2026-10-08 frame history below and the
+  # !!     per-sector bearings describe the old room only.
+  # !!   - radius/ceiling are far smaller than the new room. Park the drones
+  # !!     inside radius_tested - tracking_margin of centre; the planners refuse
+  # !!     marks outside it.
+  # !!   - The new ground plane is gravity-level and the floor is not: grounded
+  # !!     drones read z of about -0.03..+0.06 depending on where they stand.
+  # !! Survey before raising any limit:
+  # !!   scripts/measure_arena.py, scripts/arena_flight_sweep.py.
   measured: true
 
   #: Centroid of the TRACKED VOLUME -- not the room's geometric centre, and not

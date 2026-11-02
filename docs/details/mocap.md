@@ -151,6 +151,23 @@ copy it: `python3 -c "from crazyflie_shows import safety as s; print(s.ARENA_CEN
   <= 21 mm, which is what shows the frame moved and not the drones). `ARENA_CENTRE`
   was carried across; the radii are invariant. **A transformed survey is not a
   survey:** re-run `scripts/arena_flight_sweep.py` before trusting the edges.
+- **2026-11-02: the rig moved to the big arena.** New cameras, a full new
+  calibration, a new world frame. Nothing carries over from the old frame; the
+  old room's state is git tag `pre-big-arena`, the move is `post-big-arena`.
+  - **Ground plane:** set with the calibration square on a raised stand, using
+    Motive's *Custom* ground plane (the square's three markers selected) and a
+    *Vertical Offset* equal to the floor-to-marker-centre height in mm. The
+    *Auto* ground plane has no offset field and assumes the square is on the
+    floor; leaving the offset at 0 with a raised square put z = 0 about 1.4 m
+    above the floor. The plane is gravity-level; the floor slopes about 1 deg, so
+    grounded drones read slightly different z. Takeoff and land heights are
+    absolute z, so check that drones on the floor read near 0 before every flight
+    day.
+  - **Streaming:** Motive's *Local Interface* (Data Streaming pane) was unset after
+    the move, so nothing answered discovery. It must name the wired adapter.
+  - **arena.yaml was not re-surveyed.** It still holds the old room's numbers as
+    a conservative geofence (see the note at the top of the file). Park the drones
+    inside it, or survey the new room before using more of it.
 - **After any Motive recalibration or rigid-body rename:** do not fly; re-sync the
   marks (2b); transform every world-frame number in the escort config *by its kind*
   (a point is rotated and translated, an offset is rotated, an absolute bearing
