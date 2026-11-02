@@ -19,27 +19,31 @@
 arena:
   # true only when the numbers below were measured in THIS room.
   #
-  # !! 2026-11-02: THE RIG MOVED TO THE BIG ARENA AND NOTHING BELOW WAS
-  # !! MEASURED THERE. Every number in `arena:` is the OLD room's survey (git tag
-  # !! `pre-big-arena`), carried over on purpose as a small, conservative
-  # !! geofence inside a much larger tracked volume, so the shows can fly without
-  # !! a survey. `measured: true` is kept so they are not blocked; read it as
-  # !! "deliberately inherited", not "surveyed here". What that means:
-  # !!   - centre is just a point in the NEW world frame (new cameras, new
-  # !!     calibration). It sits near the new origin; it is not the new room's
-  # !!     tracked-volume centroid. The 2026-10-08 frame history below and the
-  # !!     per-sector bearings describe the old room only.
-  # !!   - radius_tested / radius_lost were RAISED 2026-11-02 to 3.00 / 3.50 m
-  # !!     WITHOUT a survey, at the user's request, so the drones can stand where
-  # !!     they were labelled (farthest mark 2.67 m out). Both are guesses well
-  # !!     inside a ~14 m room, not observations. The ceilings are still the old
-  # !!     room's (conservative). The old values were 2.00 / 2.24 (tag
-  # !!     pre-big-arena). Park the drones inside radius_tested - tracking_margin
-  # !!     of centre; the planners refuse marks outside it.
-  # !!   - The new ground plane is gravity-level and the floor is not: grounded
+  # !! 2026-11-02: THE RIG MOVED TO THE BIG ARENA (new cameras, new calibration,
+  # !! new world frame). The `arena:` numbers below were RE-MEASURED there by a
+  # !! CARRIED survey only (scripts/measure_arena.py, cf5 walked by hand for
+  # !! 240 s, 11999 samples, raw data data/arena/bigarena_carried_cf5_2026-11-02.csv).
+  # !! No flown sweep yet. The old room's survey is git tag `pre-big-arena`.
+  # !!   - Tracking held EVERYWHERE the body went: no dropout at all, largest
+  # !!     gap between samples 25 ms. The walked distance from centre, by 45 deg
+  # !!     sector, was 6.32 / 5.86 / 5.57 / 5.00 / 4.99 / 5.52 / 7.29 / 7.28 m.
+  # !!     So these are LOWER BOUNDS: where tracking was seen to hold, not where it
+  # !!     ends. radius_tested is the WORST sector (4.99 m) minus the carried-survey
+  # !!     edge margin (0.30 m).
+  # !!   - Height covered: 0.76 .. 2.13 m at the edges (as high as a person can
+  # !!     reach). Nothing above that was measured, so both ceilings are that,
+  # !!     rounded down; the old room's truncated cone does not apply.
+  # !!   - NOT covered: floor level away from the centre. On 2026-11-02, four
+  # !!     drones parked on the floor at the room's corners were not tracked at all
+  # !!     while the carried body was. Check that a parked drone is streaming
+  # !!     before trusting a mark near the edge.
+  # !!   - centre was kept, not re-derived: it is where the shows are anchored, and
+  # !!     the survey measured radii FROM it. The 2026-10-08 frame history and the
+  # !!     per-sector bearings in the comments below describe the OLD room.
+  # !!   - The ground plane is gravity-level and the floor is not: grounded
   # !!     drones read z of about -0.03..+0.06 depending on where they stand.
-  # !! Survey before raising any limit:
-  # !!   scripts/measure_arena.py, scripts/arena_flight_sweep.py.
+  # !! To raise the radius further, walk out until Motive drops the body, then
+  # !! fly scripts/arena_flight_sweep.py (pass --centre; its default is stale).
   measured: true
 
   #: Centroid of the TRACKED VOLUME -- not the room's geometric centre, and not
@@ -96,18 +100,18 @@ arena:
   #:
   #: A show that plans outside radius_tested is planning somewhere nothing has
   #: flown. Re-measure before raising it; do not assume the old 2.5 m.
-  radius_tested: 3.00           # m  UNSURVEYED (big arena, 2026-11-02); was 2.00, the old room
+  radius_tested: 4.70           # m  big arena, CARRIED survey 2026-11-02 (worst sector 4.99 - 0.30); old room 2.00
 
   #: Where a flying drone ACTUALLY lost tracking (carried survey, 2026-10-01).
   #: Plans never go here; it is the evidence behind radius_tested.
-  radius_lost: 3.50             # m  UNSURVEYED placeholder (big arena); was 2.24, the old room
+  radius_lost: 5.00             # m  big arena: NOT observed -- tracking never dropped; the worst sector's walked edge. Old room 2.24
 
   #: The volume is a truncated cone -- wide through the flight band, pinching
   #: near the ceiling. A single "ceiling" number is meaningless without saying
   #: at what radius, which is why there are three.
-  ceiling_tested: 1.95          # m, flown clean at FULL radius
-  ceiling_centre_tested: 2.42   # m, flown clean within ~0.6 m of the centre
-  ceiling_pinch_radius: 2.00    # m, beyond this the cone pinches
+  ceiling_tested: 2.10          # m  big arena, carried to 2.13 m beyond 4 m out (old room: 1.95, flown)
+  ceiling_centre_tested: 2.10   # m  big arena, carried; nothing higher measured (old room: 2.42, flown)
+  ceiling_pinch_radius: 4.70    # m  big arena: no pinch seen; set to radius_tested (old room: 2.00)
 
 separation:
   #: The hard floor. Two drones closer than this is a near miss, not a tight
