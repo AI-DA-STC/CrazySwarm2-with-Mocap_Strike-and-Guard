@@ -169,7 +169,8 @@ copy it: `python3 -c "from crazyflie_shows import safety as s; print(s.ARENA_CEN
     climb and edge loops (the header of the file has the details and the data
     files). Tracking held everywhere it was tested. The radius is limited by
     furniture, not by the cameras, so it is a circle that stops at the nearest
-    obstacle; the ceiling is a flown lower bound.
+    obstacle. The ceiling IS the cameras' limit: a flown climb lost tracking
+    just above 7.2 m (they are mounted below the ~15 m roof).
 - **After any Motive recalibration or rigid-body rename:** do not fly; re-sync the
   marks (2b); transform every world-frame number in the escort config *by its kind*
   (a point is rotated and translated, an offset is rotated, an absolute bearing

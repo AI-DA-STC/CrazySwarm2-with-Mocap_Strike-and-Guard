@@ -25,8 +25,13 @@ arena:
   # !! 11999 samples, data/arena/bigarena_carried_cf5_2026-11-02.csv), then a
   # !! FLOWN sweep the same day (scripts/arena_flight_sweep.py, cf5, data/arena/
   # !! bigarena_{climb_edge,band1.2,band2.0}_cf5_2026-11-02.csv):
-  # !!   - climb at 3.36 m out (+x) from 1.2 m to the 3.00 m cap: tracked all
-  # !!     the way, worst pose age 0.02 s. The ceiling is ABOVE 3.00 m, unmeasured.
+  # !!   - climbs at ~3.4 m out (+x): to the 3.00 m and 6.00 m caps clean, then
+  # !!     a climb to a 10 m cap LOST TRACKING just above 7.23 m (the last
+  # !!     tracked sample; the 7.00 m step was clean, 7.25 m was not). The
+  # !!     cameras are mounted below the ~15 m roof, so this is their limit. The
+  # !!     watchdog dropped cf5 to 1.2 m, tracking returned ~2 s into the
+  # !!     descent, and it landed normally. data/arena/
+  # !!     bigarena_climb{6,10}_edge_cf5_2026-11-02*.csv.
   # !!   - one full loop of the band 3.32 -> 3.85 m at 1.2 m and again at 2.0 m:
   # !!     every waypoint tracked, worst pose age 0.02 s. The loop is a spiral, so
   # !!     each bearing was flown at ONE radius (3.44 m at +y, the bearing closest
@@ -46,9 +51,12 @@ arena:
   # !!     maxima measure_arena.py prints as a radius: the maximum within a wide
   # !!     sector hides the furniture (this file briefly said 4.70 m because of
   # !!     exactly that).
-  # !!   - Ceilings: FLOWN to the 3.00 m cap at 3.36 m out with no loss, so both
-  # !!     are 3.00 m. No pinch was seen; the old room's truncated cone does not
-  # !!     apply. (The carried walk reached 2.13 m, as high as a person can reach.)
+  # !!   - Ceilings: 7.00 m, the highest step flown clean; tracking ends at
+  # !!     ~7.2 m. Measured at the EDGE only (~3.4 m out, +x); the centre was not
+  # !!     climbed, so the centre value is the edge's. Shows plan to ceiling minus
+  # !!     tracking_margin, but their own heights are far lower; anything that
+  # !!     actually flies high should remember a loss up there is a blind descent.
+  # !!     (The carried walk reached 2.13 m, as high as a person can reach.)
   # !!   - Floor level: tracked at the centre and at 3.88 m (+x). Four drones
   # !!     parked at the room's far corners (outside this arena) were not tracked
   # !!     at all. Check that a parked drone is streaming before trusting a mark
@@ -127,8 +135,8 @@ arena:
   #: The volume is a truncated cone -- wide through the flight band, pinching
   #: near the ceiling. A single "ceiling" number is meaningless without saying
   #: at what radius, which is why there are three.
-  ceiling_tested: 3.00          # m  big arena, FLOWN to the 3.00 m cap at 3.36 m out, no loss (old room: 1.95)
-  ceiling_centre_tested: 3.00   # m  big arena: the edge climb's 3.00 m; the centre was not climbed separately (old room: 2.42)
+  ceiling_tested: 7.00          # m  big arena, FLOWN clean to 7.00 m at ~3.4 m out; tracking LOST above ~7.23 m (old room: 1.95)
+  ceiling_centre_tested: 7.00   # m  big arena: the edge climb's value; the centre was not climbed separately (old room: 2.42)
   ceiling_pinch_radius: 3.75    # m  big arena: no pinch seen; set to radius_tested (old room: 2.00)
 
 separation:
