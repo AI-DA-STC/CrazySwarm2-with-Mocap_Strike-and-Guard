@@ -36,14 +36,15 @@ About 65 s on the wall clock. Print the exact timeline and every budget with
 - The morph into the scythe is chosen (heading and who goes where) so that the
   flight home afterwards is also clear.
 
-## Verified so far (2026-11-02)
+## Verified (2026-11-02)
 
 - `plan_serpent` passes on the marks the constellation flew from.
 - Simulator, three full runs on a private ROS domain: landed on time. The recorded
   flight, compared with the plan, tracked within 21 cm (serpent) and 19 cm (scythe).
   The closest pair flown was 1.06 m (3D) and 0.92 m (plan view), as planned. Every
   drone landed within 2 mm of its mark.
-- **Not yet flown on hardware.** First flight: `-p dry_run:=true`, then for real.
+- **Flown on hardware 2026-11-02** (first run, operator-run, reported a success). Still
+  rehearse with `-p dry_run:=true` after moving the marks.
 
 ## Before flying
 
