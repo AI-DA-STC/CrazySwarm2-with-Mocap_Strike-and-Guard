@@ -25,11 +25,18 @@ arena:
   # !! 240 s, 11999 samples, raw data data/arena/bigarena_carried_cf5_2026-11-02.csv).
   # !! No flown sweep yet. The old room's survey is git tag `pre-big-arena`.
   # !!   - Tracking held EVERYWHERE the body went: no dropout at all, largest
-  # !!     gap between samples 25 ms. The walked distance from centre, by 45 deg
-  # !!     sector, was 6.32 / 5.86 / 5.57 / 5.00 / 4.99 / 5.52 / 7.29 / 7.28 m.
-  # !!     So these are LOWER BOUNDS: where tracking was seen to hold, not where it
-  # !!     ends. radius_tested is the WORST sector (4.99 m) minus the carried-survey
-  # !!     edge margin (0.30 m).
+  # !!     gap between samples 25 ms. So tracking is not what limits the arena;
+  # !!     the ROOM is. The floor is not a square: furniture leaves a chamfer at
+  # !!     ROS (-x, +y) (near the old cf3 mark) and a step towards -x, and the
+  # !!     walker deliberately stayed clear of both. (Motive axes: Motive -z is
+  # !!     ROS +y.) Walked distance from centre per 10 deg bearing goes as low as
+  # !!     4.07 m at +y (80-90 deg), 4.30 m at 200-210 deg and 4.44 m at 160-170
+  # !!     deg, and up to 7.29 m at -y.
+  # !!   - radius_tested is the SHORTEST walked bearing (4.07 m) minus the
+  # !!     carried-survey edge margin (0.30 m). Do NOT read the 45 deg sector
+  # !!     maxima measure_arena.py prints as a radius: the maximum within a wide
+  # !!     sector hides the furniture (this file briefly said 4.70 m because of
+  # !!     exactly that).
   # !!   - Height covered: 0.76 .. 2.13 m at the edges (as high as a person can
   # !!     reach). Nothing above that was measured, so both ceilings are that,
   # !!     rounded down; the old room's truncated cone does not apply.
@@ -100,18 +107,18 @@ arena:
   #:
   #: A show that plans outside radius_tested is planning somewhere nothing has
   #: flown. Re-measure before raising it; do not assume the old 2.5 m.
-  radius_tested: 4.70           # m  big arena, CARRIED survey 2026-11-02 (worst sector 4.99 - 0.30); old room 2.00
+  radius_tested: 3.75           # m  big arena, CARRIED survey 2026-11-02 (shortest walked bearing 4.07 - 0.30); old room 2.00
 
   #: Where a flying drone ACTUALLY lost tracking (carried survey, 2026-10-01).
   #: Plans never go here; it is the evidence behind radius_tested.
-  radius_lost: 5.00             # m  big arena: NOT observed -- tracking never dropped; the worst sector's walked edge. Old room 2.24
+  radius_lost: 4.05             # m  big arena: NOT a dropout (tracking never dropped) -- the closest FURNITURE-limited walked edge. Old room 2.24
 
   #: The volume is a truncated cone -- wide through the flight band, pinching
   #: near the ceiling. A single "ceiling" number is meaningless without saying
   #: at what radius, which is why there are three.
   ceiling_tested: 2.10          # m  big arena, carried to 2.13 m beyond 4 m out (old room: 1.95, flown)
   ceiling_centre_tested: 2.10   # m  big arena, carried; nothing higher measured (old room: 2.42, flown)
-  ceiling_pinch_radius: 4.70    # m  big arena: no pinch seen; set to radius_tested (old room: 2.00)
+  ceiling_pinch_radius: 3.75    # m  big arena: no pinch seen; set to radius_tested (old room: 2.00)
 
 separation:
   #: The hard floor. Two drones closer than this is a near miss, not a tight
