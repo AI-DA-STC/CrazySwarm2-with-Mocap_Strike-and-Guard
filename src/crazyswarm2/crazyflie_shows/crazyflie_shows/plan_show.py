@@ -100,7 +100,9 @@ def hints(msg, cfg):
                 'off:',
                 '  1. move the offending drone; marks want >= 1 m, and all of '
                 'them inside',
-                f'     {safety.ARENA_RADIUS_PLAN:.2f} m of {safety.ARENA_CENTRE}',
+                (f'     the arena.yaml polygon, {safety.TRACKING_MARGIN:.2f} m in '
+                 'from its edges' if safety.ARENA_POLYGON is not None else
+                 f'     {safety.ARENA_RADIUS_PLAN:.2f} m of {safety.ARENA_CENTRE}'),
                 '  2. python3 scripts/sync_initial_positions.py   (mocap up, '
                 'server stopped)',
                 '  3. re-run this planner; restart the server so it re-reads '
@@ -200,8 +202,15 @@ def report(plan, cfg, names, verbose=True):
         f'    {bar(r["max_speed"], safety.MAX_SPEED)}')
     out(f'    accel       {r["max_accel"]:5.2f} m/s2 max {safety.MAX_ACCEL:.2f}'
         f'   {bar(r["max_accel"], safety.MAX_ACCEL)}')
-    out(f'    radius      {r["max_radius"]:5.2f} m  max {cfg.arena_radius:.2f} m'
-        f'   {bar(r["max_radius"], cfg.arena_radius)}')
+    if r.get('arena_shape') == 'polygon':
+        # the budget is clearance from the polygon's edge, so the bar fills
+        # as the show uses it up (margin = full, nothing to spare)
+        clr, mg = r['min_edge_clearance'], safety.TRACKING_MARGIN
+        out(f'    edge        {clr:5.2f} m  min {mg:.2f} m  clearance from the '
+            'arena.yaml polygon (closest any drone gets)')
+    if r.get('arena_shape') != 'polygon' or safety._circle_applies(cfg.arena_radius):
+        out(f'    radius      {r["max_radius"]:5.2f} m  max {cfg.arena_radius:.2f} m'
+            f'   {bar(r["max_radius"], cfg.arena_radius)}')
     ac = r.get('arena_center', safety.ARENA_CENTRE)
     # Provenance lives in arena.yaml, not here: a hard-coded survey date went
     # on vouching for numbers that were later raised without a survey.

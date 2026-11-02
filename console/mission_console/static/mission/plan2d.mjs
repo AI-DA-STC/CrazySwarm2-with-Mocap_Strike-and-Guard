@@ -155,7 +155,15 @@ export function createPlan2D(host, opts = {}) {
     for (let y = g0y; y <= g1y; y += 0.5) { ctx.beginPath(); ctx.moveTo(0, Y(y)); ctx.lineTo(W, Y(y)); ctx.stroke(); }
     const small = '500 10px ui-monospace,monospace';
     for (const sh of shapes) {
-      if (sh.kind === 'room') {
+      if (sh.kind === 'room' && sh.poly) {
+        ctx.strokeStyle = '#d8a11d'; ctx.lineWidth = 2; ctx.setLineDash([]);
+        ctx.beginPath();
+        sh.poly.forEach(([x, y], i) => (i ? ctx.lineTo(X(x), Y(y)) : ctx.moveTo(X(x), Y(y))));
+        ctx.closePath(); ctx.stroke();
+        circle(sh.cx, sh.cy, sh.rt, '#d8a11d', null, [4, 4], 1);
+        const xr = Math.max(...sh.poly.map((p) => p[0])); const yb = Math.min(...sh.poly.map((p) => p[1]));
+        text('arena polygon', xr, yb, '#c8a24a', small, -4, 14);
+      } else if (sh.kind === 'room') {
         circle(sh.cx, sh.cy, sh.rl, '#f0564f', null, [6, 4]);
         circle(sh.cx, sh.cy, sh.rt, '#d8a11d', null, null, 2);
         text(`radius_tested ${sh.rt.toFixed(2)} m`, sh.cx + sh.rt * 0.72, sh.cy - sh.rt * 0.72, '#c8a24a', small);

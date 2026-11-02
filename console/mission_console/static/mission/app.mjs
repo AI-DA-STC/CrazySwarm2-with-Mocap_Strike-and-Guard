@@ -445,7 +445,8 @@ function Scene() {
     <div class="legend">
       <span><i class="sw drone"></i>drone (mocap)</span><span><i class="sw est"></i>onboard estimate</span>
       <span><i class="sw tgt"></i>other rigid body</span>
-      ${shapes.some((x) => x.kind === 'room') && html`<span><i class="sw tested"></i>radius_tested</span><span><i class="sw lost"></i>radius_lost</span>`}
+      ${shapes.some((x) => x.kind === 'room' && x.poly) && html`<span><i class="sw tested"></i>arena polygon</span><span><i class="sw tested" style="opacity:.5"></i>geometry circle</span>`}
+      ${shapes.some((x) => x.kind === 'room' && !x.poly) && html`<span><i class="sw tested"></i>radius_tested</span><span><i class="sw lost"></i>radius_lost</span>`}
       ${shapes.filter((x) => x.kind !== 'room').map((x) => html`<span><i class="sw tested" style=${'background:' + x.color}></i>${x.label || (x.kind === 'rect' ? 'boundary' : 'circle')}</span>`)}
       <span><i class="sw mark"></i>parking mark</span>
     </div>

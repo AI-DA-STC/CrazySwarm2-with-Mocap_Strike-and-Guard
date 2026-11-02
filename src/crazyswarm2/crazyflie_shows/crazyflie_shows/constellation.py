@@ -371,14 +371,28 @@ def build_plan(names, initial_positions, cfg=None):
     # on them, so a mark outside the tracked volume is a chalk line to move,
     # not a figure to shrink. check_show would catch it as "takeoff over
     # radius", which reads like the show's fault.
+    if safety.ARENA_POLYGON is not None:
+        far = [(nm, float(safety.edge_clearance(np.asarray(s[:2], float))))
+               for nm, s in zip(names, starts)]
+        far = [(nm, c) for nm, c in far if c < safety.TRACKING_MARGIN]
+        if far:
+            raise ValueError(
+                'these drones are parked outside the tracked volume (the '
+                f'arena.yaml polygon, less {safety.TRACKING_MARGIN:.2f} m): '
+                + ', '.join(f'{nm} {c:+.2f} m from its edge' for nm, c in far)
+                + ' -- move the drone, then re-sync initial_position')
     far = [(nm, float(np.hypot(*(np.asarray(s[:2], float)
                                  - np.asarray(safety.ARENA_CENTRE, float)))))
            for nm, s in zip(names, starts)]
-    far = [(nm, d) for nm, d in far if d > safety.ARENA_RADIUS_PLAN]
+    # the circle: the arena itself when there is no polygon, or a tighter
+    # radius a caller asked for. Never looser than ARENA_RADIUS_PLAN.
+    lim = min(cfg.arena_radius, safety.ARENA_RADIUS_PLAN)
+    far = [(nm, d) for nm, d in far
+           if safety._circle_applies(cfg.arena_radius) and d > lim]
     if far:
         raise ValueError(
             'these drones are parked outside the tracked volume ('
-            f'{safety.ARENA_RADIUS_PLAN:.2f} m around {safety.ARENA_CENTRE}): '
+            f'{lim:.2f} m around {safety.ARENA_CENTRE}): '
             + ', '.join(f'{nm} at {d:.2f} m' for nm, d in far)
             + ' -- move the drone, then re-sync initial_position')
     H = cfg.form_height

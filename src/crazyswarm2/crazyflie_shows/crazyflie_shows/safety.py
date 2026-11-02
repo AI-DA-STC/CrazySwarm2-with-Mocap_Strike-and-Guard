@@ -91,6 +91,21 @@ def _load_arena():
         raise RuntimeError(f'{path} is not a valid arena file: {e}') from e
     if len(out['centre']) != 2:
         raise RuntimeError(f'{path}: arena.centre must be [x, y]')
+    # Optional: the room as a plan-view POLYGON (any shape, e.g. a rectangle
+    # with a furniture corner cut off). When present it, not the circle, is
+    # what containment checks enforce; the circle stays for the geometry that
+    # needs one (see ARENA_POLYGON).
+    poly = a.get('polygon')
+    if poly is None:
+        out['polygon'] = None
+    else:
+        try:
+            pts = np.asarray(poly, float)
+        except (TypeError, ValueError) as e:
+            raise RuntimeError(f'{path}: arena.polygon must be [[x, y], ...]: {e}') from e
+        if pts.ndim != 2 or pts.shape[1] != 2 or len(pts) < 3:
+            raise RuntimeError(f'{path}: arena.polygon needs at least 3 [x, y] vertices')
+        out['polygon'] = pts
     return out
 
 
@@ -200,6 +215,65 @@ PLAN_SEPARATION = MIN_SEPARATION + TRACKING_MARGIN
 #: ARENA_RADIUS_TESTED is where tracking was observed to *hold*, not where it
 #: is comfortable. Planning to the tested edge means flying past it.
 ARENA_RADIUS_PLAN = ARENA_RADIUS_TESTED - TRACKING_MARGIN      # 1.90 m
+
+
+#: The room as a plan-view polygon, (n, 2), or None for the classic circle.
+#:
+#: With a polygon, CONTAINMENT (is this point flyable?) is the polygon: a plan
+#: must keep TRACKING_MARGIN of clearance from its edges (edge_clearance). The
+#: circle (ARENA_CENTRE, ARENA_RADIUS_*) is kept for GEOMETRY that is built
+#: around a centre -- the escort's ring and fence, figure sizes -- and
+#: arena.yaml must set radius_tested to a circle that fits INSIDE the polygon,
+#: so circle-based geometry can never leave it. A caller that passes an
+#: explicitly SMALLER radius than ARENA_RADIUS_PLAN gets that circle enforced
+#: as well (it can only tighten).
+ARENA_POLYGON = _ARENA['polygon']
+
+
+def _point_in_polygon(xy, poly):
+    """Even-odd ray cast. xy (n, 2) -> bool (n,)."""
+    x, y = xy[:, 0][:, None], xy[:, 1][:, None]
+    ax, ay = poly[:, 0][None, :], poly[:, 1][None, :]
+    bx, by = np.roll(poly[:, 0], -1)[None, :], np.roll(poly[:, 1], -1)[None, :]
+    crosses = (ay > y) != (by > y)
+    with np.errstate(divide='ignore', invalid='ignore'):
+        x_at = ax + (y - ay) * (bx - ax) / (by - ay)
+    return (crosses & (x < x_at)).sum(axis=1) % 2 == 1
+
+
+def _distance_to_edges(xy, poly):
+    """Shortest distance from each point to the polygon's boundary. (n,)"""
+    a = poly[None, :, :]
+    b = np.roll(poly, -1, axis=0)[None, :, :]
+    ab = b - a
+    p = xy[:, None, :]
+    t = np.clip(((p - a) * ab).sum(-1) / (ab * ab).sum(-1), 0.0, 1.0)
+    return np.linalg.norm(p - (a + t[..., None] * ab), axis=-1).min(axis=1)
+
+
+def edge_clearance(xy):
+    """Signed plan-view distance to the arena's edge: positive inside.
+
+    Works on any (..., 2+) array of positions and returns the matching shape
+    without the last axis. With no polygon it is the circle's
+    ``radius_tested - r``, so callers need not care which shape the room is.
+    """
+    xy = np.asarray(xy, float)
+    shape = xy.shape[:-1]
+    flat = xy[..., :2].reshape(-1, 2)
+    if ARENA_POLYGON is None:
+        out = ARENA_RADIUS_TESTED - np.linalg.norm(
+            flat - np.asarray(ARENA_CENTRE, float), axis=1)
+    else:
+        d = _distance_to_edges(flat, ARENA_POLYGON)
+        out = np.where(_point_in_polygon(flat, ARENA_POLYGON), d, -d)
+    return out.reshape(shape)
+
+
+def _circle_applies(radius):
+    """The circle is enforced when it IS the arena, or when a caller asked for
+    one tighter than the arena's own (an override can only tighten)."""
+    return ARENA_POLYGON is None or radius < ARENA_RADIUS_PLAN - 1e-9
 
 
 def ceiling_at(r):
@@ -396,7 +470,14 @@ def check_envelope(positions, radius=ARENA_RADIUS_PLAN, ceiling=None,
     for i, p in enumerate(positions):
         p = np.asarray(p, float)
         r = float(np.linalg.norm(p[:2] - np.asarray(center, float)))
-        if r > radius:
+        if ARENA_POLYGON is not None:
+            clr = float(edge_clearance(p[:2]))
+            if clr < TRACKING_MARGIN:
+                raise ValueError(
+                    f'{label}: slot {i} at ({p[0]:+.2f}, {p[1]:+.2f}) is '
+                    f'{clr:.2f} m inside the arena polygon, needs '
+                    f'{TRACKING_MARGIN:.2f} m')
+        if _circle_applies(radius) and r > radius:
             raise ValueError(
                 f'{label}: slot {i} at r={r:.2f} m exceeds arena {radius} m')
         if len(p) > 2:
@@ -582,7 +663,11 @@ def check_show(sample_fn, total_time, n_drones, rate=CHECK_RATE,
     if ceiling is not None:
         z_lim = np.minimum(z_lim, float(ceiling))
 
+    clear = edge_clearance(samples)                   # (n_drones, n_times)
+
     report = {
+        'arena_shape': 'circle' if ARENA_POLYGON is None else 'polygon',
+        'min_edge_clearance': float(np.min(clear)),
         'min_sep': sep, 'min_sep_time': float(ts[k]), 'min_sep_pair': (a, b),
         'max_speed': v_max, 'max_accel': a_max,
         'max_radius': float(np.max(r)), 'max_z': float(np.max(z)),
@@ -606,7 +691,12 @@ def check_show(sample_fn, total_time, n_drones, rate=CHECK_RATE,
         problems.append(
             f'peak accel {a_max:.2f} m/s^2 > {MAX_ACCEL:.2f} m/s^2 at '
             f'{_locate(ts, accel.max(axis=0) > MAX_ACCEL, phase_bounds)}')
-    if report['max_radius'] > radius:
+    if ARENA_POLYGON is not None and report['min_edge_clearance'] < TRACKING_MARGIN:
+        problems.append(
+            f'arena edge clearance {report["min_edge_clearance"]:.2f} m < '
+            f'{TRACKING_MARGIN:.2f} m (polygon) at '
+            f'{_locate(ts, clear.min(axis=0) < TRACKING_MARGIN, phase_bounds)}')
+    if _circle_applies(radius) and report['max_radius'] > radius:
         problems.append(
             f'max radius {report["max_radius"]:.2f} m > arena {radius:.2f} m at '
             f'{_locate(ts, r.max(axis=0) > radius, phase_bounds)}')

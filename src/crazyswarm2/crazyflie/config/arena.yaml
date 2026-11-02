@@ -66,10 +66,19 @@ arena:
   # !!     per-sector bearings in the comments below describe the OLD room.
   # !!   - The ground plane is gravity-level and the floor is not: grounded
   # !!     drones read z of about -0.03..+0.06 depending on where they stand.
-  # !! The radius is limited by the FURNITURE, not by tracking: a circle about
-  # !! this centre cannot grow past the closest obstacle. Using the open sides
-  # !! (to ~7 m at -y) needs a non-circular arena, which the shows do not support.
-  # !! Pass --centre to arena_flight_sweep.py; its default is the old room's.
+  # !! THE ARENA IS NOW `polygon:` (below), not the circle. Measured the same
+  # !! day: a carried two-lap BOUNDARY walk hugging the walls, the chamfer and
+  # !! the step (data/arena/bigarena_boundary_lap_cf5_2026-11-02.csv); each
+  # !! edge is 0.30 m inside where that lap typically ran. Then FLOWN: ray
+  # !! probes along +x/-y/-x/+y and one tour round the polygon's own edges at
+  # !! 1.5 m (data/arena/bigarena_{ray_*,tour}_cf5_2026-11-02.csv), tracked
+  # !! everywhere, worst pose age 0.02 s, every flown sample inside it.
+  # !! The circle (centre + radius_tested) is now the largest circle about
+  # !! centre that fits INSIDE the polygon (4.07 m, to the step), kept for the
+  # !! geometry that needs a centre: the escort's ring and fence, figure sizes.
+  # !! Containment checks (safety.check_show/check_envelope, the constellation
+  # !! marks) use the polygon. Pass --centre to arena_flight_sweep.py; its
+  # !! default is the old room's.
   measured: true
 
   #: Centroid of the TRACKED VOLUME -- not the room's geometric centre, and not
@@ -126,18 +135,33 @@ arena:
   #:
   #: A show that plans outside radius_tested is planning somewhere nothing has
   #: flown. Re-measure before raising it; do not assume the old 2.5 m.
-  radius_tested: 3.75           # m  big arena, CARRIED survey 2026-11-02 (shortest walked bearing 4.07 - 0.30); old room 2.00
+  radius_tested: 4.05           # m  big arena: the largest circle about centre INSIDE `polygon` (4.07 m, to the step); old room 2.00
 
   #: Where a flying drone ACTUALLY lost tracking (carried survey, 2026-10-01).
   #: Plans never go here; it is the evidence behind radius_tested.
-  radius_lost: 4.05             # m  big arena: NOT a dropout (tracking never dropped) -- the closest FURNITURE-limited walked edge. Old room 2.24
+  radius_lost: 4.35             # m  big arena: NOT a dropout -- the furniture/wall behind the polygon's nearest edge (polygon + 0.30). Old room 2.24
 
   #: The volume is a truncated cone -- wide through the flight band, pinching
   #: near the ceiling. A single "ceiling" number is meaningless without saying
   #: at what radius, which is why there are three.
   ceiling_tested: 7.00          # m  big arena, FLOWN clean to 7.00 m at ~3.4 m out; tracking LOST above ~7.23 m (old room: 1.95)
   ceiling_centre_tested: 7.00   # m  big arena: the edge climb's value; the centre was not climbed separately (old room: 2.42)
-  ceiling_pinch_radius: 3.75    # m  big arena: no pinch seen; set to radius_tested (old room: 2.00)
+  ceiling_pinch_radius: 4.05    # m  big arena: no pinch seen; set to radius_tested (old room: 2.00)
+
+  #: THE ROOM, plan view, ROS frame (Motive x = x, Motive -z = y), vertices
+  #: counter-clockwise. A rectangle with the furniture chamfer cut off the
+  #: (-x, +y) corner (vertices 2-3) and the step on the -x side (4-5). Each edge
+  #: is 0.30 m inside the boundary lap; plans keep a further tracking_margin.
+  #: A drone flew round exactly this outline, tracked all the way (2026-11-02).
+  #: Remove the key and every check falls back to the circle above.
+  polygon:
+    - [ 5.32, -5.28]
+    - [ 5.32,  4.63]
+    - [-3.97,  4.63]   # chamfer
+    - [-5.10,  3.51]   # chamfer
+    - [-5.10,  0.56]   # step
+    - [-4.27, -0.44]   # step
+    - [-4.27, -5.28]
 
 separation:
   #: The hard floor. Two drones closer than this is a near miss, not a tight

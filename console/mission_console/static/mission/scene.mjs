@@ -132,7 +132,22 @@ export function createScene(host, opts = {}) {
     const tag = (text, x, y, z, cls = 'room') => { const t = label(text, cls); t.position.set(x, y, z); arenaG.add(t); };
 
     for (const sh of shapes) {
-      if (sh.kind === 'room') {
+      if (sh.kind === 'room' && sh.poly) {
+        // the room's polygon is the boundary; the circle is the escort's
+        // geometry circle inside it (thin, dashed)
+        const { cx, cy, rt, ceil, poly: P } = sh;
+        const xs = P.map((p) => p[0]); const ys = P.map((p) => p[1]);
+        const x0 = Math.min(...xs); const x1 = Math.max(...xs);
+        const y0 = Math.min(...ys); const y1 = Math.max(...ys);
+        floorG(new THREE.PlaneGeometry(x1 - x0 + 0.7, y1 - y0 + 0.7), (x0 + x1) / 2, (y0 + y1) / 2);
+        const loop = (z) => [...P, P[0]].flatMap(([x, y]) => [x, y, z]);
+        arenaG.add(poly(loop(0), C.tested, 2.2));
+        arenaG.add(poly(loop(ceil), C.cage, 1.2, { dashed: true, opacity: 0.55 }));
+        arenaG.add(posts(P, ceil, C.cage));
+        add(poly(circlePoints(rt), C.tested, 1.0, { dashed: true, opacity: 0.5 }), cx, cy);
+        tag(`arena polygon, ceiling ${ceil.toFixed(2)} m`, x1, y0, 0.02);
+        tag(`circle ${rt.toFixed(2)} m`, cx + rt * Math.cos(-0.6), cy + rt * Math.sin(-0.6), 0.02);
+      } else if (sh.kind === 'room') {
         const { cx, cy, rt, rl, ceil } = sh;
         floorG(new THREE.CircleGeometry(rl + 0.35, 96), cx, cy);
         add(poly(circlePoints(rt), C.tested, 2.2), cx, cy);

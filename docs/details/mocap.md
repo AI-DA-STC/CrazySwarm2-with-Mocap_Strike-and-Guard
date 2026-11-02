@@ -168,9 +168,13 @@ copy it: `python3 -c "from crazyflie_shows import safety as s; print(s.ARENA_CEN
   - **arena.yaml was re-surveyed the same day:** a carried walk, then a flown
     climb and edge loops (the header of the file has the details and the data
     files). Tracking held everywhere it was tested. The radius is limited by
-    furniture, not by the cameras, so it is a circle that stops at the nearest
-    obstacle. The ceiling IS the cameras' limit: a flown climb lost tracking
-    just above 7.2 m (they are mounted below the ~15 m roof).
+    furniture, not by the cameras, so the arena is now a POLYGON in arena.yaml
+    (`polygon:`): a rectangle with the chamfer and the step cut out, traced by a
+    carried boundary lap and then flown round. Containment checks use it; the
+    circle is kept, inside it, for geometry built around a centre (the escort).
+    Delete the key to fall back to the circle. The ceiling IS the cameras'
+    limit: a flown climb lost tracking just above 7.2 m (they are mounted below
+    the ~15 m roof).
 - **After any Motive recalibration or rigid-body rename:** do not fly; re-sync the
   marks (2b); transform every world-frame number in the escort config *by its kind*
   (a point is rotated and translated, an offset is rotated, an absolute bearing
