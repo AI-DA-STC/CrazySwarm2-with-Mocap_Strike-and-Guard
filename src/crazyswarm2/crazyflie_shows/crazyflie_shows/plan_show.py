@@ -203,11 +203,13 @@ def report(plan, cfg, names, verbose=True):
     out(f'    radius      {r["max_radius"]:5.2f} m  max {cfg.arena_radius:.2f} m'
         f'   {bar(r["max_radius"], cfg.arena_radius)}')
     ac = r.get('arena_center', safety.ARENA_CENTRE)
-    out(f'                          about ({ac[0]:+.3f}, {ac[1]:+.3f}) m, the centre of '
-        f'the MEASURED volume - not of the')
-    out(f'                          formation. Tracking held to '
-        f'{safety.ARENA_RADIUS_TESTED:.2f} m and was lost at '
-        f'{safety.ARENA_RADIUS_LOST:.2f} m (2026-10-01)')
+    # Provenance lives in arena.yaml, not here: a hard-coded survey date went
+    # on vouching for numbers that were later raised without a survey.
+    out(f'                          about ({ac[0]:+.3f}, {ac[1]:+.3f}) m, the arena.yaml '
+        f'centre - not the formation\'s.')
+    out(f'                          arena.yaml radius_tested '
+        f'{safety.ARENA_RADIUS_TESTED:.2f} m, radius_lost '
+        f'{safety.ARENA_RADIUS_LOST:.2f} m (see that file for how they were set)')
     out(f'    height      {r["max_z"]:5.2f} m  max {cfg.ceiling:.2f} m'
         f'   {bar(r["max_z"], cfg.ceiling)}')
     out(f'                          that is the centre column; the volume cones in to '
