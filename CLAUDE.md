@@ -39,7 +39,7 @@ Motive ──NatNet multicast 50 Hz──► motion_capture_tracking ──/pose
   - `serpent.py` / `serpent_show.py` / `plan_serpent`: the one-minute big-arena show
     (docs/details/serpent-show.md). It flies through `constellation_show.run()`.
   - `guard/` + `guard_show.py` / `plan_guard.py`: N defenders v M attackers with
-    strategies plugged in by name (docs/details/guard-design-notes.md). Every command
+    strategies AND rule sets plugged in by name (docs/details/guard-modules.md). Every command
     passes `guard/safety_layer.py`, built on `cbf.py`: AirStack's CBF solver copied
     byte for byte (`test/test_cbf.py` checks the hash) -- never edit it here.
     Tests: `PYTHONPATH=src/crazyswarm2/crazyflie_shows python3 -m pytest -q

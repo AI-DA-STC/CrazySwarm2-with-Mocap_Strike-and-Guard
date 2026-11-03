@@ -86,37 +86,75 @@ flying faster.
 
 ## Rules
 
-`tagging` true (the default): the STL game's model. A defender within `tag_radius`
-of an attacker for `tag_time` downs it, and it lands. `tagging` false: there are no
-tags, and the clock decides. In both modes, an attacker within `strike_radius` of
-the VIP for `strike_time` strikes and lands. `strikes_to_win` strikes win for the
-attack. Every radius sits outside the matching keep-out (`config.problems` refuses
-otherwise), so a tag or a strike is never contact.
+The rules are a module of their own (`guard/rules/`), with every rule set written as
+meters. [guard-modules.md](guard-modules.md) describes the five built-in sets and how
+to write one. They were refactored from the first fixed referee on 2026-11-03.
 
-**Measured 2026-11-03 (4 v 3, `plan_guard`):**
+**The refactor changed nothing it was not meant to.** Before touching the rules I
+recorded per-seed results under both old modes: 32 matches with tagging and 16
+without. Afterwards, `tag` and `timer` gave the same results on all 48: winner,
+match time, strikes, downs and closest pair. The strategy upgrades below came after
+that check.
 
-- **A defender on the line is a wall.** A defender standing on the line between the
-  VIP and an attacker blocks it, because the CBF will not let anything through.
-  Attackers stop at the defender's distance + `d_cc`. With the old 0.90 m keep-out,
-  a strike radius of 1.6–2.2 m never scored against `shell`.
-- **The balance is a knife edge.** One simultaneous exchange tends to settle a
-  match. With the 0.90 m keep-out, at a 2.4 m strike radius, `shell` against
-  `coordinated` went from 11 of 12 to 0 of 12 between a 1.10 s and a 1.15 s tag
-  time.
-- **With the relaxed 0.45 m keep-out** at the defaults (2.4 m, 1.15 m, 1.1 s),
-  defence wins out of 12:
+**One subtlety a test now pins:** a meter is a sum of 20 Hz ticks.
+`22 × 0.05/1.1` comes out a hair under 1.0, so "full" is `≥ 1 − 1e-9`. Without that,
+a down lands one tick late against the old seconds-based clock.
 
-  | | `coordinated` | `direct` |
-  |---|---|---|
-  | `shell` | 12 | 0 |
-  | `ring` | 8 | 5 |
+**What the strategies do with the rules** (all through the rule set's own rate
+functions, so it works under any rule set):
 
-  Every cell was safe, and the closest pair was 0.45 m.
+- **`coordinated` (attack):**
+  - it predicts its *own* down meter along each candidate path, from its current
+    meter;
+  - it evades when the rules would start filling its meter here or one step on;
+  - while striking, it breaks off on its public meter;
+  - where defenders can be downed, it **gangs up**: when the pack could down a
+    defender without filling its own meters, the attackers converge on that defender.
+- **`shell` (defence):**
+  - pincers now close round the attacker itself, so two defenders count under a
+    majority rule;
+  - a post the rules would punish (outside home ground, or next to two attackers) is
+    pulled in toward the VIP;
+  - a defender whose own meter passes `bail` falls back to the shell.
 
-  **The strategies are not ranked in a simple order:** `shell` beats the planner
-  but loses to a rush, and `ring` the reverse. That is what a test bed is for.
+**Measured 2026-11-03.** `plan_guard --matrix --rules all`, 4 v 3, 12 seeds,
+relaxed 0.45 m keep-out. Each entry is defence wins out of 12, with the number of
+defenders downed across all 12 matches in brackets:
 
-Run `plan_guard --matrix` for the current numbers. Do not copy them from here.
+| Rule set | `shell` v `coordinated` | `shell` v `direct` | `ring` v `coordinated` | `ring` v `direct` |
+|---|---|---|---|---|
+| `tag` | 12 | 0 | 4 | 5 |
+| `zone` | 11 | 0 | 6 | 5 |
+| `pressure` | 8 (13 down) | 3 (10 down) | 0 (23 down) | 0 (12 down) |
+| `zone_pressure` | 1 | 3 | 0 | 0 |
+| `timer` | 0 | 0 | 0 | 0 |
+
+- Every cell was safe. The closest aircraft pair was 0.40 m against the 0.35 m floor.
+- **`pressure` is the most two-sided:**
+  - defenders are downed as well as attackers;
+  - `ring`, which never gangs up, loses every match: the rule rewards coordination,
+    which was the point;
+  - its strike radius defaults to 1.6 m, not 2.4 m. A lone defender cannot down a
+    lone attacker, so the strike zone has to be smaller. At 2.0 m `shell` won 4 and
+    0 of 8.
+- **`timer` cannot be held** at any strike radius from 1.6 to 2.4 m. Nothing downs
+  an attacker, and with the relaxed 0.45 m keep-out one defender's wall is too thin.
+  Pure denial needs a wider keep-out (`-p d_cc:=0.9`).
+- **`zone_pressure` favours the attack.** Neither default strategy has home-ground
+  tactics yet: the defence could hold a tighter perimeter, and the attack could lure
+  defenders out. That is the next strategy work, not a rule fix.
+- **No strategy dominates.** `shell` beats the planner under `tag` and `zone` but
+  loses to the rush; `ring` the reverse; under `pressure` coordination decides.
+
+**Earlier, with the 0.90 m keep-out and the first fixed referee:**
+- A defender on the line between the VIP and an attacker was a wall: the CBF let
+  nothing through, and attackers stopped at the defender's distance + `d_cc`. A strike
+  radius of 1.6–2.2 m never scored against `shell`.
+- At 2.4 m, `shell` against `coordinated` went from 11 of 12 to 0 of 12 between a
+  1.10 s and a 1.15 s tag time. One simultaneous exchange tends to settle a match.
+
+Run `plan_guard --matrix --rules all` for the current numbers. Do not copy them
+from here.
 
 ## What a strategy may know
 
@@ -181,7 +219,7 @@ Two lessons from building `coordinated`:
 
 ## Verification
 
-- `test/test_guard.py` and `test/test_cbf.py`: 33 tests. Run them with
+- `test/test_guard.py` and `test/test_cbf.py`: 46 tests. Run them with
   `PYTHONPATH=src/crazyswarm2/crazyflie_shows python3 -m pytest -q src/crazyswarm2/crazyflie_shows/test`.
 - **`plan_guard`'s safety verdict covers every seed.** It fails if any of these
   happen:

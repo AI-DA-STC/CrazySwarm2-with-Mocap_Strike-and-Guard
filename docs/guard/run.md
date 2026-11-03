@@ -24,8 +24,9 @@ rviz2 -d install/crazyflie_shows/share/crazyflie_shows/data/guard.rviz &
 ros2 run crazyflie_shows plan_guard --rviz --matrix
 ```
 
-`--matrix` plays every defence strategy against every attack strategy in turn.
-`ros2 run crazyflie_shows plan_guard --list` names them.
+`--matrix` plays every defence strategy against every attack strategy in turn, and
+`--matrix --rules all` does that under every rule set.
+`ros2 run crazyflie_shows plan_guard --list` names them all.
 
 ## 2. Stand the drones on their marks
 
@@ -49,14 +50,32 @@ On the drones, run the same command without `use_sim_time`, first with
 `-p vip_mode:=mocap` to protect the DJI, and `-p paced:=true` to have the show
 wait for Enter before arming and before the match starts.
 
+## Choosing the rules
+
+Add `-p rules:=<name>` (`--rules <name>` for the planner):
+
+| Rules | In one line |
+|---|---|
+| `tag` (default) | a defender that stays close to an attacker long enough takes it out |
+| `pressure` | either side takes a drone out by outnumbering it nearby; one against one is a standoff |
+| `zone` | like `tag`, but each side can only be taken out on the other side's ground |
+| `zone_pressure` | like `pressure`, on the other side's ground |
+| `timer` | nobody is taken out; the defence must hold until the clock runs out |
+
+Check a rule set with `plan_guard --rules <name>` before flying it.
+
 ## What you will see
 
-Defenders are blue and attackers red. A defender that holds close to an attacker
-for long enough **tags** it. A tagged attacker turns amber and lands. An attacker
-that holds close to the VIP **strikes** and lands too. The attack wins on a strike.
-The defence wins by tagging every attacker or by holding until the clock runs out.
+Defenders are blue and attackers red. A drone that is **taken out** turns amber and
+lands; depending on the rules, that can happen to either side. An attacker that
+holds close to the VIP **strikes** and lands too. The attack wins on a strike. The
+defence wins by taking out every attacker, or by holding until the clock runs out.
+
+In RViz, each drone's label shows how close it is to being taken out (`d40%`), and
+an attacker's how close it is to striking (`s40%`).
 
 Ctrl-C (or the console's Abort) lands everything where it is.
 
-Details, settings and how to write your own strategy:
+How it is put together: [../details/guard-modules.md](../details/guard-modules.md).
+Why, what was measured, and how to write your own strategy or rule set:
 [../details/guard-design-notes.md](../details/guard-design-notes.md).
