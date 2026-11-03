@@ -361,7 +361,7 @@ def _fence_report(fence):
     else:
         open_last = False
     if not holds:
-        print('  geofence: never tripped -- the VIP stayed inside keep-in\n',
+        print('  geofence: never tripped -- the VIP stayed far enough inside the arena\n',
               flush=True)
         return
     print(f'\n  GEOFENCE EPISODES ({len(holds)})')
@@ -392,7 +392,7 @@ LEG_DONE_V = 0.05      # m/s, fastest commanded defender setpoint
 #: plain terminal AND from the mission console's stdin box. select() keeps it
 #: non-blocking, because the defenders are streaming setpoints at 20 Hz and a
 #: blocking read would stall them into their own staleness watchdog.
-#: m the VIP must come back INSIDE the keep-in radius before the ring
+#: m the VIP must come back inside the arena (vip_room >= this) before the ring
 #: resumes following. Without hysteresis a DJI hovering on the line would make
 #: the formation start and stop following several times a second.
 FENCE_HYST = 0.25

@@ -24,7 +24,7 @@ What it watches, and why each one is here:
 * ring altitude vs the DJI's. A defender at or below the DJI is the geometry
   the config calls unsurvivable, and a fence trip used to cause exactly that.
 """
-import argparse, json, math, sys, time
+import argparse, json, sys, time
 from collections import deque
 
 import numpy as np
@@ -65,7 +65,7 @@ class Watch(Node):
         self.cmd = {}
         self.cmd_t = {}          # when each command last arrived
         self.alerts = deque(maxlen=400)
-        self.worst = {'gap': 0.0, 'radius': 0.0, 'track': 0.0,
+        self.worst = {'gap': 0.0, 'edge': np.inf, 'track': 0.0,
                       'sep': 9e9, 'ringgap': 9e9}
         self.create_subscription(NamedPoseArray, '/poses', self._poses,
                                  qos_profile_sensor_data)
@@ -111,7 +111,7 @@ class Watch(Node):
 
     def _tick(self):
         now = time.monotonic()
-        c, C = self.cfg, np.array(self.cfg.room_center)
+        c = self.cfg
         flying = [n for n in self.fleet if n in self.pos]
         if not flying and VIP_BODY not in self.pos:
             return
@@ -141,9 +141,8 @@ class Watch(Node):
         lost = LOST_BEYOND_EDGE
         for n in flying:
             p = self.pos[n]
-            r = float(np.linalg.norm(p[:2] - C))
-            self.worst['radius'] = max(self.worst['radius'], r)
             out = -float(escort.room_clearance(c, p))          # + = outside
+            self.worst['edge'] = min(self.worst['edge'], -out)
             if -float(safety.edge_clearance(p)) > lost:
                 self._say('LOST ', f'{n}: {-float(safety.edge_clearance(p)):.2f} m '
                                    f'outside the arena -- past where tracking '
@@ -197,9 +196,9 @@ class Watch(Node):
                         self._say('BELOW', f'{n} is {abs(dz):.2f} m below the '
                                            f'DJI and {dxy:.2f} m from it '
                                            '-- downwash geometry')
-                self._fence(now, C)
+                self._fence(now)
 
-    def _fence(self, now, C):
+    def _fence(self, now):
         """An INDEPENDENT fence timeline, computed from mocap alone.
 
         The show prints its own GEOFENCE lines, but those are the show's
@@ -269,7 +268,7 @@ def main():
         pass          # Ctrl-C or SIGTERM: still print the summary below
     print('\n  ==== worst seen ====')
     print(f'  longest mocap gap     {w.worst["gap"]:.2f} s')
-    print(f'  furthest from centre  {w.worst["radius"]:.2f} m')
+    print(f'  closest to the clamp  {w.worst["edge"]:.2f} m (negative = past it)')
     print(f'  worst tracking error  {w.worst["track"]:.2f} m')
     s = w.worst['sep']
     print(f'  closest two drones    {"-" if s > 1e8 else f"{s:.2f} m"}')

@@ -337,7 +337,10 @@ class EscortConfig:
     #: What it buys: containment now trips at arena + contain_margin = 2.15 m,
     #: which is INSIDE the 2.24 m where tracking was lost. The show reacts
     #: while it can still see the drone, instead of after.
-    arena_radius: float = safety.ARENA_RADIUS_PLAN   # 1.90 m from room centre
+    #: With a polygon in arena.yaml this only matters when set TIGHTER than
+    #: ARENA_RADIUS_PLAN (see room_clearance); the history above is the old
+    #: room's, where the circle was the whole arena.
+    arena_radius: float = safety.ARENA_RADIUS_PLAN
     #: 1.85 m, not 2.0: this clamps ring_height, and the ring reaches 1.60 m
     #: from the arena centre where safety.CEILING_TESTED is 1.95 m. 2.0 would
     #: let a high-hovering DJI drag the ring above altitude anyone has proven

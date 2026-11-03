@@ -117,7 +117,6 @@ def measure(tr, cfg):
     vip = float(np.min(np.linalg.norm(d[:, :, :2] - tr['vip'][:, None, :2], axis=2)))
     adv = float(np.min(np.linalg.norm(d[:, :, :2] - tr['adv'][:, None, :2], axis=2)))
     speed = float(np.max(np.linalg.norm(np.diff(d, axis=0), axis=2) / dt)) if len(d) > 1 else 0.0
-    radial = np.linalg.norm(d[:, :, :2] - np.array(cfg.room_center), axis=2)
     clearance = escort.room_clearance(cfg, d)        # (T, n), + inside
     # how well did the ring end up facing the adversary while engaged?
     face = np.nan
@@ -171,7 +170,6 @@ def measure(tr, cfg):
     return {'closed': closed, 'slot_err': slot_err, 'transit_err': transit_err,
             'pair_sep': pair, 'vip_dist': vip,
             'adv_sep': adv, 'peak_speed': speed,
-            'max_radius': float(np.max(radial)),
             'min_clearance': float(np.min(clearance)), 'max_alt': float(np.max(d[:, :, 2])),
             'engaged_frac': float(np.mean(tr['engaged'])), 'face_err_deg': face,
             'slew_steps': slew, 'sep_steps': sep, 'steps': len(tr['t'])}
