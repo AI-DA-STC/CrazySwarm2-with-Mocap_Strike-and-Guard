@@ -12,6 +12,13 @@ before changing code.
 | [escort-reference.md](escort-reference.md) | Every command, show setting and number on one page; keyboard teleop; reviewing a run |
 | [escort-qna.md](escort-qna.md) | Answers to visitors' questions, sorted by audience, plus the honest list of limits |
 
+**Guard (N defenders v M attackers, pluggable strategies)**
+
+| File | What it covers |
+|---|---|
+| [guard-modules.md](guard-modules.md) | Every module, what it may and may not do, and how one tick flows through them |
+| [guard-design-notes.md](guard-design-notes.md) | Why it is built this way: the CBF ported from AirStack, the separation floor, the rules and their measured balance, writing your own strategy |
+
 **STL game**
 
 | File | What it covers |

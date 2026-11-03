@@ -38,6 +38,12 @@ Motive ──NatNet multicast 50 Hz──► motion_capture_tracking ──/pose
     belong to two older shows; the demos import a few helpers from them, so they stay.
   - `serpent.py` / `serpent_show.py` / `plan_serpent`: the one-minute big-arena show
     (docs/details/serpent-show.md). It flies through `constellation_show.run()`.
+  - `guard/` + `guard_show.py` / `plan_guard.py`: N defenders v M attackers with
+    strategies plugged in by name (docs/details/guard-design-notes.md). Every command
+    passes `guard/safety_layer.py`, built on `cbf.py`: AirStack's CBF solver copied
+    byte for byte (`test/test_cbf.py` checks the hash) -- never edit it here.
+    Tests: `PYTHONPATH=src/crazyswarm2/crazyflie_shows python3 -m pytest -q
+    src/crazyswarm2/crazyflie_shows/test`.
 - `src/crazyswarm2/crazyflie/config/`: `crazyflies.yaml` is the ONLY fleet roster
   (cf10-cf14 committed `enabled: false`); `arena.yaml` is the measured room
   (`measured: false` makes the escort planner refuse; the STL game ignores it).
