@@ -1,0 +1,460 @@
+#!/usr/bin/env python3
+"""Check the guard show offline -- and compare strategies -- with no drones.
+
+    ros2 run crazyflie_shows plan_guard                      # 4 v 3, defaults
+    ros2 run crazyflie_shows plan_guard --defenders 3 --attackers 2 --seeds 30
+    ros2 run crazyflie_shows plan_guard --defense ring --attack direct
+    ros2 run crazyflie_shows plan_guard --matrix             # every pairing
+    ros2 run crazyflie_shows plan_guard --marks              # where to stand them
+    ros2 run crazyflie_shows plan_guard --set tagging=false --set v_max_attack=1.2
+    ros2 run crazyflie_shows plan_guard --policy-module my_lab.strategies --attack mine
+
+Runs whole matches through the SAME engine guard_show flies
+(crazyflie_shows.guard.engine), against a stand-in for the aircraft: each
+drone follows its setpoint with a first-order lag (``--tau``, 0.25 s), and a
+retiring one descends at the land speed. The stand-in is not a measured
+model; it exists so that "the setpoints were safe" and "the aircraft were
+safe" are checked separately, which is the difference that matters.
+
+Two verdicts, kept apart on purpose:
+
+* **SAFETY** -- over every seed: no two airborne aircraft closer than
+  the guard's hard floor (an ellipsoid: min_separation across,
+  min_separation_z vertically), nobody closer to the VIP than its keep-out, nobody outside
+  the room or the band, the solver never in emergency, the backstop clamp
+  never needed. Any failure exits 1: this is the gate before flying.
+* **GAME** -- who won, how, how fast. Information, not a gate: a strategy that
+  always loses is a fine thing to have measured.
+"""
+
+import argparse
+import ast
+import sys
+import time
+
+import numpy as np
+
+from crazyflie_shows import escort, safety
+from crazyflie_shows.guard import policies, safety_layer
+from crazyflie_shows.guard.config import GuardConfig, override, problems
+from crazyflie_shows.guard.engine import Match
+from crazyflie_shows.guard.world import ATTACK, DEFENSE, RETIRING
+
+#: Where the attack comes from, as a bearing about the VIP: the far side from
+#: the operator (who stands on +x looking down -x), the escort's encounter
+#: geometry (escort.ReactiveAdversary.bearing).
+ATTACK_BEARING_DEG = escort.ReactiveAdversary().bearing
+DEFENDER_MARK_R = 1.8      # m from the VIP, on the floor
+ATTACKER_MARK_R = 4.4      # m from the VIP, on the floor
+VIP_Z = 1.3                # m: a point VIP hovers where the DJI would
+
+
+def vip_mark(cfg):
+    """The VIP's default spot: the escort's mark, at DJI hover height."""
+    v = escort.vip_home(escort.EscortConfig())
+    return np.array([v[0], v[1], VIP_Z])
+
+
+def recommend_marks(cfg, vip, n_def, n_att):
+    """Floor marks: defenders round the VIP, attackers on the far arc."""
+    marks = {}
+    for i in range(n_def):
+        ang = np.radians(ATTACK_BEARING_DEG) + 2.0 * np.pi * i / n_def
+        marks[f'D{i + 1}'] = vip[:2] + DEFENDER_MARK_R * np.array([np.cos(ang), np.sin(ang)])
+    # attackers spaced 1.3 m apart along the arc, centred on the bearing
+    step = 1.3 / ATTACKER_MARK_R
+    for j in range(n_att):
+        ang = np.radians(ATTACK_BEARING_DEG) + (j - (n_att - 1) / 2.0) * step
+        r = ATTACKER_MARK_R
+        while r > DEFENDER_MARK_R + 1.0:
+            q = vip[:2] + r * np.array([np.cos(ang), np.sin(ang)])
+            if float(escort.room_clearance(cfg, q)) >= 0.4:
+                break
+            r -= 0.1
+        marks[f'A{j + 1}'] = q
+    return {k: np.array([v[0], v[1], 0.0]) for k, v in marks.items()}
+
+
+def mark_problems(cfg, vip, marks, defenders, attackers):
+    """Why these floor marks cannot start a match (empty = fine)."""
+    bad = []
+    names = list(defenders) + list(attackers)
+    starts = {n: np.array([marks[n][0], marks[n][1], cfg.start_height]) for n in names}
+    for i, a in enumerate(names):
+        for b in names[i + 1:]:
+            d = float(np.linalg.norm(starts[a] - starts[b]))
+            if d < cfg.d_cc:
+                bad.append(f'{a} and {b} start {d:.2f} m apart '
+                           f'(need {cfg.d_cc:.2f})')
+        r = safety_layer.separation_ratio(cfg, starts[a], vip, 'vip')
+        if r < 1.05:
+            bad.append(f'{a} starts inside the VIP keep-out '
+                       f'({float(np.linalg.norm(starts[a][:2] - vip[:2])):.2f} m '
+                       'across) -- move it out')
+        c = float(escort.room_clearance(cfg, starts[a]))
+        if c < 0.2:
+            bad.append(f'{a} starts {c:.2f} m from the arena edge')
+    for a in attackers:
+        near = min(float(np.linalg.norm(starts[a] - starts[d])) for d in defenders) \
+            if defenders else np.inf
+        if cfg.tagging and near < cfg.tag_radius + 0.5:
+            bad.append(f'attacker {a} starts {near:.2f} m from a defender -- '
+                       'inside tag range before the match begins')
+    return bad, starts
+
+
+def simulate(cfg, dname, aname, starts, defenders, attackers, vip0, seed,
+             dparams=None, aparams=None, tau=0.25, vip_move=0.0, record=False,
+             on_tick=None):
+    """One match on the stand-in aircraft. Returns (result, metrics, trace).
+
+    ``on_tick(match, vip, labels)`` is called after every tick (the --rviz
+    player uses it to draw and to pace the match in real time).
+    """
+    rng = np.random.default_rng(seed)
+    # Nobody stands a drone exactly on its mark: jitter the starts by a few
+    # cm per seed, so seeds differ even before any strategy rolls a die.
+    jit = np.random.default_rng(10_000 + seed)
+    starts = {n: np.asarray(p, float) + np.r_[jit.normal(0.0, 0.08, 2), 0.0]
+              for n, p in starts.items()}
+    m = Match(cfg, policies.make(DEFENSE, dname, dparams),
+              policies.make(ATTACK, aname, aparams), starts, defenders,
+              attackers, vip0, rng)
+    pos = {n: np.asarray(p, float).copy() for n, p in starts.items()}
+    dt = 1.0 / cfg.rate_hz
+    vip = np.asarray(vip0, float).copy()
+    met = {'sep': np.inf, 'sep_pair': '', 'floor': np.inf, 'vip': np.inf, 'room': np.inf,
+           'z_lo': np.inf, 'z_hi': -np.inf, 'speed': 0.0}
+    trace = [] if record else None
+    while True:
+        # an optional drifting VIP: a slow circle, the DJI pilot wandering
+        if vip_move > 0.0:
+            w = vip_move / 0.6
+            vip = np.asarray(vip0, float) + 0.6 * np.array(
+                [np.cos(w * m.t) - 1.0, np.sin(w * m.t), 0.0])
+            vip_v = vip_move * np.array([-np.sin(w * m.t), np.cos(w * m.t), 0.0])
+        else:
+            vip_v = np.zeros(3)
+        tk = m.step(dt, vip, vip_v, pos)
+        for n, (sp, _) in tk.setpoints.items():
+            before = pos[n].copy()
+            pos[n] = pos[n] + (sp - pos[n]) * min(dt / tau, 1.0)
+            met['speed'] = max(met['speed'], float(np.linalg.norm(pos[n] - before)) / dt)
+        for n, a in m.agents.items():
+            if a.status == RETIRING:
+                pos[n][2] = max(0.0, pos[n][2] - cfg.land_speed * dt)
+        air = [n for n in pos if pos[n][2] > 0.3]
+        for i, a in enumerate(air):
+            for b in air[i + 1:]:
+                d = float(np.linalg.norm(pos[a] - pos[b]))
+                if d < met['sep']:
+                    met['sep'], met['sep_pair'] = d, f'{a}/{b}'
+                met['floor'] = min(met['floor'], safety_layer.floor_ratio(cfg, pos[a], pos[b]))
+            met['vip'] = min(met['vip'], safety_layer.separation_ratio(cfg, pos[a], vip, 'vip'))
+            if m.agents[a].active:
+                met['room'] = min(met['room'], float(escort.room_clearance(cfg, pos[a])))
+                met['z_lo'] = min(met['z_lo'], pos[a][2])
+                met['z_hi'] = max(met['z_hi'], pos[a][2])
+        if record:
+            trace.append((m.t, vip.copy(), {n: pos[n].copy() for n in pos},
+                          dict(tk.labels)))
+        res = m.result()
+        if on_tick is not None:
+            on_tick(m, vip, tk.labels, res)
+        if res.winner:
+            met.update(m.stats)
+            return res, met, trace
+
+
+def safety_failures(cfg, met):
+    bad = []
+    if met['floor'] < 1.0:
+        bad.append(f'two aircraft got inside the hard floor ({met["floor"]:.2f} '
+                   f'of it; closest pair {met["sep_pair"]} at {met["sep"]:.2f} m)')
+    if met['vip'] < 0.9:
+        bad.append(f'an aircraft got to {met["vip"]:.2f} of the VIP keep-out')
+    if met['room'] < -cfg.contain_margin:
+        bad.append(f'an aircraft went {-met["room"]:.2f} m past the room clamp')
+    if met['z_lo'] < cfg.floor - 0.15 or met['z_hi'] > cfg.ceiling + 0.15:
+        bad.append(f'altitude {met["z_lo"]:.2f}..{met["z_hi"]:.2f} m left the '
+                   f'{cfg.floor:.2f}..{cfg.ceiling:.2f} m band')
+    if met['emergency']:
+        bad.append(f'solver emergency push-apart on {met["emergency"]} ticks')
+    if met['backstop']:
+        bad.append(f'backstop clamp fired {met["backstop"]} times')
+    return bad
+
+
+def run_series(cfg, dname, aname, starts, D, A, vip, seeds, dparams, aparams,
+               tau, vip_move, verbose):
+    rows = []
+    for s in seeds:
+        res, met, _ = simulate(cfg, dname, aname, starts, D, A, vip, s, dparams,
+                               aparams, tau, vip_move)
+        bad = safety_failures(cfg, met)
+        rows.append((s, res, met, bad))
+        if verbose:
+            print(f'    seed {s:3d}  {res.winner:7s} t={res.t:5.1f}s  '
+                  f'strikes {res.strikes} tags {res.tags}  '
+                  f'min sep {met["sep"]:.2f} m  VIP {met["vip"]:.2f}  '
+                  f'room {met["room"]:+.2f}  CBF {met["corrected"]}'
+                  f'{"  *** " + "; ".join(bad) if bad else ""}')
+    return rows
+
+
+def summarise(rows):
+    n = len(rows)
+    dw = sum(r[1].winner == DEFENSE for r in rows)
+    t = np.mean([r[1].t for r in rows])
+    unsafe = [r for r in rows if r[3]]
+    sep = min(r[2]['sep'] for r in rows)
+    return dw, n, t, unsafe, sep
+
+
+def _kv(items):
+    out = {}
+    for it in items or ():
+        k, _, v = it.partition('=')
+        try:
+            out[k] = ast.literal_eval(v)       # numbers, tuples, True/False
+        except (ValueError, SyntaxError):
+            out[k] = v
+    return out
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
+    ap.add_argument('--defense', default='shell')
+    ap.add_argument('--attack', default='coordinated')
+    ap.add_argument('--defenders', type=int, default=4)
+    ap.add_argument('--attackers', type=int, default=3)
+    ap.add_argument('--seeds', type=int, default=12)
+    ap.add_argument('--seed0', type=int, default=0)
+    ap.add_argument('--tau', type=float, default=0.25,
+                    help='aircraft lag behind the setpoint, s')
+    ap.add_argument('--vip-move', type=float, default=0.0,
+                    help='VIP drifts on a 0.6 m circle at this speed, m/s')
+    ap.add_argument('--set', action='append', metavar='FIELD=VALUE',
+                    help='override a GuardConfig field (repeatable)')
+    ap.add_argument('--dparam', action='append', metavar='KEY=VALUE',
+                    help='defence strategy parameter (repeatable)')
+    ap.add_argument('--aparam', action='append', metavar='KEY=VALUE',
+                    help='attack strategy parameter (repeatable)')
+    ap.add_argument('--policy-module', default='',
+                    help='import this module first (your own strategies)')
+    ap.add_argument('--matrix', action='store_true',
+                    help='every defence against every attack')
+    ap.add_argument('--marks', action='store_true',
+                    help='print where to stand the drones, and check the yaml')
+    ap.add_argument('--plot', default='', help='plot seed0 to this .png')
+    ap.add_argument('--list', action='store_true', help='list the strategies')
+    ap.add_argument('--rviz', action='store_true',
+                    help='play the matches in real time on /guard/markers '
+                         '(open rviz2 -d <share>/crazyflie_shows/data/guard.rviz)')
+    ap.add_argument('--speed', type=float, default=1.0,
+                    help='--rviz playback speed (2 = twice real time)')
+    a = ap.parse_args(argv)
+
+    safety.require_measured_arena('plan_guard')
+    policies.load_module(a.policy_module)
+    cfg = override(GuardConfig(), _kv(a.set))
+    if a.list:
+        for team in (DEFENSE, ATTACK):
+            print(f'\n  {team}:')
+            for n in policies.available(team):
+                print(f'    {n:14s} {policies.describe(team, n)}')
+        print()
+        return 0
+
+    vip = vip_mark(cfg)
+    D = [f'D{i + 1}' for i in range(a.defenders)]
+    A = [f'A{j + 1}' for j in range(a.attackers)]
+    marks = recommend_marks(cfg, vip, a.defenders, a.attackers)
+    bad_cfg = problems(cfg)
+    bad_marks, starts = mark_problems(cfg, vip, marks, D, A)
+
+    print(f'\n  GUARD - offline check   {a.defenders} defenders v {a.attackers} '
+          f'attackers   rules: {"tag" if cfg.tagging else "deny"}')
+    print(f'  arena         {escort.describe_room(cfg)}; band '
+          f'{cfg.floor:.2f}..{cfg.ceiling:.2f} m')
+    print(f'  VIP           [{vip[0]:+.2f}, {vip[1]:+.2f}, {vip[2]:.2f}]'
+          f'{f", drifting at {a.vip_move:.2f} m/s" if a.vip_move else ", still"}')
+    print(f'  speeds        defence {cfg.v_max_defense:.2f}, attack '
+          f'{cfg.v_max_attack:.2f}, dodging up to {cfg.v_max_safety:.2f} m/s')
+    print(f'  keep-outs     drone {cfg.d_cc:.2f} m across x '
+          f'{cfg.d_cc * cfg.cc_z_ratio:.2f} m up/down; VIP {cfg.d_vip:.2f} x '
+          f'{cfg.d_vip * cfg.vip_z_ratio:.2f} m')
+    print(f'  rules         strike {cfg.strike_radius:.2f} m for '
+          f'{cfg.strike_time:.1f} s'
+          + (f'; tag {cfg.tag_radius:.2f} m for {cfg.tag_time:.1f} s'
+             if cfg.tagging else '; no tagging')
+          + f'; {cfg.duration:.0f} s clock')
+    for b in bad_cfg + bad_marks:
+        print(f'  *** {b}')
+    if bad_cfg or bad_marks:
+        print('\n  REFUSED\n')
+        return 1
+
+    if a.marks:
+        return report_marks(cfg, vip, marks, D, A)
+
+    dparams, aparams = _kv(a.dparam), _kv(a.aparam)
+    seeds = list(range(a.seed0, a.seed0 + a.seeds))
+    if a.rviz:
+        return play_rviz(cfg, a, starts, D, A, vip, seeds, dparams, aparams)
+    t0 = time.time()
+    if a.matrix:
+        print(f'\n  MATRIX  ({len(seeds)} seeds each; defence wins / matches)\n')
+        dn, an = policies.available(DEFENSE), policies.available(ATTACK)
+        print('  ' + ' ' * 14 + ''.join(f'{x:>22s}' for x in an))
+        any_unsafe = False
+        for d in dn:
+            cells = []
+            for at in an:
+                rows = run_series(cfg, d, at, starts, D, A, vip, seeds, None,
+                                  None, a.tau, a.vip_move, False)
+                dw, n, t, unsafe, sep = summarise(rows)
+                any_unsafe |= bool(unsafe)
+                cells.append(f'{dw:>3d}/{n:<3d} {t:5.1f}s {sep:4.2f}m'
+                             + ('!' if unsafe else ' '))
+            print(f'  {d:14s}' + ''.join(f'{c:>22s}' for c in cells))
+        print('\n  cell: defence wins/matches, mean match time, closest pair'
+              ' ("!" = a safety failure)')
+        print(f'  ({time.time() - t0:.0f} s)\n')
+        return 1 if any_unsafe else 0
+
+    print(f'\n  {a.defense} (defence) v {a.attack} (attack), seeds '
+          f'{seeds[0]}..{seeds[-1]}\n')
+    rows = run_series(cfg, a.defense, a.attack, starts, D, A, vip, seeds,
+                      dparams, aparams, a.tau, a.vip_move, True)
+    dw, n, t, unsafe, sep = summarise(rows)
+    worst = min(rows, key=lambda r: r[2]['sep'])[2]
+    print(f'\n  GAME     defence won {dw}/{n}, attack {n - dw}/{n}; mean match '
+          f'{t:.1f} s; strikes {sum(r[1].strikes for r in rows)}, tags '
+          f'{sum(r[1].tags for r in rows)}')
+    print(f'  SAFETY   closest airborne pair {sep:.2f} m '
+          f'(floor {cfg.min_separation:.2f} across, {cfg.min_separation_z:.2f} '
+          f'vertically; worst {min(r[2]["floor"] for r in rows):.2f} of it); peak speed '
+          f'{max(r[2]["speed"] for r in rows):.2f} m/s; CBF corrected '
+          f'{sum(r[2]["corrected"] for r in rows)} drone-ticks, emergency '
+          f'{sum(r[2]["emergency"] for r in rows)}, backstop '
+          f'{sum(r[2]["backstop"] for r in rows)}; closest to the VIP '
+          f'{min(r[2]["vip"] for r in rows):.2f} of its keep-out; room '
+          f'{min(r[2]["room"] for r in rows):+.2f} m; worst pair '
+          f'{worst["sep_pair"]}')
+    print(f'  ({time.time() - t0:.0f} s)')
+    if a.plot:
+        _, _, tr = simulate(cfg, a.defense, a.attack, starts, D, A, vip,
+                            seeds[0], dparams, aparams, a.tau, a.vip_move, True)
+        plot(tr, cfg, D, A, a.plot)
+    if unsafe:
+        print(f'\n  SAFETY FAILED on {len(unsafe)} seed(s) -- do not fly this.\n')
+        return 1
+    print('\n  SAFE on every seed.\n')
+    return 0
+
+
+def play_rviz(cfg, a, starts, D, A, vip, seeds, dparams, aparams):
+    """Play each seed in real time on /guard/markers, one after another."""
+    import rclpy
+    from crazyflie_shows.guard.viz import GuardViz
+
+    rclpy.init()
+    node = rclpy.create_node('plan_guard_viz')
+    viz = GuardViz(node)
+    dt = 1.0 / cfg.rate_hz
+    clock = {'next': time.monotonic()}
+    # --matrix --rviz: rotate through every pairing, so consecutive matches
+    # actually look different; otherwise the one pairing, seed after seed.
+    if a.matrix:
+        pairs = [(d, at) for d in policies.available(DEFENSE)
+                 for at in policies.available(ATTACK)]
+    else:
+        pairs = [(a.defense, a.attack)]
+
+    def tick(m, vip_now, labels, res):
+        # rclpy's signal handlers shut the context down WITHOUT raising here
+        # (SIGINT and SIGTERM alike), so check, or a stopped player keeps
+        # playing into a dead publisher and ignores every polite kill.
+        if not rclpy.ok():
+            raise KeyboardInterrupt
+        viz.publish(m.t, cfg, vip_now, m.agents, labels, res,
+                    f'{tick.pair[0]} (defence) v {tick.pair[1]} (attack) | seed {tick.seed}')
+        clock['next'] += dt / max(a.speed, 1e-3)
+        pause = clock['next'] - time.monotonic()
+        if pause > 0:
+            time.sleep(pause)
+        else:
+            clock['next'] = time.monotonic()
+
+    try:
+        for s in seeds:
+            for pair in pairs:
+                tick.seed, tick.pair = s, pair
+                viz.clear()
+                clock['next'] = time.monotonic()
+                own = pair == (a.defense, a.attack)
+                res, met, _ = simulate(cfg, pair[0], pair[1], starts, D, A, vip,
+                                       s, dparams if own else None,
+                                       aparams if own else None, a.tau, a.vip_move,
+                                       on_tick=tick)
+                bad = safety_failures(cfg, met)
+                print(f'  {pair[0]} v {pair[1]:12s} seed {s:3d}  {res.winner:7s} '
+                      f'{res.reason:28s} t={res.t:5.1f}s '
+                      f'strikes {res.strikes} tags {res.tags}  min sep '
+                      f'{met["sep"]:.2f} m{"  *** " + "; ".join(bad) if bad else ""}',
+                      flush=True)
+                time.sleep(2.0)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        node.destroy_node()
+        rclpy.try_shutdown()
+    return 0
+
+
+def report_marks(cfg, vip, marks, D, A):
+    print('\n  STAND THE DRONES HERE (metres, floor, world frame)')
+    for n in D + A:
+        m = marks[n]
+        print(f'    {"defender" if n in D else "attacker"} {n:4s} '
+              f'[{m[0]:+.2f}, {m[1]:+.2f}]   '
+              f'{float(np.linalg.norm(m[:2] - vip[:2])):.2f} m from the VIP, '
+              f'{float(escort.room_clearance(cfg, m)):.2f} m inside the edge')
+    print('\n  guard_show assigns roles by these marks (nearest the VIP defend) '
+          'unless\n  you name them: -p defenders:=cf1,cf2 -p attackers:=cf3,cf4\n')
+    return 0
+
+
+def plot(trace, cfg, D, A, path):
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+
+    fig, (ax, az) = plt.subplots(1, 2, figsize=(13, 6.5))
+    if safety.ARENA_POLYGON is not None:
+        ax.add_patch(plt.Polygon(safety.ARENA_POLYGON, closed=True, fill=False,
+                                 ls='--', color='0.6'))
+    t = np.array([s[0] for s in trace])
+    vip = np.array([s[1] for s in trace])
+    ax.plot(vip[:, 0], vip[:, 1], 'k-', lw=3, label='VIP')
+    az.plot(t, vip[:, 2], 'k-', lw=3, label='VIP')
+    for n in D + A:
+        p = np.array([s[2][n] for s in trace])
+        ls = '-' if n in D else '--'
+        col = 'tab:blue' if n in D else 'tab:red'
+        ax.plot(p[:, 0], p[:, 1], ls, color=col, lw=1, alpha=0.8)
+        ax.annotate(n, p[-1, :2], fontsize=7, color=col)
+        az.plot(t, p[:, 2], ls, color=col, lw=1, alpha=0.8)
+    ax.set_aspect('equal')
+    ax.set_title('plan view (blue defence, red attack)')
+    az.set_title('height over time')
+    az.set_xlabel('t (s)')
+    az.axhline(cfg.floor, color='0.6', ls=':')
+    az.axhline(cfg.ceiling, color='0.6', ls=':')
+    fig.savefig(path, dpi=110, bbox_inches='tight')
+    print(f'  wrote {path}')
+
+
+if __name__ == '__main__':
+    sys.exit(main())
