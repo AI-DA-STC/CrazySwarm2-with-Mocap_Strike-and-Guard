@@ -6,7 +6,9 @@
     ros2 run crazyflie_shows plan_guard --defense ring --attack direct
     ros2 run crazyflie_shows plan_guard --matrix             # every pairing
     ros2 run crazyflie_shows plan_guard --marks              # where to stand them
-    ros2 run crazyflie_shows plan_guard --set tagging=false --set v_max_attack=1.2
+    ros2 run crazyflie_shows plan_guard --rules pressure --rparam reach=1.4
+    ros2 run crazyflie_shows plan_guard --matrix --rules all  # x every rule set
+    ros2 run crazyflie_shows plan_guard --set v_max_attack=1.2 --set ceiling=4.0
     ros2 run crazyflie_shows plan_guard --policy-module my_lab.strategies --attack mine
 
 Runs whole matches through the SAME engine guard_show flies
@@ -36,6 +38,7 @@ import numpy as np
 
 from crazyflie_shows import escort, safety
 from crazyflie_shows.guard import policies, safety_layer
+from crazyflie_shows.guard import rules as rule_sets
 from crazyflie_shows.guard.config import GuardConfig, override, problems
 from crazyflie_shows.guard.engine import Match
 from crazyflie_shows.guard.world import ATTACK, DEFENSE, RETIRING
@@ -75,7 +78,7 @@ def recommend_marks(cfg, vip, n_def, n_att):
     return {k: np.array([v[0], v[1], 0.0]) for k, v in marks.items()}
 
 
-def mark_problems(cfg, vip, marks, defenders, attackers):
+def mark_problems(cfg, rules, vip, marks, defenders, attackers):
     """Why these floor marks cannot start a match (empty = fine)."""
     bad = []
     names = list(defenders) + list(attackers)
@@ -97,13 +100,13 @@ def mark_problems(cfg, vip, marks, defenders, attackers):
     for a in attackers:
         near = min(float(np.linalg.norm(starts[a] - starts[d])) for d in defenders) \
             if defenders else np.inf
-        if cfg.tagging and near < cfg.tag_radius + 0.5:
+        if rules.DOWNABLE and near < rules.reach + 0.5:
             bad.append(f'attacker {a} starts {near:.2f} m from a defender -- '
-                       'inside tag range before the match begins')
+                       'inside reach before the match begins')
     return bad, starts
 
 
-def simulate(cfg, dname, aname, starts, defenders, attackers, vip0, seed,
+def simulate(cfg, rules, dname, aname, starts, defenders, attackers, vip0, seed,
              dparams=None, aparams=None, tau=0.25, vip_move=0.0, record=False,
              on_tick=None):
     """One match on the stand-in aircraft. Returns (result, metrics, trace).
@@ -117,7 +120,7 @@ def simulate(cfg, dname, aname, starts, defenders, attackers, vip0, seed,
     jit = np.random.default_rng(10_000 + seed)
     starts = {n: np.asarray(p, float) + np.r_[jit.normal(0.0, 0.08, 2), 0.0]
               for n, p in starts.items()}
-    m = Match(cfg, policies.make(DEFENSE, dname, dparams),
+    m = Match(cfg, rules, policies.make(DEFENSE, dname, dparams),
               policies.make(ATTACK, aname, aparams), starts, defenders,
               attackers, vip0, rng)
     pos = {n: np.asarray(p, float).copy() for n, p in starts.items()}
@@ -185,17 +188,17 @@ def safety_failures(cfg, met):
     return bad
 
 
-def run_series(cfg, dname, aname, starts, D, A, vip, seeds, dparams, aparams,
+def run_series(cfg, rules, dname, aname, starts, D, A, vip, seeds, dparams, aparams,
                tau, vip_move, verbose):
     rows = []
     for s in seeds:
-        res, met, _ = simulate(cfg, dname, aname, starts, D, A, vip, s, dparams,
+        res, met, _ = simulate(cfg, rules, dname, aname, starts, D, A, vip, s, dparams,
                                aparams, tau, vip_move)
         bad = safety_failures(cfg, met)
         rows.append((s, res, met, bad))
         if verbose:
             print(f'    seed {s:3d}  {res.winner:7s} t={res.t:5.1f}s  '
-                  f'strikes {res.strikes} tags {res.tags}  '
+                  f'strikes {res.strikes} downs {res.downs}  '
                   f'min sep {met["sep"]:.2f} m  VIP {met["vip"]:.2f}  '
                   f'room {met["room"]:+.2f}  CBF {met["corrected"]}'
                   f'{"  *** " + "; ".join(bad) if bad else ""}')
@@ -240,6 +243,10 @@ def main(argv=None):
                     help='defence strategy parameter (repeatable)')
     ap.add_argument('--aparam', action='append', metavar='KEY=VALUE',
                     help='attack strategy parameter (repeatable)')
+    ap.add_argument('--rules', default='tag',
+                    help="rule set (--list names them), or 'all' with --matrix")
+    ap.add_argument('--rparam', action='append', metavar='KEY=VALUE',
+                    help='rule-set parameter (repeatable)')
     ap.add_argument('--policy-module', default='',
                     help='import this module first (your own strategies)')
     ap.add_argument('--matrix', action='store_true',
@@ -247,7 +254,8 @@ def main(argv=None):
     ap.add_argument('--marks', action='store_true',
                     help='print where to stand the drones, and check the yaml')
     ap.add_argument('--plot', default='', help='plot seed0 to this .png')
-    ap.add_argument('--list', action='store_true', help='list the strategies')
+    ap.add_argument('--list', action='store_true',
+                    help='list the strategies and rule sets')
     ap.add_argument('--rviz', action='store_true',
                     help='play the matches in real time on /guard/markers '
                          '(open rviz2 -d <share>/crazyflie_shows/data/guard.rviz)')
@@ -263,18 +271,29 @@ def main(argv=None):
             print(f'\n  {team}:')
             for n in policies.available(team):
                 print(f'    {n:14s} {policies.describe(team, n)}')
+        print('\n  rules:')
+        for n in rule_sets.available():
+            print(f'    {n:14s} {rule_sets.describe(n)}')
         print()
         return 0
+    rule_names = (rule_sets.available() if a.rules == 'all' else [a.rules])
+    if len(rule_names) > 1 and not a.matrix:
+        raise SystemExit("--rules all needs --matrix")
+    rules = rule_sets.make(rule_names[0], _kv(a.rparam))
 
     vip = vip_mark(cfg)
     D = [f'D{i + 1}' for i in range(a.defenders)]
     A = [f'A{j + 1}' for j in range(a.attackers)]
     marks = recommend_marks(cfg, vip, a.defenders, a.attackers)
     bad_cfg = problems(cfg)
-    bad_marks, starts = mark_problems(cfg, vip, marks, D, A)
+    for name in rule_names:
+        bad_cfg += [f'rules {name}: {b}' for b in
+                    rule_sets.make(name, _kv(a.rparam) if name == a.rules else None)
+                    .problems(cfg)]
+    bad_marks, starts = mark_problems(cfg, rules, vip, marks, D, A)
 
     print(f'\n  GUARD - offline check   {a.defenders} defenders v {a.attackers} '
-          f'attackers   rules: {"tag" if cfg.tagging else "deny"}')
+          f'attackers   rules: {", ".join(rule_names)}')
     print(f'  arena         {escort.describe_room(cfg)}; band '
           f'{cfg.floor:.2f}..{cfg.ceiling:.2f} m')
     print(f'  VIP           [{vip[0]:+.2f}, {vip[1]:+.2f}, {vip[2]:.2f}]'
@@ -284,11 +303,9 @@ def main(argv=None):
     print(f'  keep-outs     drone {cfg.d_cc:.2f} m across x '
           f'{cfg.d_cc * cfg.cc_z_ratio:.2f} m up/down; VIP {cfg.d_vip:.2f} x '
           f'{cfg.d_vip * cfg.vip_z_ratio:.2f} m')
-    print(f'  rules         strike {cfg.strike_radius:.2f} m for '
-          f'{cfg.strike_time:.1f} s'
-          + (f'; tag {cfg.tag_radius:.2f} m for {cfg.tag_time:.1f} s'
-             if cfg.tagging else '; no tagging')
-          + f'; {cfg.duration:.0f} s clock')
+    if len(rule_names) == 1:
+        print(f'  rules         {rules.describe()}: '
+              + ', '.join(f'{k} {v}' for k, v in sorted(rules.p.items())))
     for b in bad_cfg + bad_marks:
         print(f'  *** {b}')
     if bad_cfg or bad_marks:
@@ -301,37 +318,43 @@ def main(argv=None):
     dparams, aparams = _kv(a.dparam), _kv(a.aparam)
     seeds = list(range(a.seed0, a.seed0 + a.seeds))
     if a.rviz:
-        return play_rviz(cfg, a, starts, D, A, vip, seeds, dparams, aparams)
+        sets = [rules] + [rule_sets.make(n) for n in rule_names[1:]]
+        return play_rviz(cfg, sets, a, starts, D, A, vip, seeds, dparams, aparams)
     t0 = time.time()
     if a.matrix:
-        print(f'\n  MATRIX  ({len(seeds)} seeds each; defence wins / matches)\n')
+        print(f'\n  MATRIX  ({len(seeds)} seeds each; defence wins / matches)')
         dn, an = policies.available(DEFENSE), policies.available(ATTACK)
-        print('  ' + ' ' * 14 + ''.join(f'{x:>22s}' for x in an))
         any_unsafe = False
-        for d in dn:
-            cells = []
-            for at in an:
-                rows = run_series(cfg, d, at, starts, D, A, vip, seeds, None,
-                                  None, a.tau, a.vip_move, False)
-                dw, n, t, unsafe, sep = summarise(rows)
-                any_unsafe |= bool(unsafe)
-                cells.append(f'{dw:>3d}/{n:<3d} {t:5.1f}s {sep:4.2f}m'
-                             + ('!' if unsafe else ' '))
-            print(f'  {d:14s}' + ''.join(f'{c:>22s}' for c in cells))
-        print('\n  cell: defence wins/matches, mean match time, closest pair'
-              ' ("!" = a safety failure)')
+        for name in rule_names:
+            rs = rules if name == rule_names[0] else rule_sets.make(name)
+            print(f'\n  rules: {rs.describe()}')
+            print('  ' + ' ' * 14 + ''.join(f'{x:>26s}' for x in an))
+            for d in dn:
+                cells = []
+                for at in an:
+                    rows = run_series(cfg, rs, d, at, starts, D, A, vip, seeds,
+                                      None, None, a.tau, a.vip_move, False)
+                    dw, n, t, unsafe, sep = summarise(rows)
+                    lost = sum(sum(e.kind == 'down' and e.who in D
+                                   for e in r[1].events) for r in rows)
+                    any_unsafe |= bool(unsafe)
+                    cells.append(f'{dw:>3d}/{n:<3d} {t:5.1f}s {sep:4.2f}m D-{lost:<2d}'
+                                 + ('!' if unsafe else ' '))
+                print(f'  {d:14s}' + ''.join(f'{c:>26s}' for c in cells))
+        print('\n  cell: defence wins/matches, mean match time, closest pair, '
+              'defenders downed in all; "!" = a safety failure')
         print(f'  ({time.time() - t0:.0f} s)\n')
         return 1 if any_unsafe else 0
 
     print(f'\n  {a.defense} (defence) v {a.attack} (attack), seeds '
           f'{seeds[0]}..{seeds[-1]}\n')
-    rows = run_series(cfg, a.defense, a.attack, starts, D, A, vip, seeds,
+    rows = run_series(cfg, rules, a.defense, a.attack, starts, D, A, vip, seeds,
                       dparams, aparams, a.tau, a.vip_move, True)
     dw, n, t, unsafe, sep = summarise(rows)
     worst = min(rows, key=lambda r: r[2]['sep'])[2]
     print(f'\n  GAME     defence won {dw}/{n}, attack {n - dw}/{n}; mean match '
-          f'{t:.1f} s; strikes {sum(r[1].strikes for r in rows)}, tags '
-          f'{sum(r[1].tags for r in rows)}')
+          f'{t:.1f} s; strikes {sum(r[1].strikes for r in rows)}, downs '
+          f'{sum(r[1].downs for r in rows)}')
     print(f'  SAFETY   closest airborne pair {sep:.2f} m '
           f'(floor {cfg.min_separation:.2f} across, {cfg.min_separation_z:.2f} '
           f'vertically; worst {min(r[2]["floor"] for r in rows):.2f} of it); peak speed '
@@ -344,7 +367,7 @@ def main(argv=None):
           f'{worst["sep_pair"]}')
     print(f'  ({time.time() - t0:.0f} s)')
     if a.plot:
-        _, _, tr = simulate(cfg, a.defense, a.attack, starts, D, A, vip,
+        _, _, tr = simulate(cfg, rules, a.defense, a.attack, starts, D, A, vip,
                             seeds[0], dparams, aparams, a.tau, a.vip_move, True)
         plot(tr, cfg, D, A, a.plot)
     if unsafe:
@@ -354,8 +377,9 @@ def main(argv=None):
     return 0
 
 
-def play_rviz(cfg, a, starts, D, A, vip, seeds, dparams, aparams):
-    """Play each seed in real time on /guard/markers, one after another."""
+def play_rviz(cfg, rule_list, a, starts, D, A, vip, seeds, dparams, aparams):
+    """Play each seed in real time on /guard/markers, one after another,
+    rotating through every pairing (--matrix) and rule set (--rules all)."""
     import rclpy
     from crazyflie_shows.guard.viz import GuardViz
 
@@ -378,8 +402,9 @@ def play_rviz(cfg, a, starts, D, A, vip, seeds, dparams, aparams):
         # playing into a dead publisher and ignores every polite kill.
         if not rclpy.ok():
             raise KeyboardInterrupt
-        viz.publish(m.t, cfg, vip_now, m.agents, labels, res,
-                    f'{tick.pair[0]} (defence) v {tick.pair[1]} (attack) | seed {tick.seed}')
+        viz.publish(m.t, cfg, tick.rules, vip_now, m.agents, labels, res,
+                    f'{tick.pair[0]} v {tick.pair[1]} | {tick.rules.name} | seed {tick.seed}',
+                    m.referee.meters)
         clock['next'] += dt / max(a.speed, 1e-3)
         pause = clock['next'] - time.monotonic()
         if pause > 0:
@@ -389,22 +414,23 @@ def play_rviz(cfg, a, starts, D, A, vip, seeds, dparams, aparams):
 
     try:
         for s in seeds:
-            for pair in pairs:
-                tick.seed, tick.pair = s, pair
-                viz.clear()
-                clock['next'] = time.monotonic()
-                own = pair == (a.defense, a.attack)
-                res, met, _ = simulate(cfg, pair[0], pair[1], starts, D, A, vip,
-                                       s, dparams if own else None,
-                                       aparams if own else None, a.tau, a.vip_move,
-                                       on_tick=tick)
-                bad = safety_failures(cfg, met)
-                print(f'  {pair[0]} v {pair[1]:12s} seed {s:3d}  {res.winner:7s} '
-                      f'{res.reason:28s} t={res.t:5.1f}s '
-                      f'strikes {res.strikes} tags {res.tags}  min sep '
-                      f'{met["sep"]:.2f} m{"  *** " + "; ".join(bad) if bad else ""}',
-                      flush=True)
-                time.sleep(2.0)
+            for rules in rule_list:
+                for pair in pairs:
+                    tick.seed, tick.pair, tick.rules = s, pair, rules
+                    viz.clear()
+                    clock['next'] = time.monotonic()
+                    own = pair == (a.defense, a.attack)
+                    res, met, _ = simulate(cfg, rules, pair[0], pair[1], starts, D, A, vip,
+                                           s, dparams if own else None,
+                                           aparams if own else None, a.tau, a.vip_move,
+                                           on_tick=tick)
+                    bad = safety_failures(cfg, met)
+                    print(f'  {rules.name:14s} {pair[0]} v {pair[1]:12s} seed {s:3d}  {res.winner:7s} '
+                          f'{res.reason:28s} t={res.t:5.1f}s '
+                          f'strikes {res.strikes} downs {res.downs}  min sep '
+                          f'{met["sep"]:.2f} m{"  *** " + "; ".join(bad) if bad else ""}',
+                          flush=True)
+                    time.sleep(2.0)
     except KeyboardInterrupt:
         pass
     finally:

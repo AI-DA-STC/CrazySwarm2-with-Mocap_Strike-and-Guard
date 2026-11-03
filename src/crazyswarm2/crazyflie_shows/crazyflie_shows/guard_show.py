@@ -25,10 +25,12 @@ Parameters, all ``-p name:=value``:
 * strategies: ``defense`` (default shell), ``attack`` (default coordinated),
   ``policy_module`` (import your own), ``defense_params`` /
   ``attack_params`` as ``key=value,key=value``.
+* rules: ``rules`` (default tag; ``plan_guard --list`` names them) and
+  ``rules_params`` as ``key=value,key=value``.
 * the VIP: ``vip_mode`` point | mocap | manual, ``vip_name`` (mocap rigid
   body, default ``operator``), ``vip_point`` [x, y, z].
 * every :class:`~crazyflie_shows.guard.config.GuardConfig` field by name
-  (``-p v_max_attack:=1.2 -p tagging:=false -p ceiling:=4.0``).
+  (``-p v_max_attack:=1.2 -p min_separation:=0.6 -p ceiling:=4.0``).
 * ``dry_run``, ``paced`` (wait for Enter to arm and to start), ``lights``,
   ``seed``, ``check_placement``.
 
@@ -55,6 +57,7 @@ from crazyflie_shows.escort_show import (LAND_DURATION, LAND_HEIGHT,
                                          _stream, operator_gate)
 from crazyflie_shows.escort_teleop import VIP_TOPIC
 from crazyflie_shows.guard import policies, safety_layer
+from crazyflie_shows.guard import rules as rule_sets
 from crazyflie_shows.guard.config import GuardConfig, override, problems
 from crazyflie_shows.guard.engine import Match
 from crazyflie_shows.guard.viz import GuardViz
@@ -119,6 +122,8 @@ def main():
     aname = str(_param(node, 'attack', 'coordinated'))
     dparams = _params_kv(_param(node, 'defense_params', ''))
     aparams = _params_kv(_param(node, 'attack_params', ''))
+    rules = rule_sets.make(str(_param(node, 'rules', 'tag')),
+                           _params_kv(_param(node, 'rules_params', '')))
     if vip_mode not in ('point', 'mocap', 'manual'):
         raise SystemExit(f'vip_mode must be point | mocap | manual, not {vip_mode!r}')
 
@@ -149,15 +154,14 @@ def main():
     print(f'  attack        {aname} with {", ".join(A)}')
     print(f'  VIP           {vip_mode} '
           f'{np.round(vip_point, 2).tolist() if vip_mode != "mocap" else vip_name}')
-    print(f'  rules         {"tag" if cfg.tagging else "deny"}: strike '
-          f'{cfg.strike_radius:.2f} m/{cfg.strike_time:.1f} s, tag '
-          f'{cfg.tag_radius:.2f} m/{cfg.tag_time:.1f} s, {cfg.duration:.0f} s')
+    print(f'  rules         {rules.describe()}: '
+          + ', '.join(f'{k} {v}' for k, v in sorted(rules.p.items())))
     print(f'  speeds        defence {cfg.v_max_defense:.2f}, attack '
           f'{cfg.v_max_attack:.2f}, safety cap {cfg.v_max_safety:.2f} m/s; band '
           f'{cfg.floor:.2f}..{cfg.ceiling:.2f} m')
-    bad = problems(cfg)
+    bad = problems(cfg) + rules.problems(cfg)
     if vip_mode != 'mocap':
-        more, _ = mark_problems(cfg, vip_point, marks, D, A)
+        more, _ = mark_problems(cfg, rules, vip_point, marks, D, A)
         bad += more
     for b in bad:
         print(f'  *** {b}')
@@ -177,7 +181,7 @@ def main():
             rclpy.spin_once(node, timeout_sec=0.1)
         if vip_name not in poses.pos:
             raise SystemExit(f'  no /poses entry for {vip_name!r}.\n')
-        more, _ = mark_problems(cfg, poses.pos[vip_name], marks, D, A)
+        more, _ = mark_problems(cfg, rules, poses.pos[vip_name], marks, D, A)
         for b in more:
             print(f'  *** {b}')
         if more:
@@ -260,7 +264,7 @@ def main():
         p_vip = vip_now(now)
         if p_vip is None:
             raise ShowAborted('no fresh VIP pose at the start')
-        match = Match(cfg, dpol, apol, seeds, D, A, p_vip,
+        match = Match(cfg, rules, dpol, apol, seeds, D, A, p_vip,
                       np.random.default_rng(seed))
         viz = GuardViz(node)
         vel = escort.VelocityEstimator()
@@ -348,15 +352,15 @@ def main():
             if tk.safety is not None and tk.safety.emergency:
                 print(f'  [t+{match.t:5.1f}s] CBF emergency push-apart', flush=True)
             res = match.result()
-            viz.publish(match.t, cfg, p_vip, match.agents, tk.labels, res,
-                        f'{dname} v {aname}')
+            viz.publish(match.t, cfg, rules, p_vip, match.agents, tk.labels, res,
+                        f'{dname} v {aname} | {rules.name}', match.referee.meters)
             if res.winner:
                 break
             timeHelper.sleepForRate(cfg.rate_hz)
 
         # ------------------------------------------------------------ land
         print(f'\n  {res.winner.upper()} WINS -- {res.reason} '
-              f'(t+{res.t:.1f}s, strikes {res.strikes}, tags {res.tags})')
+              f'(t+{res.t:.1f}s, strikes {res.strikes}, downs {res.downs})')
         for n in flying:
             if n in streamed:
                 fcfs[n].notifySetpointsStop()

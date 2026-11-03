@@ -1,8 +1,9 @@
 """Every number the guard engine needs that is NOT a strategy's own.
 
-Strategy tuning lives with each strategy (its ``DEFAULTS``); this is the
-room, the aircraft limits, the safety layer and the rules -- the things every
-strategy is held to, which is what makes two strategies comparable.
+Strategy tuning lives with each strategy (its ``DEFAULTS``) and the rule
+numbers with each rule set (guard/rules/); this is the room, the aircraft
+limits, the separation floor, the safety layer and the watchdogs -- the
+things every strategy is held to, under every rule set.
 
 The attribute names ``room_center``, ``arena_radius``, ``contain_margin``,
 ``self_stale_s``, ``self_stale_land_s``, ``track_error_m`` and
@@ -93,27 +94,8 @@ class GuardConfig:
     #: The CBF works on setpoints; this is the check on the aircraft.
     near_miss_ratio: float = 0.7
 
-    # -- rules (guard/rules.py) ---------------------------------------------
-    #: True: a defender that stays within tag_radius of an attacker for
-    #: tag_time DOWNS it (it lands), as the STL game blocks intruders.
-    #: False: no tagging; the defence can only deny, and the clock decides.
-    #:
-    #: The balance is a KNIFE EDGE (plan_guard sweep, 2026-11-03, shell v
-    #: coordinated, 4 v 3): at strike_radius 2.4 the defence wins 11/12 with
-    #: tag_time 1.10 s and loses 12/12 with 1.15 s, because each match is
-    #: settled by one simultaneous exchange -- strike clock against tag
-    #: clock. The strike radius has to reach past the "wall" a defender makes
-    #: on the line (its own distance from the VIP + d_cc): at 1.6-2.2 m no
-    #: attack strategy ever scored against 'shell'.
-    tagging: bool = True
-    tag_radius: float = 1.15
-    tag_time: float = 1.1
-    #: An attacker within strike_radius of the VIP for strike_time scores a
-    #: strike (and then retires).
-    strike_radius: float = 2.4
-    strike_time: float = 1.0
-    strikes_to_win: int = 1
-    duration: float = 90.0
+    # The RULES (who can be downed, strikes, the clock) are not here: they
+    # are a module of their own, chosen by name (guard/rules/).
 
 
 def problems(cfg):
@@ -138,14 +120,6 @@ def problems(cfg):
                    'evidence for closer')
     if cfg.v_max_safety < max(cfg.v_max_defense, cfg.v_max_attack):
         bad.append('v_max_safety must be at least both team caps')
-    if cfg.tagging and cfg.tag_radius <= cfg.d_cc:
-        bad.append(f'tag_radius {cfg.tag_radius:.2f} m is inside the '
-                   f'{cfg.d_cc:.2f} m the safety layer keeps between drones, '
-                   'so nobody could ever be tagged')
-    if cfg.strike_radius <= cfg.d_vip:
-        bad.append(f'strike_radius {cfg.strike_radius:.2f} m is inside the '
-                   f'{cfg.d_vip:.2f} m keep-out around the VIP, so nobody '
-                   'could ever strike')
     if not 0.0 < cfg.near_miss_ratio < 1.0:
         bad.append('near_miss_ratio must be between 0 and 1 (a fraction of '
                    'the hard floor), or ordinary tracking error lands the show')

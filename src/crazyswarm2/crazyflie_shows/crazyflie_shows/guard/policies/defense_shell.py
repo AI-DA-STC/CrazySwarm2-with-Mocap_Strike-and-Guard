@@ -15,7 +15,7 @@ import numpy as np
 from crazyflie_shows.guard.policies import Policy, register
 from crazyflie_shows.guard.policies.common import (assign, into_room, seek,
                                                    unit)
-from crazyflie_shows.guard.world import DEFENSE
+from crazyflie_shows.guard.world import ATTACK, DEFENSE
 
 
 def _rot_z(v, ang):
@@ -35,7 +35,9 @@ class Shell(Policy):
                                # leaves the VIP open to the next attacker)
         'lead_s': 0.6,         # s of attacker motion to aim ahead of
         'press_gap': 0.0,      # m short of the attacker; 0 = from the rules
-        'pincer_deg': 40.0,    # side offset of a second defender on one threat
+        'pincer_deg': 60.0,    # a second defender closes on the attacker this far
+                               # round from the first, so both are in reach
+        'bail': 0.35,          # own down meter at which a defender falls back
         'urgency_gain': 1.5,   # how much a fast, close threat jumps the queue
         'd_ref': 4.0,          # m: urgency is zero this far from the VIP
         'v_ref': 1.0,          # m/s: closing speed that counts as full urgency
@@ -48,12 +50,15 @@ class Shell(Policy):
         super().reset(view, rng)
         self._prev = {}
 
-    def _press(self, cfg):
+    def _press(self, view):
         if self.p['press_gap'] > 0.0:
             return self.p['press_gap']
-        # In tag mode it stands just inside tag range, so holding the block
-        # also scores; in deny mode a little outside the keep-out.
-        return cfg.tag_radius - 0.1 if cfg.tagging else cfg.d_cc + 0.2
+        # Where attackers can be downed it stands just inside the rule set's
+        # reach, so holding the block also scores; otherwise a little outside
+        # the keep-out.
+        rules = view.rules
+        return (rules.reach - 0.1 if rules.can_down(ATTACK)
+                else view.cfg.d_cc + 0.2)
 
     def act(self, view):
         p, cfg = self.p, view.cfg
@@ -86,18 +91,27 @@ class Shell(Policy):
                 cols.append((i, k))
             k += 1
 
-        press = self._press(cfg)
+        press = self._press(view)
         points, feeds = [], []
         for i, kind in cols:
             a = A[i]
             pred = a.p + a.v * p['lead_s']
             u = unit(pred - vip)
             rr = float(np.linalg.norm(pred - vip))
-            br = float(np.clip(rr - press, p['r_shell'], p['r_max']))
-            if kind:
+            if kind == 0:
+                br = float(np.clip(rr - press, p['r_shell'], p['r_max']))
+                q = vip + u * br
+            else:
+                # PINCER: close on the attacker itself, pincer_deg round from
+                # the blocker's side, so both defenders are within reach of it
+                # -- under a majority rule one defender alone downs nobody.
                 side = 1.0 if kind % 2 else -1.0
-                u = _rot_z(u, side * np.radians(p['pincer_deg']) * ((kind + 1) // 2))
-            points.append(into_room(vip + u * br, view.arena))
+                w = _rot_z(-u, side * np.radians(p['pincer_deg']) * ((kind + 1) // 2))
+                q = pred + w * press
+                r_q = float(np.linalg.norm(q - vip))
+                if r_q < p['r_shell']:
+                    q = vip + unit(q - vip) * p['r_shell']
+            points.append(into_room(self._allowed(view, q, A), view.arena))
             feeds.append(a.v * p['follow'])
 
         cost = np.zeros((len(D), len(cols)))
@@ -112,11 +126,39 @@ class Shell(Policy):
         for di, ci in assign(cost):
             d = D[di]
             i, kind = cols[ci]
+            if view.meters.get(d.name, {}).get('down', 0.0) >= p['bail']:
+                # its own meter is filling: fall back to the shell, where its
+                # teammates are, instead of finishing the block
+                back = into_room(vip + unit(d.p - vip) * p['r_shell'], view.arena)
+                out[d.name] = seek(d.p, back, vmax, cfg.a_max)
+                self.labels[d.name] = 'bail'
+                continue
             out[d.name] = seek(d.p, points[ci], vmax, cfg.a_max, feeds[ci])
             self._prev[d.name] = (A[i].name, kind)
             self.labels[d.name] = (f'block {A[i].name}' if kind == 0
                                    else f'pincer {A[i].name}')
         return out
+
+    @staticmethod
+    def _allowed(view, q, A):
+        """``q`` pulled toward the VIP until the RULES would not fill a
+        defender's meter there (a post outside home ground under 'zone', or
+        next to two attackers under 'pressure'). Rules that cannot down a
+        defender leave it where it is."""
+        rules = view.rules
+        if not rules.can_down(DEFENSE) or not A:
+            return q
+        vip = view.vip_p
+        opp = np.array([a.p for a in A], float).reshape(1, -1, 3)
+        allies = np.array([d.p for d in view.defenders], float).reshape(1, -1, 3)
+        for _ in range(12):
+            if float(rules.down_rates(DEFENSE, q[None], opp, allies, vip)[0]) <= 0.0:
+                return q
+            r = float(np.linalg.norm(q - vip))
+            if r <= view.cfg.d_vip + 0.4:
+                return q
+            q = vip + (q - vip) * max(r - 0.25, view.cfg.d_vip + 0.4) / r
+        return q
 
     def _posts(self, view, D, vmax):
         """Spread the idle defenders round the VIP, alternating heights."""

@@ -36,7 +36,7 @@ class Agent:
     #: which is its strategy's intent (engine.py, "What a strategy may know").
     v: np.ndarray
     status: str = ACTIVE
-    #: Why it stopped being active: 'downed' (tagged), 'struck' (scored).
+    #: Why it stopped being active: 'downed', or 'struck' (it scored).
     outcome: str = ''
 
     @property
@@ -81,8 +81,14 @@ class View:
     vip_v: np.ndarray
     agents: dict                   # name -> Agent (both teams, every status)
     arena: Arena
-    cfg: object                    # GuardConfig: the rules and limits
-    #: Events so far, oldest first: (t, kind, attacker, by).
+    cfg: object                    # GuardConfig: limits, separation, safety
+    #: The rule set being played (guard/rules/): call its down_rates /
+    #: strike_rates on PREDICTED positions to see how a plan would score.
+    rules: object = None
+    #: Everybody's meters now, name -> {'down': 0..1, 'strike': 0..1}:
+    #: public, like a scoreboard.
+    meters: dict = field(default_factory=dict)
+    #: Events so far, oldest first (rules.Event).
     events: list = field(default_factory=list)
 
     def team(self, team, active_only=True):

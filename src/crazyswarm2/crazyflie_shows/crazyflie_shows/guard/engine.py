@@ -15,7 +15,8 @@ Per tick, in this order (the order is the design):
    after this step may undo it except the backstop clamp, which should
    never fire and is counted if it does.
 5. Integrate into setpoints.
-6. The referee judges the AIRCRAFT positions; tagged and striking attackers
+6. The referee integrates the rule set's meters from the AIRCRAFT positions;
+   downed drones (either team, if the rules allow) and striking attackers
    start RETIRING (the caller lands them) and become obstacles.
 
 What a strategy may know -- the platform is pointless if a team can read the
@@ -27,7 +28,7 @@ other's intent, so this is enforced here, not left to good manners:
   VelocityEstimator). Their commanded velocity -- their strategy's decision --
   is never in an opponent's View. A team sees its OWN commands.
 * **Each team gets its own View, built fresh every tick, of copies**: its own
-  Agent objects, its own copy of the config and the arena. Mutating them
+  Agent objects, its own copy of the config, the arena and the rule set. Mutating them
   changes nothing outside that team's strategy.
 * **Each team has its own random stream**, so one team's dice cannot move
   the other's.
@@ -62,10 +63,12 @@ class Tick:
 
 
 class Match:
-    def __init__(self, cfg, defense, attack, starts, defenders, attackers,
+    def __init__(self, cfg, rules, defense, attack, starts, defenders, attackers,
                  vip_p, rng):
-        """``starts``: name -> 3D start position (where streaming begins)."""
+        """``rules``: a rule set (guard.rules.make). ``starts``: name -> 3D
+        start position (where streaming begins)."""
         self.cfg = cfg
+        self.rules = rules
         self.defense, self.attack = defense, attack
         self.agents = {}
         for team, names in ((DEFENSE, defenders), (ATTACK, attackers)):
@@ -76,7 +79,7 @@ class Match:
         self.v = {n: np.zeros(3) for n in self.agents}
         self._est = {n: escort.VelocityEstimator() for n in self.agents}
         self.v_obs = {n: np.zeros(3) for n in self.agents}
-        self.referee = Referee(cfg)
+        self.referee = Referee(rules)
         self.t = 0.0
         self.stats = {'ticks': 0, 'corrected': 0, 'emergency': 0,
                       'not_converged': 0, 'backstop': 0}
@@ -110,7 +113,8 @@ class Match:
             agents[n] = Agent(a.name, a.team, a.p.copy(), np.array(v, float),
                               a.status, a.outcome)
         return View(self.t, dt, np.array(vip_p, float), np.array(vip_v, float),
-                    agents, Arena(cfg), cfg,
+                    agents, Arena(cfg), cfg, copy.deepcopy(self.rules),
+                    {n: dict(m) for n, m in self.referee.meters.items()},
                     [dataclasses.replace(e) for e in self.referee.events])
 
     def resync(self, positions):
@@ -199,10 +203,10 @@ class Match:
         events = self.referee.update(self.t, dt, self.agents, vip_p)
         retired = []
         for e in events:
-            a = self.agents[e.attacker]
+            a = self.agents[e.who]
             if a.status == ACTIVE:
                 a.status = RETIRING
-                a.outcome = 'downed' if e.kind == 'tag' else 'struck'
+                a.outcome = 'downed' if e.kind == 'down' else 'struck'
                 self.v[a.name] = np.zeros(3)
                 retired.append(a.name)
                 sp_out.pop(a.name, None)

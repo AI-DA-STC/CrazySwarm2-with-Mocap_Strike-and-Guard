@@ -22,7 +22,7 @@ class Direct(Policy):
 
     def act(self, view):
         out = {}
-        r = view.cfg.strike_radius - self.p['inside']
+        r = view.rules.strike_radius - self.p['inside']
         for a in view.attackers:
             goal = view.vip_p + unit(a.p - view.vip_p) * r
             goal[2] = view.vip_p[2]

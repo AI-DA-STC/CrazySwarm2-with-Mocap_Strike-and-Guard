@@ -63,11 +63,13 @@ class GuardViz:
         m.lifetime = Duration(sec=1)
         return m
 
-    def publish(self, t, cfg, vip, agents, labels, result=None, title=''):
+    def publish(self, t, cfg, rules, vip, agents, labels, result=None, title='',
+                meters=None):
         if not self.ok:
             return
         try:
-            self._publish(t, cfg, vip, agents, labels, result, title)
+            self._publish(t, cfg, rules, vip, agents, labels, result, title,
+                          meters or {})
         except Exception as e:                        # noqa: BLE001
             self.node.get_logger().warn(f'guard viz: {e!r}', throttle_duration_sec=5.0)
 
@@ -75,7 +77,7 @@ class GuardViz:
         """Forget trails (a new match)."""
         self.trails = {}
 
-    def _publish(self, t, cfg, vip, agents, labels, result, title):
+    def _publish(self, t, cfg, rules, vip, agents, labels, result, title, meters):
         stamp = self.node.get_clock().now().to_msg()
         out = []
         # the room: floor outline and ceiling outline
@@ -101,7 +103,7 @@ class GuardViz:
         out.append(m)
         m = self._m('vip', 2, Marker.SPHERE, stamp)
         m.pose.position = _pt(vip)
-        m.scale.x = m.scale.y = m.scale.z = 2 * cfg.strike_radius
+        m.scale.x = m.scale.y = m.scale.z = 2 * rules.strike_radius
         m.color = _c(C_STRIKE)
         out.append(m)
         # every drone: body, half keep-out, trail, label
@@ -133,7 +135,11 @@ class GuardViz:
             m.color = _c(C_TEXT)
             what = (a.outcome.upper() if a.status == RETIRING or not a.active
                     else labels.get(n, ''))
-            m.text = f'{n} {what}'.strip()
+            # the meters, as the referee has them: down (and strike) fill
+            mt = meters.get(n, {}) if a.active else {}
+            gauge = ''.join(f' {k[0]}{int(100 * v)}%' for k, v in sorted(mt.items())
+                            if v > 0.005)
+            m.text = f'{n} {what}{gauge}'.strip()
             out.append(m)
         # the scoreboard, above the room
         m = self._m('score', 0, Marker.TEXT_VIEW_FACING, stamp)
@@ -142,7 +148,7 @@ class GuardViz:
         m.color = _c(C_TEXT)
         line = f'{title} | t {t:.1f}s'
         if result is not None:
-            line += f' | strikes {result.strikes} tags {result.tags}'
+            line += f' | strikes {result.strikes} downs {result.downs}'
             if result.winner:
                 line += f' | {result.winner.upper()} WINS: {result.reason}'
         m.text = line

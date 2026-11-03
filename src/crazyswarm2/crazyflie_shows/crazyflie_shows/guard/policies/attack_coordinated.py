@@ -74,15 +74,16 @@ class Coordinated(Policy):
         'horizon_s': 4.0,
         'samples': 8,
         'soft_k': 8.0,             # smooth-min sharpness (STL game: SOFT_K)
-        'tag_margin': 0.1,         # m: counts as 'in tag range' this far out
-        'tag_share': 0.6,          # share of tag_time it will spend in range
+        'meter_share': 0.6,        # how full it will let its down meter get
         'w_progress': 1.0,
         'w_lane': 0.5,             # pull toward its own lane (keeps the spread)
         'w_gap': 1.5,              # pull toward bearings no defender covers
         'w_safe': 2.5,
         'safe_cap': 0.6,
         'commit_margin': 0.3,
-        'evade_share': 0.5,        # of tag_time in range before a striker breaks off
+        'evade_share': 0.5,        # down meter at which a striker breaks off
+        'hunt_range': 2.5,         # in reaches: how far it looks for a defender to gang up on
+        'gang_gap': 0.15,          # m inside reach it closes to
         'feint_prob': 0.25,
         'feint_s': 1.2,
         'feint_cool_s': 6.0,
@@ -164,7 +165,7 @@ class Coordinated(Policy):
 
     # -- planning -----------------------------------------------------------
     def _candidates(self, view, name, kinds):
-        p, cfg = self.p, view.cfg
+        p = self.p
         b0, h0 = self._lane[name]
         out_g, out_k = [], []
         for db in p['bearings_deg']:
@@ -172,12 +173,67 @@ class Coordinated(Policy):
             u = np.array([np.cos(b), np.sin(b), 0.0])
             for dz in p['dz']:
                 for kind in kinds:
-                    r = p['r_stage'] if kind == 'stage' else cfg.strike_radius - 0.25
+                    r = p['r_stage'] if kind == 'stage' else view.rules.strike_radius - 0.25
                     g = view.vip_p + u * r
                     g[2] = view.vip_p[2] + h0 + dz
                     out_g.append(into_room(g, view.arena, 0.4))
                     out_k.append(kind)
         return np.array(out_g), out_k
+
+    @staticmethod
+    def _rate(view, a, where):
+        """How fast the rules would fill ``a``'s down meter at ``where``."""
+        rules = view.rules
+        if not rules.can_down(ATTACK):
+            return 0.0
+        opp = np.array([d.p for d in view.defenders], float).reshape(1, -1, 3)
+        mates = np.array([m.p for m in view.attackers if m.name != a.name],
+                         float).reshape(1, -1, 3)
+        return float(rules.down_rates(ATTACK, np.asarray(where, float)[None],
+                                      opp, mates, view.vip_p)[0])
+
+    def _hunt(self, view, a):
+        """(score, spot, defender) for a defender the pack can down, or None.
+
+        Every attacker within ``hunt_range`` reaches of a defender is assumed
+        to close to just inside reach of it, on its own side; if the RULES say
+        that would fill the defender's meter, and would not fill this
+        attacker's own at its spot, that is a hunt. Under 'pressure' it is a
+        2 v 1 on an isolated defender; under 'zone', a defender caught
+        outside home ground. Rules that cannot down defenders: never.
+        """
+        rules, p = view.rules, self.p
+        if not rules.can_down(DEFENSE) or not view.defenders:
+            return None
+        r = rules.reach
+        A, D = view.attackers, view.defenders
+        best = None
+        for d in D:
+            dd = float(np.linalg.norm(d.p - a.p))
+            if dd > p['hunt_range'] * r:
+                continue
+            pack = [m for m in A
+                    if float(np.linalg.norm(m.p - d.p)) <= p['hunt_range'] * r]
+            spots = {m.name: d.p + unit(m.p - d.p) * (r - p['gang_gap'])
+                     for m in pack}
+            opp = np.array(list(spots.values()), float).reshape(1, -1, 3)
+            allies = np.array([q.p for q in D if q is not d], float).reshape(1, -1, 3)
+            rate_d = float(rules.down_rates(DEFENSE, d.p[None], opp, allies,
+                                            view.vip_p)[0])
+            if rate_d <= 0.0:
+                continue
+            mine = spots[a.name]
+            others = np.array([spots.get(m.name, m.p) for m in A if m is not a],
+                              float).reshape(1, -1, 3)
+            risk = float(rules.down_rates(
+                ATTACK, mine[None], np.array([q.p for q in D], float).reshape(1, -1, 3),
+                others, view.vip_p)[0])
+            if risk > 0.0:
+                continue
+            score = rate_d - 0.1 * dd
+            if best is None or score > best[0]:
+                best = (score, into_room(mine, view.arena, 0.4), d.name)
+        return best
 
     @staticmethod
     def _markers(view, a):
@@ -197,12 +253,14 @@ class Coordinated(Policy):
 
         * SPACE (m): the smooth minimum over the rollout of the room and band
           margins -- these must hold at every instant.
-        * TIME, in metres-equivalent: the tag rule is temporal ("within
-          tag_radius FOR tag_time"), so the margin is how much of tag_time
-          is left once the longest predicted exposure to any one defender is
-          spent, times the attacker's speed. An instantaneous distance margin
-          (the first version) forbade the fast pass through range that the
-          rules allow, and the attack never struck.
+        * TIME, in metres-equivalent: the rules are temporal (a meter has to
+          FILL), so the margin is how much of the down meter would be left at
+          its fullest along the path -- filled and drained by the rule set's
+          own down_rates on the predicted positions, from the meter it has
+          now -- times what the attacker covers in one down_time. An
+          instantaneous distance margin (the first version) forbade the fast
+          pass through range that the rules allow, and the attack never
+          struck.
 
         ``dwell`` (G,) holds the attacker at its goal after arriving -- a
         strike candidate must survive strike_time there.
@@ -210,7 +268,8 @@ class Coordinated(Policy):
         p, cfg = self.p, view.cfg
         vip = view.vip_p
         v_a, v_d = view.v_max(ATTACK), view.v_max(DEFENSE)
-        reach = cfg.tag_radius if cfg.tagging else cfg.d_cc
+        rules = view.rules
+        reach = rules.reach if rules.can_down(ATTACK) else cfg.d_cc
         G = len(goals)
         dist = np.linalg.norm(goals - a.p, axis=1)                    # (G,)
         dwell = np.zeros(G) if dwell is None else np.asarray(dwell, float)
@@ -223,22 +282,51 @@ class Coordinated(Policy):
         ra = np.linalg.norm(rel, axis=2, keepdims=True)
         meet = vip + rel / np.maximum(ra, 1e-6) * np.maximum(ra - reach, cfg.d_vip + 0.3)
         dt_s = T / p['samples']                                       # (G,)
-        exposure = np.zeros(G)
-        for d in self._markers(view, a):
+        S = p['samples']
+        # The defence, predicted: its markers run for the meeting point, the
+        # rest stay put; teammates stay put. Then the RULE SET says how fast
+        # this attacker's down meter would fill at every sample -- the same
+        # down_rates the referee integrates -- from its meter now.
+        markers = self._markers(view, a)
+        opp = []
+        for d in markers:
             to = meet - d.p                                           # (G,S,3)
             n = np.linalg.norm(to, axis=2, keepdims=True)
             step = np.minimum(v_d * t[..., None], n)
-            dt_ = d.p + to / np.maximum(n, 1e-9) * step
-            inside = np.linalg.norm(at - dt_, axis=2) < reach + p['tag_margin']
-            exposure = np.maximum(exposure, inside.sum(axis=1) * dt_s)
+            opp.append(d.p + to / np.maximum(n, 1e-9) * step)
+        for d in view.defenders:
+            if all(d is not m for m in markers):
+                opp.append(np.broadcast_to(d.p, (G, S, 3)))
+        mates = [m.p for m in view.attackers if m.name != a.name]
+        peak = np.zeros(G)
+        if rules.can_down(ATTACK):
+            K = G * S
+            opp_a = (np.stack(opp, axis=2).reshape(K, -1, 3) if opp
+                     else np.zeros((K, 0, 3)))
+            ally_a = (np.broadcast_to(np.asarray(mates, float), (K, len(mates), 3))
+                      if mates else np.zeros((K, 0, 3)))
+            rate = rules.down_rates(ATTACK, at.reshape(K, 3), opp_a, ally_a,
+                                    vip).reshape(G, S)
+            meter = np.full(G, view.meters.get(a.name, {}).get('down', 0.0))
+            peak = meter.copy()
+            drain = rules.drain('down')
+            for k in range(S):
+                meter = np.where(rate[:, k] > 0.0,
+                                 meter + rate[:, k] * dt_s,
+                                 np.maximum(0.0, meter - drain * dt_s))
+                peak = np.maximum(peak, meter)
         flat = at.reshape(-1, 3)
         space = np.concatenate([
             np.asarray(view.arena.clearance(flat)).reshape(G, -1) - 0.2,
             np.minimum(at[..., 2] - view.arena.floor,
                        view.arena.ceiling - at[..., 2]) - 0.2], axis=1)
         rob_space = _soft_min_rows(space, p['soft_k'])
-        rob_time = ((p['tag_share'] * cfg.tag_time - exposure) * v_a
-                    if cfg.tagging else np.full(G, p['safe_cap']))
+        # TIME, in metres-equivalent: how much of the meter is left unspent
+        # at its worst along the path, times what the attacker covers in the
+        # time that fills it.
+        t_unit = rules.down_time if np.isfinite(rules.down_time) else 1.0
+        rob_time = ((p['meter_share'] - peak) * t_unit * v_a
+                    if rules.can_down(ATTACK) else np.full(G, p['safe_cap']))
         rob = np.minimum(rob_space, rob_time)
         progress = np.linalg.norm(a.p - vip) - np.linalg.norm(goals - vip, axis=1)
         b0, _ = self._lane[a.name]
@@ -266,7 +354,7 @@ class Coordinated(Policy):
             goals, kinds = self._candidates(view, a.name, ('stage', 'strike'))
         strike = np.array([k == 'strike' for k in kinds])
         score, rob = self._score(view, a, goals,
-                                 np.where(strike, view.cfg.strike_time, 0.0))
+                                 np.where(strike, view.rules.strike_time, 0.0))
         # Committed: go for the strike line that scores best. Robustness
         # CHOOSES the line (least exposure, most spread, best height); it no
         # longer GATES the attempt -- waiting for a provably open lane meant
@@ -280,7 +368,7 @@ class Coordinated(Policy):
         st['best_r'] = min(st.get('best_r', np.inf), r_now)
         if st['goal'] is not None and st['mode'] == mode:
             cur, _ = self._score(view, a, st['goal'][None],
-                                 [view.cfg.strike_time if mode == 'strike' else 0.0])
+                                 [view.rules.strike_time if mode == 'strike' else 0.0])
             if cur[0] >= score[i] - p['commit_margin']:
                 return
         # FEINT: during an attack, sometimes show the other side first
@@ -339,7 +427,7 @@ class Coordinated(Policy):
         self._advance_play(view)
         play = self._play
         D = view.defenders
-        reach = cfg.tag_radius if cfg.tagging else cfg.d_cc
+        rules = view.rules
         v_a = view.v_max(self.team)
         out = {}
         for a in view.attackers:
@@ -350,9 +438,6 @@ class Coordinated(Policy):
             attacking = (play['state'] == 'commit'
                          and view.t >= play['go_at'].get(a.name, np.inf))
             feinting = st['mode'] == 'feint' and view.t < st['feint_until']
-            # its own tag clock, kept the way the referee keeps it
-            near = min((float(np.linalg.norm(q.p - a.p)) for q in D), default=np.inf)
-            st['exposed'] = st.get('exposed', 0.0) + view.dt if near <= reach else 0.0
             if not attacking:
                 st.update(goal=self._toward_lane(view, a), mode='stage', best_r=np.inf)
             elif view.t >= st['next'] and not feinting:
@@ -360,19 +445,31 @@ class Coordinated(Policy):
                 st['next'] = view.t + p['replan_s']
             label = st['mode'] if not (play['decoy'] == a.name and attacking) else 'decoy'
 
-            # EVADE: staging, it keeps out of tag range altogether; striking,
-            # it breaks off only when its tag clock is past evade_share of
-            # tag_time and its strike clock is not already running.
+            # GANG UP: where defenders can be downed, join teammates round a
+            # defender the rules say the pack can down -- unless striking.
+            if st['mode'] != 'strike':
+                hunt = self._hunt(view, a)
+                if hunt is not None:
+                    out[a.name] = seek(a.p, hunt[1], v_a, cfg.a_max)
+                    self.labels[a.name] = f'gang {hunt[2]}'
+                    continue
+
+            # EVADE, judged by the RULES, not by distance. Staging: leave if
+            # its down meter would fill here, or one step nearer the closest
+            # defender. Striking: break off only once its public meter is
+            # past evade_share and its strike meter is not already running.
             if D:
                 d = min(D, key=lambda q: float(np.linalg.norm(q.p - a.p)))
-                dn = float(np.linalg.norm(d.p - a.p))
                 in_strike = (float(np.linalg.norm(a.p - view.vip_p))
-                             <= cfg.strike_radius)
+                             <= rules.strike_radius)
                 if attacking and st['mode'] == 'strike':
-                    flee = (cfg.tagging and not in_strike
-                            and st['exposed'] >= p['evade_share'] * cfg.tag_time)
+                    flee = (rules.can_down(ATTACK) and not in_strike
+                            and view.meters.get(a.name, {}).get('down', 0.0)
+                            >= p['evade_share'])
                 else:
-                    flee = dn < reach + p['evade_extra']
+                    step = a.p + unit(d.p - a.p) * p['evade_extra']
+                    flee = (self._rate(view, a, a.p) > 0.0
+                            or self._rate(view, a, step) > 0.0)
                 if flee:
                     st['stuck'] += view.dt
                     away = a.p - d.p
