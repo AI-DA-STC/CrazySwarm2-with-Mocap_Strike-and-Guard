@@ -235,13 +235,63 @@ Two lessons from building `coordinated`:
   at worst for 6 v 6, against the 50 ms budget at 20 Hz. The spikes are the
   attackers' replans.
 
-## Open before hardware
+## Gates and pauses
 
-- **No hardware flight yet.** The first one should be slow (`v_max_*` 0.6), 1 v 1,
-  `paced:=true`.
-- **Close flying is borrowed evidence.** The STL game is designed to 0.20 m, but
-  `stl_show` has no hardware flight recorded in this repo. Start at a wider floor
-  (`-p min_separation:=0.6 -p d_cc:=0.7`) and narrow it flight by flight. Before
-  going faster than 1 m/s, build the HOCBF.
-- Seven drones means two Crazyradios (roster URIs `radio://0/…`, `radio://1/…`).
-- No mission-console window yet (`missions/guard.yaml`).
+With `paced:=true` the show waits for Enter (or the console's Continue) at:
+1. **ARM and take off.**
+2. **PILOT: take off the DJI** (`vip_mode:=mocap` only). The DJI goes up *into* a
+   volume whose drones are already dodging it: first in.
+3. **START the match.**
+4. **At the end:** with a DJI, **PILOT: land the DJI**, before the drones come down
+   (last out); otherwise **LAND the drones?**
+
+A match has no legs, so there are no gates inside it, unlike the escort's per-leg
+Continue.
+
+**While a gate waits, or the match pauses** (a lost VIP pose, a drone on hold), the
+engine's `hold()` runs:
+- every drone holds where it is **through the safety layer**, so it still dodges
+  the DJI and keeps its spacing;
+- every watchdog keeps running;
+- the strategies are not asked and the match clock stops.
+
+The first version only re-sent the last setpoint during a gate. A DJI climbing past
+the drones would then have had nothing getting out of its way
+(`test_a_held_drone_still_dodges_the_dji`).
+
+The mission console's window is `missions/guard.yaml`: every choice above, the gates
+as buttons, indicators for phase, rules, result, last down or strike and safety, a
+VIP keyboard for `vip_mode:=manual`, and the 3D view with the show's markers.
+
+## Before the first hardware flight
+
+**Proven in the simulator** (which has no mocap, so poses come from setpoints):
+- the full flight path;
+- a paced run with every gate answered through stdin, as the console does;
+- one SIGINT mid-match landing all seven drones (exit 130);
+- downs landing drones one at a time.
+
+**Not exercised until hardware:**
+- **Every check that reads real `/poses`:** the per-drone containment watchdog, the
+  near-miss check on measured aircraft, the placement check, and opponents'
+  velocities estimated from real mocap. The escort's first flight was the first test
+  of its equivalents too.
+- **Close flying.** The STL game is designed to 0.20 m, but `stl_show` has no
+  hardware flight recorded in this repo.
+- **Streaming load.** Seven drones on `cmd_full_state` at 20 Hz: the escort streamed
+  four, and the STL game uses the high-level commander. Expect two Crazyradios
+  (roster URIs `radio://0/…`, `radio://1/…`).
+- **The DJI gates.** They need a mocap VIP.
+- **LED cues.** They are off in the simulator.
+
+**A ladder for the first session.** Run `plan_guard` with the same choices before
+each step, and a dry run (`-p dry_run:=true`) before the first:
+
+| Step | Teams | Settings |
+|---|---|---|
+| 1 | 1 v 1 | point VIP, `rules:=tag`, `v_max_defense`/`v_max_attack` 0.5, `min_separation` 0.6, `d_cc` 0.7, paced |
+| 2 | 2 v 1 | the same; then `rules:=pressure`, so a defender can be downed |
+| 3 | 4 v 3 | 0.8 m/s; then narrow the separation in steps, watching the closest pair the show prints at the end |
+| 4 | with the DJI | `vip_mode:=mocap`, paced, all gates |
+
+Before going faster than 1 m/s, build the acceleration-level CBF (HOCBF).

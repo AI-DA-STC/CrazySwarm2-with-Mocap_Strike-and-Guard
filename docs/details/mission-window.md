@@ -5,7 +5,7 @@ open http://localhost:8077, then pick the demo under **Dashboard → Missions** 
 its own browser window, e.g. `/mission?m=crazyflie_shows/escort`).
 
 Everything on a window is defined by one file per demo,
-`src/crazyswarm2/crazyflie_shows/missions/<demo>.yaml` (`escort.yaml`, `stl.yaml`): the
+`src/crazyswarm2/crazyflie_shows/missions/<demo>.yaml` (`escort.yaml`, `stl.yaml`, `guard.yaml`): the
 choices offered, the prompts that become buttons, the status tiles, the teleop pad. The show itself never reads that
 file; it only describes how to *run* the show. The rest of the console is described in
 [console.md](console.md).

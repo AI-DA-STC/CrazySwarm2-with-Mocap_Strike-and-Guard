@@ -127,28 +127,19 @@ class Match:
         return self.referee.result(self.t, self.agents)
 
     # ------------------------------------------------------------------
-    def step(self, dt, vip_p, vip_v, measured=None):
-        cfg = self.cfg
-        self.t += dt
+    def _begin(self, dt, vip_p, vip_v, measured):
         # A retiring drone is being landed by the high-level commander. Model
         # its descent in the setpoint, so that with no mocap (the simulator)
         # it is still an obstacle where it really is, not frozen in mid-air.
         for n, a in self.agents.items():
             if a.status == RETIRING:
-                self.sp[n][2] = max(0.0, self.sp[n][2] - cfg.land_speed * dt)
-        vip_p = np.asarray(vip_p, float)
-        vip_v = np.asarray(vip_v, float)
+                self.sp[n][2] = max(0.0, self.sp[n][2] - self.cfg.land_speed * dt)
         self._observe(dt, measured)
+        return np.asarray(vip_p, float), np.asarray(vip_v, float)
 
-        want = {}
-        for pol in (self.defense, self.attack):
-            got = pol.act(self._view_for(pol.team, dt, vip_p, vip_v)) or {}
-            for n, v in got.items():
-                a = self.agents.get(n)
-                if a is None or a.team != pol.team or not a.active:
-                    continue          # a strategy may only steer its own
-                want[n] = np.asarray(v, float)
-
+    def _move(self, dt, want, vip_p, vip_v):
+        """Requests -> caps -> ONE joint safety solve -> setpoints."""
+        cfg = self.cfg
         active = [n for n, a in self.agents.items() if a.active]
         retiring = [n for n, a in self.agents.items() if a.status == RETIRING]
         nominal = []
@@ -195,6 +186,36 @@ class Match:
                 sp_out[n] = (sp.copy(), v.copy())
         self.stats['backstop'] += len(clamped)
         self.stats['ticks'] += 1
+        return sp_out, res, clamped
+
+    def hold(self, dt, vip_p, vip_v, measured=None):
+        """Hold every active drone where it is -- THROUGH the safety layer.
+
+        For a paused match (an operator gate, a lost VIP pose, a drone on
+        hold): the strategies are not asked and the referee does not run or
+        advance the clock, but every drone still dodges the VIP and keeps its
+        spacing, which a bare 'stream the last setpoint' does not -- the DJI
+        takes off and lands during gates, past drones that must get out of
+        its way. Returns name -> (setpoint, velocity) for the active drones.
+        """
+        vip_p, vip_v = self._begin(dt, vip_p, vip_v, measured)
+        sp_out, _, _ = self._move(dt, {}, vip_p, vip_v)
+        return sp_out
+
+    def step(self, dt, vip_p, vip_v, measured=None):
+        self.t += dt
+        vip_p, vip_v = self._begin(dt, vip_p, vip_v, measured)
+
+        want = {}
+        for pol in (self.defense, self.attack):
+            got = pol.act(self._view_for(pol.team, dt, vip_p, vip_v)) or {}
+            for n, v in got.items():
+                a = self.agents.get(n)
+                if a is None or a.team != pol.team or not a.active:
+                    continue          # a strategy may only steer its own
+                want[n] = np.asarray(v, float)
+
+        sp_out, res, clamped = self._move(dt, want, vip_p, vip_v)
 
         # the referee judges the aircraft: refresh positions to this tick's
         for n, a in self.agents.items():

@@ -34,6 +34,12 @@ Parameters, all ``-p name:=value``:
 * ``dry_run``, ``paced`` (wait for Enter to arm and to start), ``lights``,
   ``seed``, ``check_placement``.
 
+Gates (``paced:=true``): ARM and take off; with ``vip_mode:=mocap``, the
+PILOT takes the DJI off; START the match; at the end, the pilot lands the
+DJI (mocap) or you confirm the landing. While a gate waits, every drone holds
+through the safety layer -- it still dodges the DJI -- and every watchdog
+runs. The match itself has no legs and so no gates inside it.
+
 What is shared with the escort, and why it is not copied: the /poses cache,
 the setpoint stream helpers and the operator gates (escort_show), the room
 helpers and the per-drone containment watchdog (escort), the abort and the
@@ -269,42 +275,36 @@ def main():
         viz = GuardViz(node)
         vel = escort.VelocityEstimator()
         watch = {n: {} for n in flying}
+        clk = {'last': timeHelper.time(), 't0': timeHelper.time()}
+        vip_last = {'p': np.asarray(p_vip, float).copy()}
+        closest = {'d': np.inf}
+        title = f'{dname} v {aname} | {rules.name}'
 
-        def stream_hold():
-            """Keep every flying drone fed on its current setpoint."""
-            for n in flying:
-                if n in streamed or match.agents[n].active:
-                    _stream(fcfs[n], match.sp[n], np.zeros(3))
-                    streamed.add(n)
-
-        def pump():
-            rclpy.spin_once(node, timeout_sec=0.0)
-            stream_hold()
-            timeHelper.sleepForRate(cfg.rate_hz)
-
-        streaming = True
-        if paced:
-            operator_gate('START the match?', pump=pump)
-        t0 = timeHelper.time()
-        print(f'  MATCH LIVE   t0 = {_clock()}   streaming at {cfg.rate_hz:g} Hz\n')
-        last = t0
-        min_live = np.inf
-        while True:
+        def tick_clock():
             rclpy.spin_once(node, timeout_sec=0.0)
             now = timeHelper.time()
-            dt = max(now - last, 1e-3)
-            last = now
+            dt = max(now - clk['last'], 1e-3)
+            clk['last'] = now
+            return now, dt
 
-            p_vip = vip_now(now)
-            if p_vip is None:
+        def vip_fresh(now, dt):
+            """(VIP position, velocity, fresh?). A stale VIP is held at its
+            last pose until vip_stale_land_s, then the show lands."""
+            p = vip_now(now)
+            if p is None:
                 if vip_age(now) > cfg.vip_stale_land_s:
                     raise ShowAborted(f'VIP pose lost for {vip_age(now):.1f} s')
-                stream_hold()                   # hold still until it is back
-                timeHelper.sleepForRate(cfg.rate_hz)
-                continue
-            v_vip = vel.update(p_vip, dt)
+                return vip_last['p'], np.zeros(3), False
+            vip_last['p'] = np.asarray(p, float).copy()
+            return vip_last['p'], vel.update(p, dt), True
 
-            # per-drone watchdog (the escort's): stale, outside, not following
+        def observe(now, dt):
+            """The watchdogs, every tick, gates included: (measured, holding).
+
+            Per drone (the escort's contain_check): stale mocap, outside the
+            room, not following its setpoint. Then the aircraft themselves:
+            the CBF holds SETPOINTS apart, this checks the measured pairs.
+            """
             measured, holding = {}, []
             for n in flying:
                 a = match.agents[n]
@@ -322,25 +322,59 @@ def main():
                     raise ShowAborted(f'CONTAINMENT {n}: {why}')
                 if act == 'hold':
                     holding.append(f'{n}: {why}')
-            # the aircraft themselves: the CBF holds SETPOINTS apart
             live = [(n, p) for n, p in measured.items()
                     if p is not None and p[2] > 0.3]
             for i, (n1, p1) in enumerate(live):
                 for n2, p2 in live[i + 1:]:
                     d = float(np.linalg.norm(p1 - p2))
-                    min_live = min(min_live, d)
+                    closest['d'] = min(closest['d'], d)
                     if safety_layer.floor_ratio(cfg, p1, p2) < cfg.near_miss_ratio:
                         raise ShowAborted(f'NEAR MISS {n1}/{n2} {d:.2f} m apart')
-            if holding:
-                print(f'  [t+{now - t0:5.1f}s] HOLD -- {"; ".join(holding)}', flush=True)
-                stream_hold()
+            return measured, holding
+
+        def stream(setpoints):
+            for n, (sp, v) in setpoints.items():
+                _stream(fcfs[n], sp, v)
+                streamed.add(n)
+
+        def hold_tick():
+            """One paused tick: the drones hold where they are THROUGH the
+            safety layer (so they still dodge the DJI and keep their spacing),
+            every watchdog runs, the match clock does not. Used by every gate
+            and whenever the match itself has to pause."""
+            now, dt = tick_clock()
+            p, v, _ = vip_fresh(now, dt)
+            measured, _ = observe(now, dt)
+            stream(match.hold(dt, p, v, measured or None))
+            viz.publish(match.t, cfg, rules, p, match.agents, {}, match.result(),
+                        f'{title} | HOLDING', match.referee.meters)
+            timeHelper.sleepForRate(cfg.rate_hz)
+
+        streaming = True
+        if paced and vip_mode == 'mocap':
+            # FIRST IN: the Crazyflies are up and holding; the DJI goes up
+            # into a volume whose every drone is already dodging it.
+            operator_gate('PILOT: take off the DJI now and bring it to the VIP '
+                          'spot. The drones hold and dodge it. Continue when it '
+                          'is steady.', pump=hold_tick)
+        if paced:
+            operator_gate('START the match?', pump=hold_tick)
+        clk['t0'] = timeHelper.time()
+        print(f'  MATCH LIVE   t0 = {_clock()}   streaming at {cfg.rate_hz:g} Hz\n')
+        while True:
+            now, dt = tick_clock()
+            p_vip, v_vip, fresh = vip_fresh(now, dt)
+            measured, holding = observe(now, dt)
+            if not fresh or holding:
+                if holding:
+                    print(f'  [t+{now - clk["t0"]:5.1f}s] HOLD -- {"; ".join(holding)}',
+                          flush=True)
+                stream(match.hold(dt, p_vip, np.zeros(3), measured or None))
                 timeHelper.sleepForRate(cfg.rate_hz)
                 continue
 
             tk = match.step(dt, p_vip, v_vip, measured or None)
-            for n, (sp, v) in tk.setpoints.items():
-                _stream(fcfs[n], sp, v)
-                streamed.add(n)
+            stream(tk.setpoints)
             for n in tk.retired:
                 fcfs[n].notifySetpointsStop()
                 streamed.discard(n)
@@ -353,14 +387,22 @@ def main():
                 print(f'  [t+{match.t:5.1f}s] CBF emergency push-apart', flush=True)
             res = match.result()
             viz.publish(match.t, cfg, rules, p_vip, match.agents, tk.labels, res,
-                        f'{dname} v {aname} | {rules.name}', match.referee.meters)
+                        title, match.referee.meters)
             if res.winner:
                 break
             timeHelper.sleepForRate(cfg.rate_hz)
 
         # ------------------------------------------------------------ land
         print(f'\n  {res.winner.upper()} WINS -- {res.reason} '
-              f'(t+{res.t:.1f}s, strikes {res.strikes}, downs {res.downs})')
+              f'(t+{res.t:.1f}s, strikes {res.strikes}, downs {res.downs})', flush=True)
+        if paced and vip_mode == 'mocap':
+            # LAST OUT is the Crazyflies: the DJI comes down past drones that
+            # are still holding and dodging it.
+            operator_gate('Match over. PILOT: land the DJI now; the drones hold '
+                          'and dodge it. Continue when it is on the ground.',
+                          pump=hold_tick)
+        elif paced:
+            operator_gate('Match over. LAND the drones?', pump=hold_tick)
         for n in flying:
             if n in streamed:
                 fcfs[n].notifySetpointsStop()
@@ -372,7 +414,8 @@ def main():
         for n in flying:
             fcfs[n].arm(False)
         armed = False
-        _report(match, min_live)
+        print('  landed and disarmed -- done', flush=True)
+        _report(match, closest['d'])
         return 0
 
     except ShowAborted as e:

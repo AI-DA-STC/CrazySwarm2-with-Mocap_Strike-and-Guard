@@ -1,0 +1,169 @@
+# Mission view for the guard show (guard_show) -- read by the mission console
+# (console/mission_console/missions.py), never by the show itself. Delete this
+# file and guard_show is unchanged. Format: docs/details/mission-window.md.
+#
+# N defenders v M attackers, strategies and rule sets chosen by name. One
+# window: the choices made before takeoff, the Enter gates of a paced run
+# (arm, the DJI's take-off, start, the DJI's landing), the match as it happens,
+# and a 3D view with the show's own markers (meters included).
+mission: 1
+title: Guard (N v M)
+summary: >
+  Defenders protect a VIP from attackers, with the strategies and the rules
+  chosen below. A safety layer (AirStack's CBF) sits under both strategies.
+  Run plan_guard with the same choices first. Paced by default: Continue at
+  every gate, Land ends it.
+docs: docs/guard/run.md
+run: guard_show
+flight: true
+# guard_show calls abort.take_signals(): one SIGINT = land where they are
+# (tested in sim 2026-11-03: one SIGINT mid-match landed all seven, exit 130).
+abort: sigint
+
+options:
+  - name: rules
+    label: Rules
+    choices:
+      tag: a defender close to an attacker long enough takes it out (attackers only)
+      pressure: either side takes a drone out by outnumbering it nearby; 1 v 1 is a standoff
+      zone: like tag, but each side only on the other side's ground (3 m round the VIP)
+      zone_pressure: like pressure, on the other side's ground
+      timer: nobody is taken out; the defence must hold until the clock runs out
+    default: tag
+  - name: defense
+    label: Defence strategy
+    choices:
+      shell: urgency-weighted 3D intercepts, pincers when outnumbering (the default)
+      ring: the escort's idea -- a flat ring that turns to the nearest threat (a baseline)
+    default: shell
+  - name: attack
+    label: Attack strategy
+    choices:
+      coordinated: team play + 3D planning scored by the rules, feints, gang-ups (the default)
+      direct: straight at the VIP, all at once (a baseline)
+    default: coordinated
+  - name: vip_mode
+    label: VIP
+    choices:
+      point: a fixed point at the VIP mark -- nobody in the volume
+      manual: a point you steer with the VIP keyboard below
+      mocap: the DJI (or a person) wearing the rigid body named by vip_name
+    default: point
+  - name: vip_name
+    label: VIP rigid body
+    type: text
+    default: operator
+    when: {vip_mode: mocap}
+  - name: paced
+    label: Operator-paced (Continue at every gate)
+    type: bool
+    default: true
+  - name: dry_run
+    label: Dry run (every check, arm nothing)
+    type: bool
+    default: false
+    omit_default: true
+  - name: defenders
+    label: Defenders (cf1,cf2,...; empty = by the marks)
+    type: text
+    default: ''
+    omit_default: true
+  - name: attackers
+    label: Attackers (cf5,cf6,...; empty = by the marks)
+    type: text
+    default: ''
+    omit_default: true
+  - name: v_max_defense
+    label: Defence top speed (m/s)
+    type: number
+    default: 1.0
+    omit_default: true
+  - name: v_max_attack
+    label: Attack top speed (m/s)
+    type: number
+    default: 1.0
+    omit_default: true
+  - name: min_separation
+    label: Separation floor across (m; widen it for first flights)
+    type: number
+    default: 0.35
+    omit_default: true
+  - name: d_cc
+    label: Safety keep-out across (m; at least the floor + 0.10)
+    type: number
+    default: 0.45
+    omit_default: true
+  - name: seed
+    label: Seed
+    type: number
+    default: 0
+    omit_default: true
+  - name: check_placement
+    label: Check placement (mocap vs initial_position)
+    type: bool
+    default: true
+    omit_default: true
+
+helpers:
+  vip_keys:
+    label: VIP keyboard
+    run: escort_teleop
+    params: {target: vip}
+    when: {vip_mode: manual}
+    autostart: true
+    teleop: planar
+    enable_after: 'MATCH LIVE'
+
+topics:
+  markers: [/guard/markers]
+
+# guard_show and plan_guard check every plan against the measured room
+arena: room
+
+gate:
+  # escort_show.operator_gate prints ">>> ..." then "[Enter] ... [q] land"
+  prompt: '^\s*>>>\s*(?P<text>.+)$'
+  until: '\[q\]\s*land'
+  buttons:
+    - {label: Continue, send: '', key: Enter, tone: primary}
+    - {label: Land now (q), send: q, tone: danger}
+
+indicators:
+  - {label: Phase, match: 'GUARD SHOW', value: checking, initial: idle}
+  - {label: Phase, match: 'REFUSED', value: REFUSED, tone: {REFUSED: fail}}
+  - {label: Phase, match: 'MOCAP CHECK', value: checking mocap}
+  - {label: Phase, match: 'waiting for the VIP', value: waiting for the VIP, tone: {waiting for the VIP: warn}}
+  - {label: Phase, match: '>>> ARM and take off', value: ready to arm}
+  - {label: Phase, match: 'lifting to', value: lifting}
+  - {label: Phase, match: '>>> PILOT: take off', value: DJI taking off, tone: {DJI taking off: warn}}
+  - {label: Phase, match: '>>> START the match', value: ready to start}
+  - {label: Phase, match: 'MATCH LIVE', value: LIVE, tone: {LIVE: ok}}
+  - {label: Phase, match: '>>> Match over', value: match over}
+  - {label: Phase, match: 'landed and disarmed', value: landed}
+  - {label: Phase, match: '\*\*\* ABORT', value: ABORT, tone: {ABORT: fail}}
+  - {label: Phase, match: 'dry_run - checks done', value: dry run OK, tone: {dry run OK: ok}}
+  - {label: Phase, match: 'ended before arming', value: refused before arming, tone: {refused before arming: fail}}
+  - {label: Rules, match: '^\s*rules\s+(?P<r>[a-z_]+)', value: '$r', initial: '--'}
+  - {label: Result, match: '(?P<w>DEFENSE|ATTACK) WINS', value: '$w wins', tone: {DEFENSE wins: ok, ATTACK wins: warn}, initial: '--'}
+  - {label: Last event, match: 't\+\s*[\d.]+s\s+(?P<e>\w+ (DOWNED|STRUCK) \w*)', value: '$e', initial: '--'}
+  - {label: Safety, match: 'NEAR MISS', value: NEAR MISS, tone: {NEAR MISS: fail}, initial: ok}
+  - {label: Safety, match: 'CBF emergency', value: CBF emergency, tone: {CBF emergency: warn}}
+  - {label: Hold, match: 'HOLD --', value: holding, tone: {holding: warn}, initial: '--'}
+  - {label: Placement, match: 'all drones within tolerance', value: ok, tone: {ok: ok}, initial: '--'}
+
+# lines worth a row in the timeline (everything is still in the raw output)
+events:
+  - 'DOWNED|STRUCK'
+  - 'MATCH LIVE'
+  - 'WINS'
+  - '>>> '
+  - 'HOLD --'
+  - 'NEAR MISS|CBF emergency'
+  - '\*\*\*'
+  - 'landed and disarmed'
+  - 'SAFETY LAYER'
+
+layout:
+  main: [scene]
+  side: [gate, indicators, teleop, fleet, launch]
+  bottom: [events, output]

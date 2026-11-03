@@ -47,8 +47,17 @@ ros2 run crazyflie_shows guard_show --ros-args -p use_sim_time:=true \
 
 On the drones, run the same command without `use_sim_time`, first with
 `-p dry_run:=true` (every check, nothing armed), then for real. Add
-`-p vip_mode:=mocap` to protect the DJI, and `-p paced:=true` to have the show
-wait for Enter before arming and before the match starts.
+`-p vip_mode:=mocap` to protect the DJI. With `-p paced:=true` the show waits for
+Enter before arming, before the match starts and before landing. With the DJI, it
+also waits while the pilot takes it off and lands it; the drones hold and keep
+out of its way during every wait.
+
+Or use the web console (`./console/run.sh`), **Missions → Guard (N v M)**: every
+choice is a field, the waits are buttons, and the 3D view shows the match.
+
+For the first sessions on real drones, follow the ladder in
+[../details/guard-design-notes.md](../details/guard-design-notes.md) ("Before the
+first hardware flight"): start 1 v 1, slow and wide apart.
 
 ## Choosing the rules
 

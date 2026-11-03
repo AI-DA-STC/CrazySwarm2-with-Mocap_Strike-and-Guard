@@ -338,3 +338,21 @@ def test_each_team_has_its_own_random_stream():
         if dname == 'test_roll_d':
             first = list(_RollA.draws)
     assert _RollA.draws == first and len(first) == 5
+
+
+def test_a_held_drone_still_dodges_the_dji():
+    # a paused match (an operator gate): the DJI climbs straight up through
+    # where a defender is hovering; hold() must move it out of the way
+    starts = {'d': MID + [0.0, 0.0, -0.4], 'a': MID + [4.0, 0.0, -0.4]}
+    m = Match(CFG, TAG, policies.make(DEFENSE, 'ring'),
+              policies.make(ATTACK, 'direct'), starts, ['d'], ['a'],
+              MID + [0.0, 0.0, -3.0], np.random.default_rng(0))
+    worst = np.inf
+    for k in range(150):
+        # starts 2.5 m below the defender (outside the 2.1 m-tall keep-out)
+        # and climbs at 0.4 m/s to 0.5 m above where it was
+        vip = MID + [0.0, 0.15, -2.9 + 0.02 * k]
+        sp = m.hold(0.05, vip, np.array([0.0, 0.0, 0.4]))
+        worst = min(worst, safety_layer.separation_ratio(CFG, sp['d'][0], vip, 'vip'))
+    assert worst >= 0.95
+    assert m.t == 0.0 and not m.referee.events          # the match did not run
