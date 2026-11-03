@@ -70,8 +70,7 @@ def simulate(cfg, script, walk_speed=0.0, duration=None, walk_bearing=90.0,
         # the VIP walks, and is turned back at the arena edge rather than
         # marched through the net
         p_next = p_vip + walk * dt
-        r = p_next[:2] - np.array(cfg.room_center)
-        if np.linalg.norm(r) > cfg.arena_radius - cfg.ring_radius:
+        if escort.vip_room(cfg, p_next) < 0.0:
             walk = -walk
             p_next = p_vip + walk * dt
         p_next[2] = p_vip[2]
@@ -119,6 +118,7 @@ def measure(tr, cfg):
     adv = float(np.min(np.linalg.norm(d[:, :, :2] - tr['adv'][:, None, :2], axis=2)))
     speed = float(np.max(np.linalg.norm(np.diff(d, axis=0), axis=2) / dt)) if len(d) > 1 else 0.0
     radial = np.linalg.norm(d[:, :, :2] - np.array(cfg.room_center), axis=2)
+    clearance = escort.room_clearance(cfg, d)        # (T, n), + inside
     # how well did the ring end up facing the adversary while engaged?
     face = np.nan
     if tr['engaged'].any():
@@ -171,7 +171,8 @@ def measure(tr, cfg):
     return {'closed': closed, 'slot_err': slot_err, 'transit_err': transit_err,
             'pair_sep': pair, 'vip_dist': vip,
             'adv_sep': adv, 'peak_speed': speed,
-            'max_radius': float(np.max(radial)), 'max_alt': float(np.max(d[:, :, 2])),
+            'max_radius': float(np.max(radial)),
+            'min_clearance': float(np.min(clearance)), 'max_alt': float(np.max(d[:, :, 2])),
             'engaged_frac': float(np.mean(tr['engaged'])), 'face_err_deg': face,
             'slew_steps': slew, 'sep_steps': sep, 'steps': len(tr['t'])}
 
@@ -198,9 +199,9 @@ def verdict(m, cfg):
     if m['peak_speed'] > cfg.v_max * 1.05:
         bad.append(f'peak speed {m["peak_speed"]:.2f} m/s > v_max '
                    f'{cfg.v_max:.2f} m/s')
-    if m['max_radius'] > cfg.arena_radius + 0.01:
-        bad.append(f'a defender reaches {m["max_radius"]:.2f} m from room '
-                   f'centre, outside arena_radius {cfg.arena_radius:.2f} m')
+    if m['min_clearance'] < -0.01:
+        bad.append(f'a defender goes {-m["min_clearance"]:.2f} m outside the '
+                   f'arena ({escort.describe_room(cfg)})')
     if m['max_alt'] > cfg.ceiling:
         bad.append(f'altitude {m["max_alt"]:.2f} m over ceiling {cfg.ceiling:.2f} m')
     return bad
@@ -218,8 +219,8 @@ def report_case(name, cfg, script, walk, verbose=True, vip_z=None):
         print(f'    peak speed    {m["peak_speed"]:.2f} m/s (cap {cfg.v_max:.2f})')
         print(f'    formation     worst slot error {m["slot_err"]:.2f} m when '
               f'settled, {m["transit_err"]:.2f} m in transit (lag, not error)')
-        print(f'    volume        {m["max_radius"]:.2f} m radius, '
-              f'{m["max_alt"]:.2f} m up')
+        print(f'    volume        {m["min_clearance"]:.2f} m from the arena edge '
+              f'at the closest, {m["max_alt"]:.2f} m up')
         print(f'    wall          closed to {m["closed"] * 100:.0f}% '
               f'({np.degrees(cfg.wall_half_angle):.0f} deg half-angle, '
               f'lead-to-wing '
@@ -258,11 +259,10 @@ def best_standing_phase(cfg, step_deg=5.0):
     with the shipped config the worst slot sits 2.50 m out at psi=60 deg and
     2.42 m at psi=90.
     """
-    c = np.array(cfg.room_center)
     best, best_worst = 0.0, -np.inf
     for psi in np.radians(np.arange(0.0, 120.0, step_deg)):
         slots = escort.ring_targets(escort.vip_home(cfg), psi, cfg)
-        worst = cfg.arena_radius - float(np.max(np.linalg.norm(slots[:, :2] - c, axis=1)))
+        worst = float(np.min(escort.room_clearance(cfg, slots)))
         if worst > best_worst:
             best, best_worst = float(psi), worst
     return best, best_worst
@@ -273,11 +273,14 @@ def recommend_marks(cfg):
     v = escort.vip_home(cfg)
     psi, _ = best_standing_phase(cfg)
     slots = escort.ring_targets(v, psi, cfg)
-    # The adversary goes on the open side -- away from the VIP's own offset --
-    # far enough out that it starts OUTSIDE the ring it is supposed to attack.
-    away = -np.array(cfg.vip_offset, float)
-    n = float(np.linalg.norm(away))
-    away = np.array([1.0, 0.0]) if n < 1e-6 else away / n
+    # The adversary stands on the side it attacks from (its entry bearing,
+    # which is set opposite the operator), far enough out that it starts
+    # OUTSIDE the ring it is supposed to attack. This used to be "away from
+    # vip_offset", which meant the same thing only while the VIP was offset
+    # toward the operator; with the VIP at the centre of the big arena the
+    # offset is a few centimetres and its direction says nothing.
+    a = np.radians(escort.ReactiveAdversary().bearing)
+    away = np.array([np.cos(a), np.sin(a)])
     adv_r = cfg.ring_radius + cfg.min_adv_sep + 0.3
     adv = np.array([v[0] + adv_r * away[0], v[1] + adv_r * away[1], 0.0])
     return [np.array([s[0], s[1], 0.0]) for s in slots], adv
@@ -286,17 +289,15 @@ def recommend_marks(cfg):
 def report_marks(cfg, yaml_path=None):
     """Print where to stand the drones, and check the yaml's marks if given."""
     v = escort.vip_home(cfg)
-    c = np.array(cfg.room_center)
     d_marks, a_mark = recommend_marks(cfg)
     print(f'\n  VIP mark        [{v[0]:+.2f}, {v[1]:+.2f}]  '
           f'(room centre + vip_offset -- NOT inferred from the drones)')
-    print(f'  arena           {cfg.arena_radius:.2f} m around '
-          f'[{c[0]:+.2f}, {c[1]:+.2f}]\n')
+    print(f'  arena           {escort.describe_room(cfg)}\n')
     print('  STAND THE DRONES HERE (metres, floor, world frame)')
     for i, m in enumerate(d_marks):
         print(f'    defender {i + 1}   [{m[0]:+.2f}, {m[1]:+.2f}]   '
               f'{np.linalg.norm(m[:2] - v[:2]):.2f} m from the VIP mark, '
-              f'{np.linalg.norm(m[:2] - c):.2f} m from room centre')
+              f'{float(escort.room_clearance(cfg, m)):.2f} m inside the edge')
     print(f'    adversary    [{a_mark[0]:+.2f}, {a_mark[1]:+.2f}]   '
           f'{np.linalg.norm(a_mark[:2] - v[:2]):.2f} m from the VIP mark '
           f'(must exceed {cfg.ring_radius + cfg.min_adv_sep:.2f})')
@@ -345,8 +346,12 @@ def plot(tr, cfg, path):
     import matplotlib.pyplot as plt
 
     fig, ax = plt.subplots(figsize=(7, 7))
-    ax.add_patch(plt.Circle(cfg.room_center, cfg.arena_radius, fill=False,
-                            ls='--', color='0.7'))
+    if safety.ARENA_POLYGON is None:
+        ax.add_patch(plt.Circle(cfg.room_center, cfg.arena_radius, fill=False,
+                                ls='--', color='0.7'))
+    else:
+        ax.add_patch(plt.Polygon(safety.ARENA_POLYGON, closed=True,
+                                 fill=False, ls='--', color='0.7'))
     ax.plot(tr['vip'][:, 0], tr['vip'][:, 1], 'k-', lw=2, label='VIP')
     ax.plot(tr['adv'][:, 0], tr['adv'][:, 1], 'r-', lw=1.5, label='adversary')
     for i in range(tr['def'].shape[1]):
@@ -415,10 +420,10 @@ def main():
           f'{cfg.ring_radius * cfg.phase_rate:.2f} m/s at the slot')
     print(f'  VIP budget    {escort.max_vip_speed(cfg):+.2f} m/s left to follow '
           'a walking person')
-    reach = float(np.hypot(*cfg.vip_offset)) + cfg.ring_radius
-    print(f'  arena margin  ring reaches {reach:.2f} m of the '
-          f'{cfg.arena_radius:.2f} m arena '
-          f'({cfg.arena_radius - reach:+.2f} m spare)\n')
+    print(f'  arena         {escort.describe_room(cfg)}')
+    print(f'  arena margin  the ring around the VIP mark has '
+          f'{escort.vip_room(cfg, escort.vip_home(cfg)):+.2f} m spare to the '
+          'nearest edge\n')
 
     problems = 0
     static_only = escort.check_config(cfg, moving_vip=False)
@@ -436,8 +441,8 @@ def main():
 
     if cfg.vip_airborne:
         print(f'  AIRBORNE VIP  ring holds level with it '
-              f'({cfg.vip_height_offset:+.2f} m); the pilot must stay within '
-              f'{escort.vip_keep_in(cfg):.2f} m of room centre and under '
+              f'({cfg.vip_height_offset:+.2f} m); the pilot must stay '
+              f'{cfg.ring_radius:.2f} m inside the arena edge and under '
               f'{escort.max_vip_speed(cfg):.2f} m/s\n')
     m_static, bad = report_case('static VIP point', cfg, script, 0.0,
                                 vip_z=args.vip_z)

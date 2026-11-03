@@ -414,7 +414,19 @@ class EscortConfig:
     #: bearing, and that agreement is a check on the frame fit: the operator
     #: did not move, so "toward the operator" must still point at them.
     #: Any future frame change must rotate this AND AdversaryScript.legs.
-    vip_offset: tuple = (-0.017, 0.600)
+    #:
+    #: 2026-11-03, THE BIG ARENA (new room, new frame; nothing above carries
+    #: over). The operator stands on +x looking down -x, and the DJI sits at
+    #: the room's middle, on cf5's mark of 2026-11-02 (0.048, -0.042). The
+    #: offset is now just that mark minus room_center. Everything that made
+    #: an off-centre VIP necessary was the small room's: with the polygon,
+    #: the VIP at the centre has about 4 m to the nearest edge, so the
+    #: attacker has room to stand off, flank and retreat on every side.
+    #: The attacker's bearings (AdversaryScript.legs, ReactiveAdversary.
+    #: bearing) moved with it, to 145 deg: the original encounter geometry
+    #: of 2026-09/10, which put the operator at 0 deg and the attacker at
+    #: 145 deg, on the far side of the VIP from the operator.
+    vip_offset: tuple = (0.261, 0.031)
 
     # -- loop / estimation -------------------------------------------------
     rate_hz: float = 20.0          # setpoint stream rate per drone
@@ -456,6 +468,100 @@ def vip_home(cfg):
     """The static VIP mark: room centre plus ``vip_offset``."""
     return np.array([cfg.room_center[0] + cfg.vip_offset[0],
                      cfg.room_center[1] + cfg.vip_offset[1], 0.0])
+
+
+# -- the room ---------------------------------------------------------------
+#
+# Every "is this inside the arena?" in the escort goes through these three,
+# so the escort works in whatever shape arena.yaml describes. Added
+# 2026-11-03 for the big arena, whose usable floor is a polygon (a rectangle
+# less a furniture chamfer and a step) of about twice the area of the largest
+# circle that fits in it.
+#
+# The escort's room is the arena less safety.TRACKING_MARGIN -- the same
+# margin ARENA_RADIUS_PLAN takes off the circle -- so a setpoint never sits
+# closer to the measured edge than a plan of any other show may.
+# cfg.arena_radius still applies, about room_center, when it is set TIGHTER
+# than the arena's own plan radius (an override can only shrink the room).
+# With no polygon in arena.yaml the circle IS the room and every function
+# here reduces exactly to the radius arithmetic it replaced.
+
+def _circle_only(cfg):
+    return safety.ARENA_POLYGON is None
+
+
+def room_clearance(cfg, xy):
+    """Signed plan-view distance (m) to the edge of the escort's room.
+
+    Positive inside. ``xy`` is any (..., 2+) array; returns the matching
+    shape without the last axis.
+    """
+    xy = np.asarray(xy, float)
+    r = np.linalg.norm(xy[..., :2] - np.asarray(cfg.room_center, float),
+                       axis=-1)
+    if _circle_only(cfg):
+        return cfg.arena_radius - r
+    d = safety.edge_clearance(xy) - safety.TRACKING_MARGIN
+    if cfg.arena_radius < safety.ARENA_RADIUS_PLAN - 1e-9:
+        d = np.minimum(d, cfg.arena_radius - r)
+    return d
+
+
+def room_inward(cfg, xy):
+    """Unit plan-view vector pointing into the room from ``xy`` (2,)."""
+    xy = np.asarray(xy, float)[:2]
+    if _circle_only(cfg):
+        r = xy - np.asarray(cfg.room_center, float)
+        return -r / max(float(np.linalg.norm(r)), 1e-6)
+    eps = 1e-3
+    g = np.array([
+        float(room_clearance(cfg, xy + [eps, 0.0])
+              - room_clearance(cfg, xy - [eps, 0.0])),
+        float(room_clearance(cfg, xy + [0.0, eps])
+              - room_clearance(cfg, xy - [0.0, eps]))])
+    n = float(np.linalg.norm(g))
+    if n < 1e-9:                     # flat spot (a ridge): head for the centre
+        g, n = np.asarray(cfg.room_center, float) - xy, 1.0
+        n = max(float(np.linalg.norm(g)), 1e-6)
+    return g / n
+
+
+def clamp_to_room(cfg, xy):
+    """``(xy, clamped)``: ``xy`` (2,) pulled back into the room if outside.
+
+    Radially toward room_center, as the circle clamp always did -- for a
+    polygon by bisection along that line, which is exact because check_config
+    proves room_center is inside and the room is star-shaped about it (every
+    point of it can see the centre: the step and the chamfer are both shallow).
+    """
+    xy = np.asarray(xy, float)[:2].copy()
+    if float(room_clearance(cfg, xy)) >= 0.0:
+        return xy, False
+    c = np.asarray(cfg.room_center, float)
+    if _circle_only(cfg):
+        r = xy - c
+        return c + r * (cfg.arena_radius / float(np.linalg.norm(r))), True
+    lo, hi = 0.0, 1.0
+    for _ in range(30):
+        mid = 0.5 * (lo + hi)
+        if float(room_clearance(cfg, c + mid * (xy - c))) >= 0.0:
+            lo = mid
+        else:
+            hi = mid
+    return c + lo * (xy - c), True
+
+
+def describe_room(cfg):
+    """One line naming the room the escort is confined to, for printouts."""
+    c = cfg.room_center
+    if _circle_only(cfg):
+        return f'{cfg.arena_radius:.2f} m around [{c[0]:+.2f}, {c[1]:+.2f}]'
+    out = (f'arena.yaml polygon ({len(safety.ARENA_POLYGON)} corners), less '
+           f'{safety.TRACKING_MARGIN:.2f} m')
+    if cfg.arena_radius < safety.ARENA_RADIUS_PLAN - 1e-9:
+        out += (f', and within {cfg.arena_radius:.2f} m of '
+                f'[{c[0]:+.2f}, {c[1]:+.2f}]')
+    return out
 
 
 def wrap_pi(a):
@@ -534,11 +640,10 @@ def contain_check(cfg, p_live, age, sp, dt, state):
         return 'hold', f'no mocap for {age:.1f} s'
 
     p = np.asarray(p_live, float)
-    r = float(np.linalg.norm(p[:2] - np.array(cfg.room_center)))
-    if r > cfg.arena_radius + cfg.contain_margin:
-        return 'land', (f'{r:.2f} m from room centre, outside the '
-                        f'{cfg.arena_radius + cfg.contain_margin:.2f} m '
-                        'containment')
+    out = -float(room_clearance(cfg, p))
+    if out > cfg.contain_margin:
+        return 'land', (f'{out:.2f} m outside the arena edge, past the '
+                        f'{cfg.contain_margin:.2f} m containment')
     if sp is not None:
         err = float(np.linalg.norm(p[:2] - np.asarray(sp, float)[:2]))
         if err > cfg.track_error_m:
@@ -551,9 +656,16 @@ def contain_check(cfg, p_live, age, sp, dt, state):
     return 'ok', None
 
 
-def vip_keep_in(cfg):
-    """How far the VIP may stray from room centre before the ring will not fit."""
-    return cfg.arena_radius - cfg.ring_radius
+def vip_room(cfg, p_vip):
+    """How much further the VIP may go before its ring stops fitting, m.
+
+    Negative once the far slots are past the arena edge. It replaces
+    ``vip_keep_in`` (a radius about room centre), which could only describe
+    a circular room: here the limit is the VIP's distance to the NEAREST edge
+    less the ring, so it is right in any shape. For a circle the two are the
+    same test (keep_in - stray).
+    """
+    return float(room_clearance(cfg, p_vip)) - cfg.ring_radius
 
 
 def vip_problems(cfg, p_vip, v_vip=None, defenders=()):
@@ -565,13 +677,12 @@ def vip_problems(cfg, p_vip, v_vip=None, defenders=()):
     """
     out = []
     p_vip = np.asarray(p_vip, float)
-    c = np.array(cfg.room_center)
-    stray = float(np.linalg.norm(p_vip[:2] - c))
-    if stray > vip_keep_in(cfg):
-        out.append(f'the VIP is {stray:.2f} m from room centre, past the '
-                   f'{vip_keep_in(cfg):.2f} m where a {cfg.ring_radius:.2f} m '
-                   'ring still fits inside the arena -- the far slots are '
-                   'being clamped and the ring is no longer a ring')
+    room = vip_room(cfg, p_vip)
+    if room < 0.0:
+        out.append(f'the VIP is {cfg.ring_radius + room:.2f} m from the arena '
+                   f'edge, closer than the {cfg.ring_radius:.2f} m ring needs '
+                   'to fit -- the far slots are being clamped and the ring is '
+                   'no longer a ring')
     if v_vip is not None:
         speed = float(np.linalg.norm(np.asarray(v_vip, float)[:2]))
         if speed > max_vip_speed(cfg):
@@ -667,8 +778,9 @@ def check_config(cfg, moving_vip=True):
                    f'{safety.PLAN_SEPARATION:.2f} m -- open wall_half_angle '
                    f'(now {np.degrees(cfg.wall_half_angle):.0f} deg) or widen '
                    f'the ring')
-    if cfg.vip_airborne and vip_keep_in(cfg) <= 0.3:
-        bad.append(f'an airborne VIP would have only {vip_keep_in(cfg):.2f} m '
+    home_room = vip_room(cfg, vip_home(cfg))
+    if cfg.vip_airborne and home_room <= 0.3:
+        bad.append(f'an airborne VIP would have only {home_room:.2f} m '
                    'of room to fly in before the ring stops fitting in the '
                    'arena -- shrink ring_radius, or the demo is a hover')
     if not (cfg.floor < cfg.height < cfg.ceiling):
@@ -682,14 +794,16 @@ def check_config(cfg, moving_vip=True):
                    f'plus min_adv_sep ({cfg.ring_radius + cfg.min_adv_sep:.2f} m) '
                    '-- blocking would only engage once the adversary is '
                    'already through the defenders')
+    if float(room_clearance(cfg, cfg.room_center)) <= 0.0:
+        bad.append('room_center is outside the arena -- every clamp pulls '
+                   'toward it, so it must be inside')
     if cfg.ring_radius >= cfg.arena_radius:
         bad.append(f'ring_radius {cfg.ring_radius:.2f} m >= arena_radius '
                    f'{cfg.arena_radius:.2f} m -- the ring cannot fit')
-    reach = float(np.hypot(*cfg.vip_offset)) + cfg.ring_radius
-    if reach > cfg.arena_radius:
-        bad.append(f'the ring around the offset VIP reaches {reach:.2f} m from '
-                   f'room centre, outside arena_radius {cfg.arena_radius:.2f} m '
-                   '-- move the VIP closer to the centre or shrink the ring')
+    if home_room < 0.0:
+        bad.append(f'the ring around the VIP mark reaches {-home_room:.2f} m '
+                   f'past the arena edge ({describe_room(cfg)}) -- move the '
+                   'VIP further from the edge or shrink the ring')
     if cfg.v_max <= cfg.ring_radius * cfg.phase_rate:
         bad.append(f'a slot travels {cfg.ring_radius * cfg.phase_rate:.2f} m/s '
                    f'when the ring turns, at or over v_max {cfg.v_max:.2f} m/s '
@@ -849,11 +963,8 @@ class SetpointGuard:
                                self.reasons, 'vip')
 
         # 3. the room
-        c = np.array([cfg.room_center[0], cfg.room_center[1]])
-        r = sp[:2] - c
-        n = float(np.linalg.norm(r))
-        if n > cfg.arena_radius:
-            sp[:2] = c + r * (cfg.arena_radius / n)
+        sp[:2], clamped = clamp_to_room(cfg, sp[:2])
+        if clamped:
             self.reasons.append('arena')
         if not (cfg.floor <= sp[2] <= cfg.ceiling):
             sp[2] = float(np.clip(sp[2], cfg.floor, cfg.ceiling))
@@ -944,9 +1055,11 @@ class AdversaryScript:
     #: 2.24 m radius where a drone actually lost tracking. Rotating both puts
     #: it back at 1.841 m, identical to what flew before, because the whole
     #: encounter is then the same physical geometry turned with the frame.
-    legs: tuple = ((6.0, 236.59, 2.30),   # rise and sit off to one side
-                   (8.0, 236.59, 1.80),   # the probe = ring_radius + min_adv_sep
-                   (6.0, 236.59, 2.30))   # turned away, backs off past release
+    #: 2026-11-03, big arena: 145 deg again, the operator back at 0 deg (+x).
+    #: See vip_offset.
+    legs: tuple = ((6.0, 145.0, 2.30),    # rise and sit off to one side
+                   (8.0, 145.0, 1.80),    # the probe = ring_radius + min_adv_sep
+                   (6.0, 145.0, 2.30))    # turned away, backs off past release
 
     #: One label per leg, for the operator-paced mode: what the NEXT press of
     #: Enter is about to make the adversary do. Kept beside the legs rather
@@ -1017,15 +1130,14 @@ class AdversaryScript:
         """
         bad = []
         p_vip = vip_home(cfg) if p_vip is None else np.asarray(p_vip, float)
-        c = np.array(cfg.room_center)
         for dur, bearing, radius in self.legs:
             a = np.radians(bearing)
             p = p_vip[:2] + radius * np.array([np.cos(a), np.sin(a)])
-            d = float(np.linalg.norm(p - c))
-            if d > cfg.arena_radius:
+            out = -float(room_clearance(cfg, p))
+            if out > 0.0:
                 bad.append(f'leg ({bearing:+.0f} deg, {radius:.1f} m) puts the '
-                           f'adversary {d:.2f} m from room centre, outside '
-                           f'arena_radius {cfg.arena_radius:.2f} m -- the guard '
+                           f'adversary {out:.2f} m outside the arena '
+                           f'({describe_room(cfg)}) -- the guard '
                            'would drag it inside and the block would engage '
                            'before the approach even starts')
         if abs(self.height - cfg.height) > 0.3:
@@ -1363,7 +1475,9 @@ class ReactiveAdversary:
     #: room centre, outside both the 1.90 m arena and the 2.24 m radius where
     #: tracking is actually lost, and the static case was REFUSED. Rotating it
     #: returns the station to 1.84 m.
-    bearing: float = 236.59         # deg, which side it enters from
+    #: 2026-11-03, big arena: 145 deg, with the operator at 0 deg (+x). See
+    #: EscortConfig.vip_offset.
+    bearing: float = 145.0          # deg, which side it enters from
     #: Gradient weights. Only their RATIO matters -- the sum is saturated to
     #: v_max -- but the repulsion must win inside ``repel_range`` or the
     #: attacker drives through the ring and leans on the guard instead.
@@ -1553,11 +1667,7 @@ class ReactiveAdversary:
                         d, dn = np.array([1.0, 0.0]), 1.0
                     self.p[:2] = np.asarray(p_vip, float)[:2] + d * (shell / dn)
         if cfg is not None:
-            c = np.array(cfg.room_center)
-            r = self.p[:2] - c
-            rn = float(np.linalg.norm(r))
-            if rn > cfg.arena_radius:
-                self.p[:2] = c + r * (cfg.arena_radius / rn)
+            self.p[:2], _ = clamp_to_room(cfg, self.p[:2])
         return self.p.copy()
 
     #: Hunt the ring's widest gap instead of pressing head-on.
@@ -1697,12 +1807,10 @@ class ReactiveAdversary:
                   * (-to_vip / max(d_vip, 1e-6)))
 
         if cfg is not None:                 # the room pushes back too
-            c = np.array(cfg.room_center)
-            r = self.p[:2] - c
-            rn = float(np.linalg.norm(r))
-            margin = cfg.arena_radius - rn
+            margin = float(room_clearance(cfg, self.p))
             if margin < 0.40:
-                v += self.k_wall * (1.0 - max(margin, 0.0) / 0.40) * (-r / max(rn, 1e-6))
+                v += (self.k_wall * (1.0 - max(margin, 0.0) / 0.40)
+                      * room_inward(cfg, self.p))
 
         # progress check: closing on the VIP, or just being herded?
         self._best = min(self._best + self.relax_rate * dt, d_vip + 1e3)
@@ -1743,8 +1851,8 @@ class ReactiveAdversary:
                        f'release_radius {cfg.release_radius:.2f} -- it would '
                        'start and end the run already engaged')
         st = self.station(np.asarray(p_vip, float))
-        d = float(np.linalg.norm(st[:2] - np.array(cfg.room_center)))
-        if d > cfg.arena_radius:
-            bad.append(f'its waiting station is {d:.2f} m from room centre, '
-                       f'outside the {cfg.arena_radius:.2f} m arena')
+        out = -float(room_clearance(cfg, st))
+        if out > 0.0:
+            bad.append(f'its waiting station [{st[0]:+.2f}, {st[1]:+.2f}] is '
+                       f'{out:.2f} m outside the arena ({describe_room(cfg)})')
         return bad

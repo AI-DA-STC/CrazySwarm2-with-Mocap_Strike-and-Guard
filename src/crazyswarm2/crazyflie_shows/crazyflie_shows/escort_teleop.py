@@ -170,11 +170,7 @@ class Teleop(Node):
         p = self.pos + self.vel * dt
 
         # the room, clamped here so what you steer is what gets flown
-        c = np.array(self.cfg.room_center)
-        r = p[:2] - c
-        n = float(np.linalg.norm(r))
-        if n > self.cfg.arena_radius:
-            p[:2] = c + r * (self.cfg.arena_radius / n)
+        p[:2], _ = escort.clamp_to_room(self.cfg, p[:2])
         if self.target == 'adversary':
             p[2] = float(np.clip(p[2], self.cfg.floor, self.cfg.ceiling))
         else:

@@ -165,6 +165,46 @@ Added after this document's first draft; the code comments in `escort.py` and
   position, minimum pair separation and any defender at or below the DJI's
   altitude.
 
+## The big arena (2026-11-03)
+
+The rig moved to the big arena on 2026-11-02 ([mocap.md](mocap.md), section 2c).
+Its usable floor is a polygon in `arena.yaml`, about twice the area of the largest
+circle that fits in it, and the escort now uses the polygon rather than a circle.
+
+* **One definition of "inside".** `escort.room_clearance` gives the signed distance
+  to the escort's edge: the arena polygon less `TRACKING_MARGIN`, which is the same
+  margin `ARENA_RADIUS_PLAN` takes off the circle. `clamp_to_room`, `room_inward`
+  and `vip_room` are built on it. Every check that used a radius about room centre
+  now goes through them: the setpoint clamp, the attacker's clamp and its wall
+  push, containment, the geofence (`vip_room` replaces `vip_keep_in`), the script
+  and station checks, the planner, the teleop clamp and `watch_escort`. With no
+  `polygon:` in `arena.yaml` each one reduces to its old radius arithmetic.
+  Verified: `plan_escort` gives the same numbers with the key removed.
+  `cfg.arena_radius` still applies when it is set tighter than the arena's.
+* **The clamp pulls radially toward room centre**, as before. For a polygon it
+  bisects along that line, which is exact only while the room is star-shaped
+  about room centre. Checked on a 20,000-point grid for the current polygon;
+  re-check it if `polygon:` changes shape a lot. `check_config` refuses a centre
+  outside the room.
+* **New room, new layout.** The pilot stands on +x facing -x, and the DJI sits
+  at the middle of the room, on cf5's mark of 2026-11-02. `vip_offset` is that
+  mark minus room centre. The attacker's bearings (`AdversaryScript.legs`,
+  `ReactiveAdversary.bearing`) went back to 145 deg, which with the operator at
+  0 deg is the encounter geometry that flew in September and October. Centring
+  the VIP failed in the old room only because the circle was small (item 2
+  below). `plan_escort --marks` now stands the adversary on its entry bearing,
+  not "away from `vip_offset`", which is meaningless when the offset is a few
+  centimetres.
+* **The walking case was not caused by the move.** The pre-move code with the
+  pre-move `arena.yaml` fails it in exactly the same way, and a sweep of
+  `arena_radius` from 1.9 to 3.95 m fails at every size. In the big arena,
+  `--sweep` clears 0.20 m/s against both attackers. The default 0.30 m/s case
+  passes against the reactive attacker only because it barely engages while the
+  VIP walks, and still fails against the script. Item 1 below stands.
+* **Not changed:** `ceiling` (1.85 m) and every encounter number (ring, stand-off,
+  speeds). The ceiling no longer binds in the big arena (7 m), but raising it is
+  a choice about how high a hand-flown DJI may drag the ring, not a room limit.
+
 ## Decisions still open
 
 Each of these has a working default, and each is someone's call, not the
@@ -198,7 +238,9 @@ code's. `plan_escort` prints the consequences of whatever is chosen.
    slowly; slow the ring (a lazier block); shrink `R` (less room between the
    drones and the person); raise `v_max` (a real safety decision about flying
    faster next to a human, and the one that needs a written justification).
-2. **Where the VIP stands.** `vip_offset` is a *direction and distance* from
+2. **Where the VIP stands.** *(The OLD room's reasoning. In the big arena the
+   VIP sits at the centre; see "The big arena (2026-11-03)" above.)*
+   `vip_offset` is a *direction and distance* from
    room centre, shipped as `(-0.017, +0.600)` since the 2026-10-08 frame
    rotation (it was `(+0.60, 0)`, "the +x side, nearest the operator", in the
    old frame; rotated by +91.59 degrees it points at +91.6 degrees and still

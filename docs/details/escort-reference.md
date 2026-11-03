@@ -149,13 +149,16 @@ used to sit here became wrong in a way that still LOOKED plausible -- which is
 exactly how a drone gets stood on the wrong mark. The marks also move whenever
 ring_radius or vip_offset changes. The planner reads the live config; prose
 does not.
-geofence        VIP may stray 0.90 m from room centre (arena 1.90 - ring 1.00),
-                then the ring HOLDS and all three defenders go CYAN. It
-                resumes once the DJI is back within 0.65 m AND inside the
+geofence        the VIP must stay at least ring_radius (1.00 m) inside the
+                arena edge -- the NEAREST edge of the arena.yaml polygon less
+                0.10 m (since 2026-11-03; it was a radius about room centre)
+                -- or the ring HOLDS and all three defenders go CYAN. It
+                resumes once the DJI is 0.25 m further in AND inside the
                 parked ring -- so fly it to the MIDDLE, not just back in.
 VIP speed       0.30 m/s budget at rest, 0.05 m/s while blocking (the ring
-                turns at 0.55 rad/s then); --sweep clears 0.00 m/s with the
-                reactive attacker, 0.15 m/s scripted -- hover during the attack
+                turns at 0.55 rad/s then); --sweep clears 0.20 m/s with both
+                attackers in the big arena (0.00 reactive / 0.15 scripted in
+                the old room) -- still hover during the attack
 attacker        plans at 0.80 m/s but its setpoint goes through the same guard
                 as a defender's, so it FLIES at 0.60 m/s at most
 ```

@@ -290,8 +290,8 @@ engagement       starts at 2.10 m, releases at 2.22 m
 separation       0.8 m defender-defender, 1.0 m defender-to-protected,
 floors           attacker keeps 0.8 m off defenders, defenders yield at 0.7 m
 slot order       by bearing, fixed at the gather; nearest slot blocks
-arena            2.00 m tested radius, 1.90 m planned, ceiling 1.85 m
-pilot box        0.90 m from room centre; resumes inside 0.65 m
+arena            the measured floor polygon less 0.10 m; ceiling 1.85 m
+pilot box        stay 1.0 m inside the nearest edge; resumes 1.25 m inside
 mocap            50 Hz   setpoints 20 Hz per aircraft   one radio
 lost tracking    hold 0.3 s, land 1.0 s (0.4 / 2.0 s for the protected one)
 ring gap         1.73 m between adjacent defenders

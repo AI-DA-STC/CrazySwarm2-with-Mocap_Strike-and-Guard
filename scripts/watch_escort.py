@@ -14,9 +14,10 @@ What it watches, and why each one is here:
   tracking has no position measurement, its estimator drifts, and the show
   keeps commanding it from a model that cannot see it -- the 2026-10-07
   fly-away. Gaps are what precede that.
-* each drone's radius from the arena centre, against the setpoint clamp
-  (ARENA_RADIUS_PLAN), the containment trip, and the radius where tracking
-  was actually lost.
+* each drone's distance outside the escort's room (the arena polygon, or
+  circle, less TRACKING_MARGIN: the setpoint clamp), against the containment
+  trip and the line where tracking was lost (radius_lost - radius_tested
+  beyond the arena edge; for the big arena, the walls behind the polygon).
 * actual vs COMMANDED position. Divergence shows up here first, while the
   drone is still inside the room.
 * min pairwise separation against min_pair_sep.
@@ -45,6 +46,10 @@ DOWNWASH_RXY = 0.80
 #: timeline independently, so a different hysteresis would report trips the
 #: show did not take.
 FENCE_HYST = 0.25
+#: How far beyond the arena edge tracking was actually lost (or, for the big
+#: arena, where the walls are): radius_lost - radius_tested. For a circle this
+#: is exactly the old "r > ARENA_RADIUS_LOST" test.
+LOST_BEYOND_EDGE = safety.ARENA_RADIUS_LOST - safety.ARENA_RADIUS_TESTED
 
 
 def enabled_fleet(path):
@@ -133,20 +138,22 @@ class Watch(Node):
                                 if live_cmd else 'stopped streaming'))
         self.streaming = live_cmd
 
-        trip = c.arena_radius + c.contain_margin
+        lost = LOST_BEYOND_EDGE
         for n in flying:
             p = self.pos[n]
             r = float(np.linalg.norm(p[:2] - C))
             self.worst['radius'] = max(self.worst['radius'], r)
-            if r > safety.ARENA_RADIUS_LOST:
-                self._say('LOST ', f'{n}: {r:.2f} m from centre -- past where '
-                                   f'tracking was lost ({safety.ARENA_RADIUS_LOST:.2f})')
-            elif r > trip:
-                self._say('CONTA', f'{n}: {r:.2f} m from centre, past the '
-                                   f'{trip:.2f} m containment')
-            elif r > c.arena_radius:
-                self._say('edge ', f'{n}: {r:.2f} m from centre, past the '
-                                   f'{c.arena_radius:.2f} m clamp')
+            out = -float(escort.room_clearance(c, p))          # + = outside
+            if -float(safety.edge_clearance(p)) > lost:
+                self._say('LOST ', f'{n}: {-float(safety.edge_clearance(p)):.2f} m '
+                                   f'outside the arena -- past where tracking '
+                                   f'was lost ({lost:.2f})')
+            elif out > c.contain_margin:
+                self._say('CONTA', f'{n}: {out:.2f} m outside the clamp, past '
+                                   f'the {c.contain_margin:.2f} m containment')
+            elif out > 0.0:
+                self._say('edge ', f'{n}: {out:.2f} m outside the setpoint '
+                                   'clamp')
             # Only against a LIVE command. The show stops streaming when it
             # lands, and comparing a landed drone against the last setpoint it
             # ever got produces a large CONSTANT error that looks exactly like
@@ -205,17 +212,17 @@ class Watch(Node):
         times a second for as long as the DJI was out.
 
         Mirrors escort_show's predicate deliberately, including its
-        asymmetry: it trips on stray > keep_in, and clears only once the DJI
-        is back inside keep_in - FENCE_HYST *and* within ring_radius of the
+        asymmetry: it trips on vip_room < 0, and clears only once the DJI
+        is back with vip_room >= FENCE_HYST *and* within ring_radius of the
         point the ring parked on. Drift here from escort_show is a bug in
         this file; keep them together.
         """
         c, f = self.cfg, self.fence
-        keep_in = escort.vip_keep_in(c)
         p = self.pos[VIP_BODY]
-        stray = float(np.linalg.norm(p[:2] - C))
+        room = escort.vip_room(c, p)
+        to_edge = room + c.ring_radius
         if f['on']:
-            if stray > keep_in:
+            if room < 0.0:
                 f['on'] = False
                 f['since'] = now
                 # The ring parks on the last position it was still following,
@@ -223,13 +230,13 @@ class Watch(Node):
                 f['centre'] = (f['last_good'] if f['last_good'] is not None
                                else p).copy()
                 f['wall'] = time.time()
-                self._say('FENCE', f'HOLD -- DJI {stray:.2f} m from centre, '
-                                   f'past keep-in {keep_in:.2f}; ring should '
+                self._say('FENCE', f'HOLD -- DJI {to_edge:.2f} m from the arena '
+                                   f'edge, under the {c.ring_radius:.2f} m ring; ring should '
                                    'stop following and hold altitude')
             else:
                 f['last_good'] = p.copy()
         else:
-            in_arena = stray <= keep_in - FENCE_HYST
+            in_arena = room >= FENCE_HYST
             in_ring = float(np.linalg.norm(p[:2] - f['centre'][:2])) <= c.ring_radius
             if in_arena and in_ring:
                 held = now - f['since']
@@ -237,7 +244,7 @@ class Watch(Node):
                 f['last_good'] = p.copy()
                 f['holds'].append((f['wall'], held))
                 self._say('FENCE', f'RESUME after {held:.1f} s -- DJI back '
-                                   f'{stray:.2f} m from centre and inside the '
+                                   f'{to_edge:.2f} m from the edge and inside the '
                                    'parked ring')
 
 
@@ -249,9 +256,9 @@ def main():
     fleet = enabled_fleet(YAML)
     logf = open(a.log, 'a') if a.log else None
     print(f'\n  WATCHING (read-only). fleet: {", ".join(fleet)}; VIP body {VIP_BODY!r}')
-    print(f'  clamp {cfg.arena_radius:.2f} m | containment '
-          f'{cfg.arena_radius + cfg.contain_margin:.2f} m | tracking lost '
-          f'{safety.ARENA_RADIUS_LOST:.2f} m')
+    print(f'  clamp {escort.describe_room(cfg)} | containment '
+          f'{cfg.contain_margin:.2f} m past it | tracking lost '
+          f'{LOST_BEYOND_EDGE:.2f} m past the arena edge')
     print(f'  mocap hold {cfg.self_stale_s:.1f} s | land {cfg.self_stale_land_s:.1f} s'
           f' | pair floor {cfg.min_pair_sep:.2f} m\n')
     rclpy.init()

@@ -55,9 +55,9 @@ The show waits for **Enter** at every stage:
 
 ![The show, step by step](../diagrams/10-show-sequence.png)
 
-**Brief the pilot:** take off only when asked, fly under the ring, keep inside the
-middle of the arena (about 0.9 m from the centre), and **hold still while the attacker
-is pressing**. [Why](how-it-works.md#the-speed-budget).
+**Brief the pilot:** take off only when asked, fly under the ring, keep the DJI well
+inside the flying area (the ring needs about a metre of room on every side), and
+**hold still while the attacker is pressing**. [Why](how-it-works.md#the-speed-budget).
 
 ## In the web console
 

@@ -562,8 +562,9 @@ def main():
     print(f'  ring          {cfg.ring_radius:.2f} m, {where}, '
           f'turning at {cfg.phase_rate:.2f} rad/s, cap {cfg.v_max:.2f} m/s')
     if cfg.vip_airborne:
-        print(f'  VIP keep-in   stay within {escort.vip_keep_in(cfg):.2f} m of '
-              f'[{cfg.room_center[0]:+.2f}, {cfg.room_center[1]:+.2f}] and under '
+        print(f'  VIP keep-in   stay at least {cfg.ring_radius:.2f} m inside the '
+              f'arena ({escort.describe_room(cfg)}), {escort.vip_room(cfg, escort.vip_home(cfg)):.2f} m '
+              f'from the mark at the nearest edge, and under '
               f'{escort.max_vip_speed(cfg):.2f} m/s, or the ring cannot hold')
     print(f'  walk budget   {escort.max_vip_speed(cfg):+.2f} m/s '
           '(how fast the VIP may move)\n')
@@ -1173,11 +1174,14 @@ def main():
             # AND back inside the ring the defenders are still holding. Arena
             # alone would let a DJI re-acquire from outside the formation and
             # drag the whole ring across the room to meet it.
-            stray = float(np.linalg.norm(np.asarray(p_vip, float)[:2]
-                                         - np.array(cfg.room_center)))
-            keep_in = escort.vip_keep_in(cfg)
+            # room: how much further the VIP can go before its ring stops
+            # fitting inside the arena (negative = already past). Measured to
+            # the NEAREST edge, so it is right for a polygon room as well as
+            # a circle (it was a radius about room centre until 2026-11-03).
+            room = escort.vip_room(cfg, p_vip)
+            to_edge = room + cfg.ring_radius
             if fence['on']:
-                if stray > keep_in:
+                if room < 0.0:
                     fence['on'] = False
                     fence['centre'] = np.asarray(fence['last_good'], float).copy()
                     fence['was_airborne'] = cfg.vip_airborne
@@ -1199,8 +1203,9 @@ def main():
                     fence['since'] = time.time()
                     fence['since_t'] = t
                     print(f'\n  [t+{t:5.1f}s {_clock()}] GEOFENCE HOLD #'
-                          f'{len(fence["holds"]) + 1}: the VIP is {stray:.2f} m '
-                          f'out, past {keep_in:.2f} m -- the ring STOPS following '
+                          f'{len(fence["holds"]) + 1}: the VIP is {to_edge:.2f} m '
+                          f'from the arena edge, under the {cfg.ring_radius:.2f} m '
+                          'its ring needs -- the ring STOPS following '
                           'and holds, defenders go CYAN. Fly it back INTO the '
                           'ring to resume.', flush=True)
                     # Cue the defenders to LED_FENCE: without it the ring
@@ -1215,7 +1220,7 @@ def main():
                 else:
                     fence['last_good'] = np.asarray(p_vip, float).copy()
             else:
-                in_arena = stray <= keep_in - FENCE_HYST
+                in_arena = room >= FENCE_HYST
                 in_ring = float(np.linalg.norm(
                     np.asarray(p_vip, float)[:2] - fence['centre'][:2])) <= cfg.ring_radius
                 if in_arena and in_ring:
@@ -1404,8 +1409,8 @@ def main():
                 gripes = escort.vip_problems(cfg, p_vip, info['v_vip'], live)
             else:
                 back = fence['centre']
-                gripes = [f'GEOFENCE holding: VIP {stray:.2f} m from room '
-                          f'centre (limit {keep_in:.2f}), ring parked on '
+                gripes = [f'GEOFENCE holding: VIP {to_edge:.2f} m from the '
+                          f'arena edge (needs {cfg.ring_radius:.2f}), ring parked on '
                           f'[{back[0]:+.2f}, {back[1]:+.2f}] -- bring the VIP '
                           f'back inside {cfg.ring_radius:.2f} m of that point '
                           'to resume']
