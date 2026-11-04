@@ -11,23 +11,23 @@ robots:
     # more Crazyflies can not be found", so NOTHING comes up (2026-10-02).
     # This rig has one dongle, so the wildcard bought nothing.
     uri: radio://0/80/2M/E7E7E7E701
-    initial_position: [1.7552, 1.723, 0.0]
+    initial_position: [1.7784, 1.7563, 0.0]
     type: cf21  # see robot_types
 
   cf2:
     enabled: true
     uri: radio://0/80/2M/E7E7E7E702
-    initial_position: [1.6439, -1.7026, 0.0]
+    initial_position: [1.6762, -1.6802, 0.0]
     type: cf21  # see robot_types
 
   cf3:
     enabled: true
     uri: radio://0/80/2M/E7E7E7E703
-    initial_position: [-1.7242, 1.5663, 0.0]
+    initial_position: [-1.7088, 1.576, 0.0]
     type: cf21  # see robot_types
 
   cf5:
-    enabled: true
+    enabled: false
     uri: radio://0/80/2M/E7E7E7E705
     initial_position: [0.0483, -0.0415, 0.0]
     type: cf21  # see robot_types
@@ -55,7 +55,7 @@ robots:
     # claimed 0.89 m and "every planner will refuse"; both were wrong, and a
     # comment that tells the operator a passing check is failing trains them
     # to distrust the file that IS ground truth.)
-    initial_position: [-1.6173, -1.6578, 0.0]
+    initial_position: [-1.62, -1.6449, 0.0]
     type: cf21  # see robot_types
 
   # cf10-cf14: the STL show's intruders (docs/stl/run.md), on a SECOND
@@ -68,21 +68,21 @@ robots:
   # the colleague's layout -- run scripts/sync_initial_positions.py before
   # flying; stl_show's placement check refuses until they match mocap.
   cf10:
-    enabled: false
+    enabled: true
     uri: radio://1/90/2M/E7E7E7E710
-    initial_position: [-1.5, 1.5, 0.0]
+    initial_position: [-3.7975, 1.678, 0.0]
     type: cf21  # see robot_types
 
   cf11:
-    enabled: false
+    enabled: true
     uri: radio://1/90/2M/E7E7E7E711
-    initial_position: [-1.5, 0.75, 0.0]
+    initial_position: [-3.8365, 2.4019, 0.0]
     type: cf21  # see robot_types
 
   cf12:
-    enabled: false
+    enabled: true
     uri: radio://1/90/2M/E7E7E7E712
-    initial_position: [-1.5, 0.0, 0.0]
+    initial_position: [-3.8222, 3.2238, 0.0]
     type: cf21  # see robot_types
 
   cf13:
