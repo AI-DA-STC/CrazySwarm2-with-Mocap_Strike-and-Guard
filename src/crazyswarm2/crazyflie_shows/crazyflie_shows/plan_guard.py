@@ -2,6 +2,10 @@
 """Check the guard show offline -- and compare strategies -- with no drones.
 
     ros2 run crazyflie_shows plan_guard                      # 4 v 3, defaults
+    ros2 run crazyflie_shows plan_guard --defenders cf1,cf2,cf3,cf4 \
+        --attackers cf10,cf11,cf12             # YOUR drones, at their roster marks
+    ros2 run crazyflie_shows plan_guard --defenders cf1,cf2 --attackers cf10 --live
+                                               # ...at where mocap sees them NOW
     ros2 run crazyflie_shows plan_guard --defenders 3 --attackers 2 --seeds 30
     ros2 run crazyflie_shows plan_guard --defense ring --attack direct
     ros2 run crazyflie_shows plan_guard --matrix             # every pairing
@@ -76,6 +80,47 @@ def recommend_marks(cfg, vip, n_def, n_att):
             r -= 0.1
         marks[f'A{j + 1}'] = q
     return {k: np.array([v[0], v[1], 0.0]) for k, v in marks.items()}
+
+
+def roster_marks(names):
+    """name -> floor mark from crazyflies.yaml (the installed copy)."""
+    import yaml
+    from crazyflie_shows.plan_show import default_yaml
+    with open(default_yaml()) as fh:
+        robots = yaml.safe_load(fh)['robots']
+    missing = [n for n in names if n not in robots]
+    if missing:
+        raise SystemExit(f'not in crazyflies.yaml: {missing}')
+    off = [n for n in names if not robots[n].get('enabled', False)]
+    if off:
+        print(f'  NOTE          enabled: false in the roster, so the server will '
+              f'not fly them: {", ".join(off)}')
+    return {n: np.array(robots[n]['initial_position'], float) for n in names}
+
+
+def live_marks(names, wait=4.0):
+    """name -> where /poses sees it now (floor height ignored)."""
+    import rclpy
+    from rclpy.qos import qos_profile_sensor_data
+    from motion_capture_tracking_interfaces.msg import NamedPoseArray
+    rclpy.init()
+    node = rclpy.create_node('plan_guard_marks')
+    got = {}
+
+    def cb(msg):
+        for p in msg.poses:
+            got[p.name] = np.array([p.pose.position.x, p.pose.position.y, 0.0])
+    node.create_subscription(NamedPoseArray, '/poses', cb, qos_profile_sensor_data)
+    end = time.time() + wait
+    while time.time() < end and not all(n in got for n in names):
+        rclpy.spin_once(node, timeout_sec=0.1)
+    node.destroy_node()
+    rclpy.try_shutdown()
+    missing = [n for n in names if n not in got]
+    if missing:
+        raise SystemExit(f'not on /poses: {missing} (is mocap up, on this '
+                         'ROS_DOMAIN_ID, with those rigid-body names?)')
+    return {n: got[n] for n in names}
 
 
 def mark_problems(cfg, rules, vip, marks, defenders, attackers):
@@ -229,8 +274,16 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     ap.add_argument('--defense', default='shell')
     ap.add_argument('--attack', default='coordinated')
-    ap.add_argument('--defenders', type=int, default=4)
-    ap.add_argument('--attackers', type=int, default=3)
+    ap.add_argument('--defenders', default='4',
+                    help='a count (planned marks) or names cf1,cf2,... '
+                         '(their initial_position in crazyflies.yaml)')
+    ap.add_argument('--attackers', default='3', help='as --defenders')
+    ap.add_argument('--live', action='store_true',
+                    help='with names: plan from where /poses sees the drones '
+                         'now, not from the roster (mocap must be up)')
+    ap.add_argument('--vip', default='',
+                    help='x,y,z of a point VIP (default: the escort VIP mark '
+                         'at DJI height)')
     ap.add_argument('--seeds', type=int, default=12)
     ap.add_argument('--seed0', type=int, default=0)
     ap.add_argument('--tau', type=float, default=0.25,
@@ -281,10 +334,17 @@ def main(argv=None):
         raise SystemExit("--rules all needs --matrix")
     rules = rule_sets.make(rule_names[0], _kv(a.rparam))
 
-    vip = vip_mark(cfg)
-    D = [f'D{i + 1}' for i in range(a.defenders)]
-    A = [f'A{j + 1}' for j in range(a.attackers)]
-    marks = recommend_marks(cfg, vip, a.defenders, a.attackers)
+    vip = (np.array([float(x) for x in a.vip.split(',')]) if a.vip
+           else vip_mark(cfg))
+    named = not (a.defenders.isdigit() and a.attackers.isdigit())
+    if named:
+        D = [n for n in a.defenders.split(',') if n]
+        A = [n for n in a.attackers.split(',') if n]
+        marks = (live_marks(D + A) if a.live else roster_marks(D + A))
+    else:
+        D = [f'D{i + 1}' for i in range(int(a.defenders))]
+        A = [f'A{j + 1}' for j in range(int(a.attackers))]
+        marks = recommend_marks(cfg, vip, len(D), len(A))
     bad_cfg = problems(cfg)
     for name in rule_names:
         bad_cfg += [f'rules {name}: {b}' for b in
@@ -292,8 +352,12 @@ def main(argv=None):
                     .problems(cfg)]
     bad_marks, starts = mark_problems(cfg, rules, vip, marks, D, A)
 
-    print(f'\n  GUARD - offline check   {a.defenders} defenders v {a.attackers} '
+    print(f'\n  GUARD - offline check   {len(D)} defenders v {len(A)} '
           f'attackers   rules: {", ".join(rule_names)}')
+    if named:
+        src = 'live /poses' if a.live else 'crazyflies.yaml initial_position'
+        print(f'  drones        defence {",".join(D)}; attack {",".join(A)} '
+              f'(from {src})')
     print(f'  arena         {escort.describe_room(cfg)}; band '
           f'{cfg.floor:.2f}..{cfg.ceiling:.2f} m')
     print(f'  VIP           [{vip[0]:+.2f}, {vip[1]:+.2f}, {vip[2]:.2f}]'
