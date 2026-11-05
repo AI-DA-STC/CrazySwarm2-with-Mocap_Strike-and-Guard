@@ -171,6 +171,27 @@ ros2 topic echo /cf1/connection_statistics --once
 > two dongles — the rules in
 > [mocap.md section 3c](mocap.md#3c-trim-drone-log-topics-to-protect-radio-bandwidth).
 
+### Testing on the mocap Wi-Fi without internet (`offline_window.sh`)
+
+With the wired port taken, the laptop is on one Wi-Fi at a time: `motive` (mocap,
+no internet) or the internet one. `scripts/offline_window.sh` runs a probe on
+`motive` and always switches back: it syntax-checks the probe first, logs to
+`log/offline/<stamp>/run.log`, opens a terminal window that follows that log
+live, and a watchdog reconnects the internet Wi-Fi even if the script is killed.
+It refuses to run while a crazyflie server or mocap node is up, and keeps
+everything it starts on a private `ROS_DOMAIN_ID`.
+
+```bash
+scripts/offline_window.sh --dry-run console_network   # all phases, no network switch
+scripts/offline_window.sh console_network             # the real thing (~3 min offline)
+```
+
+Probes live in `scripts/offline_probes/`. The header of `offline_window.sh` says
+how to write one. `console_network` checks the console, its journal, the mission
+window (headless Chrome) and Motive discovery across a switch. Node >= 22 (via
+nvm) and `google-chrome` are needed for its browser tests; without them it skips
+those tests.
+
 ### Prop-spin ground test (`arming` example)
 
 ```bash

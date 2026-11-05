@@ -522,4 +522,21 @@ in it, and why, is in [server-changes.md](server-changes.md).
   (`crazyswarm_py.py`, atexit — survives exceptions and Ctrl-C; if rclpy is
   already shut down the deck keeps its last color). Change colors manually
   with `scripts/led.sh` or `ros2 run crazyflie_examples color_led`.
+- **Console blind after a Wi-Fi switch (2026-11-05).** The mission console runs
+  every check through the `ros2` CLI, and so through the `ros2` daemon, which it
+  spawns when it starts. Its fleet journal is a long-running
+  `ros2 topic echo /rosout`. Both join DDS on the network the laptop had **when
+  the console started**. Switch Wi-Fi afterwards (hangar → `motive`, because the
+  wired port is taken) and both go deaf, while RViz, the preflight GUI and the
+  drones, all launched after the switch, work normally. Symptom: health says
+  "crazyflie_server not running" and every drone is BLOCKED during a real flight.
+  Reproduced with `scripts/offline_window.sh console_network` (sim, private
+  domain). After the switch the old daemon's `ros2 node list` was **empty** while
+  `--no-daemon` saw the server. The journal heard **0 of 2** `land` commands while
+  reporting "listening". `ros2 daemon stop` fixes health but **not** the journal,
+  which is a separate process. Not affected: the mission window's 3D view (the
+  browser talks to foxglove_bridge directly; headless Chrome drew best-effort
+  `/poses` fine after the switch). **Fix today: switch networks first, then
+  start the console. If the network changes, restart the console and run
+  `ros2 daemon stop`.**
 
