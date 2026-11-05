@@ -174,6 +174,9 @@ class ProcessManager:
         self.env = dict(env or os.environ)
         self.procs = {}
         self._lock = threading.Lock()
+        #: flightlog.FlightRecorder, set by the server: records every flight
+        #: (is_flight) to its own folder. None = no recording.
+        self.recorder = None
 
     # --- lifecycle ---------------------------------------------------------
     def start(self, action_id, label, argv, kind='task', note='', cwd=None):
@@ -181,10 +184,17 @@ class ProcessManager:
         with self._lock:
             self.procs[proc.id] = proc
 
+        extra = {}
+        if self.recorder is not None and is_flight(action_id):
+            try:
+                extra = self.recorder.prepare(proc)
+            except Exception:                          # noqa: BLE001 - never block a flight
+                extra = {}
         master, slave = pty.openpty()
         try:
             os.set_blocking(master, True)
             env = dict(self.env)
+            env.update(extra)
             env.setdefault('PYTHONUNBUFFERED', '1')
             env.setdefault('TERM', 'dumb')
             # ros2 CLI colours its output; TERM=dumb + this keeps the log clean.
@@ -200,6 +210,8 @@ class ProcessManager:
             proc.ended = time.time()
             self._emit_line(proc, f'!! failed to start: {exc}')
             self._emit_state(proc)
+            if extra:
+                self.recorder.finished(proc)
             return proc
         finally:
             try:
@@ -210,6 +222,8 @@ class ProcessManager:
         proc.master_fd = master
         self._emit_line(proc, f'$ {proc.cmdline}')
         self._emit_state(proc)
+        if extra:
+            self.recorder.started(proc)
         threading.Thread(target=self._pump, args=(proc,), daemon=True).start()
         return proc
 
@@ -264,6 +278,8 @@ class ProcessManager:
         proc.ended = time.time()
         self._emit_line(proc, f'[exit {proc.returncode}]')
         self._emit_state(proc)
+        if self.recorder is not None:
+            self.recorder.finished(proc)
 
     def stop(self, proc_id, hard=False):
         proc = self.procs.get(proc_id)
@@ -368,6 +384,8 @@ class ProcessManager:
             proc.seq += 1
             row = (proc.seq, time.time(), text)
             proc.lines.append(row)
+        if self.recorder is not None:
+            self.recorder.line(proc, row[1], text)
         self.bus.publish({'type': 'line', 'proc': proc.id, 'seq': row[0], 'text': text})
 
     def _emit_state(self, proc):

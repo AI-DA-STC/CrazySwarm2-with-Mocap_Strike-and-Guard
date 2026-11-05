@@ -59,6 +59,9 @@ VAR_BYTES = {
     'stateEstimateZ.vx': 2, 'stateEstimateZ.vy': 2, 'stateEstimateZ.vz': 2,
     'stateEstimateZ.x': 2, 'stateEstimateZ.y': 2, 'stateEstimateZ.z': 2,
     'supervisor.info': 2, 'pm.state': 1,
+    # uint16 PWM (log TOC, cache/E46BE59F.json): the downwash block
+    'motor.m1': 2, 'motor.m2': 2, 'motor.m3': 2, 'motor.m4': 2,
+    'pm.vbatMV': 2,
 }
 LOG_BLOCK_BYTES = 26
 MIN_SEPARATION_M = 1.0

@@ -103,6 +103,15 @@ nothing. Then fly with the command on the demo's page.
 After an E-STOP, unplug and re-plug **every** drone's battery. Until you do, the drones
 refuse to arm, and there is no error message.
 
+## After the flight
+
+Every flight started from the console is recorded: what the show printed, the drones'
+commands against where mocap saw them, battery and radio, and a report. To record a
+flight started from a terminal, put `./scripts/record_flight.sh` in front of the
+command. The folder is printed at the start and at the end (under
+`~/.ros/flight_logs/`). Open `report.txt` in it. What everything means is in
+[details/flight-logs.md](details/flight-logs.md).
+
 ## The web console (optional)
 
 Prefer buttons to terminals? Run `./console/run.sh`, open http://localhost:8077, and pick

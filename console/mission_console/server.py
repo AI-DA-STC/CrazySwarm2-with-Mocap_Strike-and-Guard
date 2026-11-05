@@ -21,7 +21,7 @@ from urllib.parse import urlparse, parse_qs
 
 import yaml
 
-from . import builds, catalog, configio, missions, settings, system, usage
+from . import builds, catalog, configio, flightlog, missions, settings, system, usage
 from .journal import Journal
 from .health import Health
 from .procs import EventBus, ProcessManager, is_flight
@@ -41,6 +41,7 @@ class App:
     def __init__(self):
         self.bus = EventBus()
         self.procs = ProcessManager(self.bus, REPO)
+        self.procs.recorder = flightlog.FlightRecorder(self.procs, REPO)
         self.health = Health(self.procs)
         self.history = []
         self._health_lock = threading.Lock()

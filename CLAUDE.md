@@ -49,6 +49,10 @@ Motive ──NatNet multicast 50 Hz──► motion_capture_tracking ──/pose
   (`measured: false` makes the escort planner refuse; the STL game ignores it).
 - `src/crazyswarm2/crazyflie/src/crazyflie_server.cpp`: heavily patched; read
   `docs/details/server-changes.md` before touching it.
+- Flight logs: every console flight (and any run through `scripts/record_flight.sh`) gets
+  `~/.ros/flight_logs/<stamp>_<script>/` with output, meta, config, a bag and
+  `report.txt` (`ros2 run crazyflie_shows flight_report <folder>`). Read it before
+  guessing what happened in a flight: docs/details/flight-logs.md.
 - `console/`: optional web GUI, removable (`rm -rf console/` changes nothing else).
   Drives the `ros2` CLI as subprocesses, never in-process rclpy. Each demo's window is
   `src/crazyswarm2/crazyflie_shows/missions/<demo>.yaml`. Read `console/README.md` first.

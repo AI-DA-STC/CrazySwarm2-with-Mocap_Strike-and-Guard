@@ -242,6 +242,20 @@ one. It is a plain file on purpose: read it from a shell, or ask Claude to,
 before rearranging anything. `MISSION_CONSOLE_USAGE_DIR` redirects it — set it
 for a test console so test clicks never count as the operator's.
 
+**Flight logs** (`mission_console/flightlog.py`). Every process `is_flight`
+says commands drones gets its own folder under `~/.ros/flight_logs/`:
+- the show's output, wall-clock stamped;
+- `meta.json`: argv, git commit, domain, exit;
+- copies of crazyflies.yaml and arena.yaml;
+- a `ros2 bag record` (mcap) of `/poses`, the drones' commands, onboard poses
+  and status, and `/rosout`;
+- after the flight, `ros2 run crazyflie_shows flight_report <folder>`.
+
+The recorder and the report run as ordinary processes in the live console. The
+show gets `$FLIGHT_LOG_DIR`. `FLIGHT_LOG_ROOT` moves the folders, and
+`MISSION_CONSOLE_FLIGHT_LOG=0` turns recording off. Contents and how to read
+them: [../docs/details/flight-logs.md](../docs/details/flight-logs.md).
+
 ---
 
 ## Access
@@ -331,6 +345,7 @@ console/
     system.py                census of rig processes on the machine: any domain, any origin
     journal.py               fleet-command journal from /rosout (ros2 topic echo --csv)
     usage.py                 the usage log and dashboard prefs
+    flightlog.py             every flight recorded: output, bag, meta, report
     static/                  index.html, app.js, style.css
       mission/               the mission window: index.html app.mjs ros.mjs scene.mjs plan2d.mjs mission.css
       vendor/                Preact+htm, three.js (vendored: the rig network is offline)

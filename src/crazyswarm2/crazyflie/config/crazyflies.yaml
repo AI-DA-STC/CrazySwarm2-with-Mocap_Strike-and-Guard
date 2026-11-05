@@ -206,6 +206,27 @@ all:
           - range.zrange          # uint16, mm
           - stateEstimateZ.vx     # int16, mm/s
           - stateEstimateZ.vy     # int16, mm/s
+      # OFF by default. The downwash detector's OPTIONAL firmware half
+      # (2026-11-05): flight_report already flags a drone that sinks while
+      # another drone (or the DJI) is above it from MOCAP alone; uncomment this
+      # to also see how hard the drone fought it (thrust, motor PWM, tilt,
+      # acc.z). Turn it on only to investigate downwash: it is ~10 more
+      # packets/s per drone on links that already warn. 24 B of the 26 B
+      # log-block budget; every var checked in this fleet's log TOC
+      # (cache/E46BE59F.json): stock firmware groups. Keep this var ORDER
+      # (flight_report reads it from the flight's config copy).
+      # docs/details/flight-logs.md, "The downwash detector".
+      # downwash:
+      #   frequency: 10 # Hz
+      #   vars:
+      #     - stabilizer.roll       # float, deg
+      #     - stabilizer.pitch      # float, deg
+      #     - stabilizer.thrust     # float, 0..65535 commanded collective thrust
+      #     - acc.z                 # float, g (1.0 hovering; a dip = being pushed down)
+      #     - motor.m1              # uint16, PWM 0..65535 (near the top = saturated)
+      #     - motor.m2              # uint16
+      #     - motor.m3              # uint16
+      #     - motor.m4              # uint16
       # attitude:
       #   frequency: 10 # was 50
       #   vars:
