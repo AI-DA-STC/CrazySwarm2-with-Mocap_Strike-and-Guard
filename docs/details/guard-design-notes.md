@@ -263,6 +263,96 @@ The mission console's window is `missions/guard.yaml`: every choice above, the g
 as buttons, indicators for phase, rules, result, last down or strike and safety, a
 VIP keyboard for `vip_mode:=manual`, and the 3D view with the show's markers.
 
+## Making the match readable (2026-11-05)
+
+The show had been flown several times on hardware (4 v 3, cf1-cf4 against
+cf10-cf12). Three problems came out of those flights. First, the strategies'
+intent was only partly visible. Second, most matches ended on a near-miss
+landing before a winner was obvious. Third, who won lived in the console.
+
+**Intent, not clutter.** Strategies now say what each drone means to do
+(`Intent`: kind, goal, target) and what the team's play is (`plan`). The viz
+draws these as an operations map. The engine hands them to the picture only,
+never to the opponent. Recording them does not change play: `plan_guard` gives
+the same result, match time and closest pair as before the change, on 12 seeds
+of the defaults and on 8 seeds of `pressure` with a drifting VIP.
+
+What was removed:
+- the body sphere on each drone (it sat on top of the real drone);
+- the always-on keep-out ellipsoids, now shown only while the CBF is changing that
+  drone's command;
+- the translucent strike and keep-out spheres round the VIP, now two circles.
+
+**Near misses: graded, glitch-filtered, explained.** The old watch landed
+everything when two measured drones were inside 0.7 of the floor ellipsoid on
+a single frame. Two things made that end matches it did not need to end:
+- One frame is enough for a mocap glitch to count. A swapped or ghost rigid
+  body puts a drone on top of another for a frame or two.
+- Landing does not separate a close pair. Holding does: the CBF already keeps the
+  *setpoints* `d_cc` apart, so held aircraft settle back apart.
+
+So now (guard/watch.py):
+- A pose that jumps further than a Crazyflie can fly is a glitch. The drone flies
+  on its setpoint for that tick, and the glitch is counted.
+- A soft near miss on two ticks in a row pauses the match.
+- Inside 0.55 of the floor (0.19 m across, 0.34 m vertically), or a pause that
+  does not clear in 3 s, everything lands.
+- `near_miss_pause:=false` restores the old rule.
+
+**Why the near misses happened is not known yet.** No output from those flights
+was kept. The stand-in aircraft in `plan_guard` (first-order lag, 0.25 s) never
+comes inside the floor, so the cause is something it does not model: real
+tracking, mocap glitches, or both. Every near miss now prints the setpoint gap
+and each drone's tracking error at that tick. Each run writes a trace to
+its flight folder (`guard_trace.csv`, next to the bag the console records: [flight-logs.md](flight-logs.md)). The next hardware session should answer it.
+
+**The finale (guard/finale.py)** makes the result visible on the drones:
+- losers dark, low, home, landed;
+- winners green, in an honour guard (defence) or a capture ring (attack);
+- the attacker that struck stays up for the capture.
+
+It flies through `Match.steer`, so the CBF is under it, and `plan_guard` checks it
+on every seed. Measured on 8 seeds each, all reached the end of the finale:
+4 v 3 under `tag`, `timer` and `pressure`; 2 v 1; 5 v 5 `zone_pressure`; tau 0.4.
+
+The first version landed the losers at their marks wherever the VIP was. With a
+drifting VIP that was unsafe: down to 0.50 of the VIP keep-out at 0.5 m/s. A drone
+being landed is a fixed obstacle that cannot dodge, and nothing stops a hand-flown
+DJI. Losers now land only `land_clear` (0.8 m) beyond the keep-out. The capture
+ring is at 1.8 ± 0.12 m.
+
+**A moving DJI: what `plan_guard --vip-move` says** (8 seeds, VIP on a 0.6 m
+circle; the worst figure is the closest any aircraft came, as a fraction of the
+VIP keep-out):
+
+| Rules | Drift | Worst | Verdict |
+|---|---|---|---|
+| `tag` | 0.1 to 0.5 m/s | 0.98 to 0.94 | SAFE |
+| `timer`, finale on | 0.3 m/s | 0.95 | SAFE |
+| `timer`, finale on | 0.5 m/s | 0.88 (1 seed) | FAILED: the winning striker rallying from the keep-out's edge, aircraft lag |
+| `pressure` | 0.1 m/s | 0.98 | SAFE |
+| `pressure` | 0.2 to 0.5 m/s | 0.85 to 0.66 | FAILED |
+
+The `pressure` failures **predate this change**. They are downed *defenders*
+being landed straight down near the VIP while it drifts onto them. This is the same
+mechanism the finale fix removes. Widening `d_vip` does not help (tried 1.35).
+
+The fix is to have a downed drone move clear of the VIP through the CBF before it
+is landed. That changes the match: the drone stays an obstacle for longer, and the
+balance shifts. It is not done yet. Until it is, fly the DJI under `tag` (only
+attackers are downed, out where defenders meet them), and keep the DJI slow
+(≤ 0.3 m/s) during the match and the finale.
+
+**LEDs.** The cues are now:
+- out of play: dark (amber read as red across the room);
+- scoring: white (a defender tagging, an attacker in the strike zone);
+- decoy: magenta;
+- finale: winners green.
+
+Each cue is sent only on a change, at most every 0.25 s per drone. None of it has
+been seen on hardware yet. Magenta against red is the one most likely to be hard to
+tell apart.
+
 ## Before the first hardware flight
 
 **Proven in the simulator** (which has no mocap, so poses come from setpoints):

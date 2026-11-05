@@ -12,7 +12,7 @@ above and below the VIP as well as around it.
 
 import numpy as np
 
-from crazyflie_shows.guard.policies import Policy, register
+from crazyflie_shows.guard.policies import Intent, Policy, register
 from crazyflie_shows.guard.policies.common import (assign, into_room, seek,
                                                    unit)
 from crazyflie_shows.guard.world import ATTACK, DEFENSE
@@ -66,6 +66,7 @@ class Shell(Policy):
         vip = view.vip_p
         vmax = view.v_max(self.team)
         out = {}
+        self.intents = {}
         if not D:
             return out
         if not A:
@@ -132,11 +133,14 @@ class Shell(Policy):
                 back = into_room(vip + unit(d.p - vip) * p['r_shell'], view.arena)
                 out[d.name] = seek(d.p, back, vmax, cfg.a_max)
                 self.labels[d.name] = 'bail'
+                self.intents[d.name] = Intent('bail', back.copy(), A[i].name)
                 continue
             out[d.name] = seek(d.p, points[ci], vmax, cfg.a_max, feeds[ci])
             self._prev[d.name] = (A[i].name, kind)
             self.labels[d.name] = (f'block {A[i].name}' if kind == 0
                                    else f'pincer {A[i].name}')
+            self.intents[d.name] = Intent('block' if kind == 0 else 'pincer',
+                                          np.array(points[ci], float), A[i].name)
         return out
 
     @staticmethod
@@ -177,4 +181,5 @@ class Shell(Policy):
         for di, si in assign(cost):
             out[D[di].name] = seek(D[di].p, slots[si], vmax, view.cfg.a_max)
             self.labels[D[di].name] = 'post'
+            self.intents[D[di].name] = Intent('post', np.array(slots[si], float))
         return out

@@ -56,6 +56,12 @@ Each team's brain, swappable by name.
   - `DEFAULTS` lists your tunables. Passing a misspelled one is an error, not a
     silent default.
   - `labels` holds a word per drone, shown in logs and RViz.
+  - `intents` (optional) holds an `Intent(kind, goal, target)` per drone: what move
+    it is making, where it is heading and which opponent it is about. `plan`
+    (optional) holds the team's play (`phase`, `lanes`, `decoy`). Both are for the
+    picture and the LEDs only. The engine passes them to the viz in the `Tick`,
+    never to the other strategy. `DEFENSE_KINDS` / `ATTACK_KINDS` in
+    `policies/__init__.py` list the kinds the viz has symbols for.
 - **Plugging in:** decorate the class with `@register`, then choose it by name
   (`-p defense:=...`, `-p attack:=...`). To use a strategy without editing the
   package, put it in any importable module and pass `-p policy_module:=...` (show)
@@ -163,17 +169,67 @@ The rule numbers live with each rule set, not here.
 keep-out, or a separation floor below anything with flight evidence. Field names match the escort's config, so the containment check
 and the room helpers are shared, not copied.
 
-## 7. `guard/viz.py`: the RViz picture
+## 7. `guard/viz.py`: the picture, as an operations map
 
-It draws:
-- the room outline;
-- the VIP with its keep-out and strike sphere;
-- drones coloured by team, grey once out of play, with their keep-outs, trails and
-  behaviour labels;
-- a scoreboard.
+The same markers go to RViz and to the console's 3D view. Its module docstring
+has the full symbol table. In short:
+- **Who is who:** a team-coloured halo and a label per drone. The drone itself is
+  the real one (TF / `/poses`); only `plan_guard --rviz`, which has no real
+  drones, adds a body sphere (`GuardViz(bodies=True)`).
+- **What each drone means to do:** its `Intent` as a symbol: a block's screen
+  bar, a pincer's hook, a staging circle, a strike arrow, and so on. A dotted
+  line runs to the opponent it is about.
+- **The attack's plan:** its lanes as axes of advance, and the phase on the
+  scoreboard (`attack COMMITTED behind decoy cf11`).
+- **The safety layer at work:** a drone's keep-out shows only on the ticks the
+  CBF changed its command (`Match.corrected`).
+- **Events and result:** a ring bursts where a drone is downed, and at the VIP
+  on a strike. The VIP turns green or red under a banner.
 
-Publishing is best effort: a failed marker costs a picture, never a flight. Open it
-with `rviz2 -d <share>/crazyflie_shows/data/guard.rviz`.
+Markers that were drawn last tick and not this one are deleted at once, so a
+changed intent never lingers. Publishing is best effort: a failed marker costs
+a picture, never a flight.
+
+## 7a. `guard/finale.py`: the end, made obvious
+
+After the result, the same for every strategy and rule set:
+1. **Rally.** The winners take a formation round the VIP. The losers sink to
+   `floor + loser_dz`, fly home to their marks and are landed there.
+2. **Emote.**
+   - Defence wins: an honour guard turning with a Mexican wave.
+   - Attack wins: a capture ring squeezing in and out. The attacker whose strike
+     won is reinstated (`Match.reinstate`) instead of landed.
+3. **Home.** The winners fly to their marks at start height and hold. A mark
+   with a downed drone on it is moved aside.
+
+Every move is `Match.steer`: requests to goals, through the same safety
+layer, with no strategy, referee or match clock. Losers are handed to the
+landing commander with `Match.retire`. The formation is VIP-relative, so a
+moving DJI drags it along.
+
+Lights, per drone: `win` (green), `team` (its colour), `off`. `check()`
+refuses a ring inside the VIP keep-out or a speed above either team cap.
+`plan_guard` flies the finale on its stand-in aircraft and checks it like the
+match (`--no-finale` to skip; `--matrix` never flies it).
+
+## 7b. `guard/watch.py`: the near-miss watch
+
+It runs on the *measured* aircraft every tick in `guard_show`, gates included:
+- **Mocap glitch:** a pose that jumps more than `mocap_jump_m` in one tick, plus
+  what the drone could have flown through any missing frames. The drone is
+  flown on its setpoint for two ticks, and the glitch is counted. It is not a
+  near miss.
+- **Soft near miss** (`near_miss_ratio` of the floor ellipsoid, for
+  `near_miss_ticks` ticks in a row): the match pauses and every drone holds
+  through the safety layer. Play resumes once every pair is back outside
+  `near_miss_clear_ratio`.
+- **Hard near miss** (`near_miss_land_ratio`), or a pause longer than
+  `near_miss_pause_s`: everything lands. `near_miss_pause:=false` restores the
+  old rule, where a soft near miss lands everything.
+
+Each near miss is printed with its evidence: the measured gap, the setpoint gap
+at the same tick, and each drone's tracking error. These separate "the plan put
+them there" from "the aircraft lagged the plan".
 
 ## 8. The programs
 
@@ -193,5 +249,15 @@ with `rviz2 -d <share>/crazyflie_shows/data/guard.rviz`.
   - **VIP pose lost:** hold, then land;
   - **each drone:** stale mocap, outside the room, or not following its setpoint
     (the escort's check, shared);
-  - **near miss:** two *measured* aircraft inside the near-miss fraction of the
-    floor.
+  - **near miss:** two *measured* aircraft too close: a pause, or a landing if
+    much closer (7b above).
+
+  It also drives the LEDs:
+  - role lights mid-match: white while scoring, magenta for the decoy, dark when
+    out of play; `role_lights:=false` turns them off;
+  - the finale's lights.
+
+  Each change is sent once, at most every 0.25 s per drone. `trace:=true` (the
+  default) writes every tick's measured and commanded position, phase and intent
+  per drone to `guard_trace.csv` in the flight's folder
+  ([flight-logs.md](flight-logs.md)).

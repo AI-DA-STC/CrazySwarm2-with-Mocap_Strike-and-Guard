@@ -5,7 +5,8 @@
 # N defenders v M attackers, strategies and rule sets chosen by name. One
 # window: the choices made before takeoff, the Enter gates of a paced run
 # (arm, the DJI's take-off, start, the DJI's landing), the match as it happens,
-# and a 3D view with the show's own markers (meters included).
+# and a 3D view with the show's own markers: an operations map of what each
+# drone means to do (screens, pincers, staging areas, strike arrows, lanes).
 mission: 1
 title: Guard (N v M)
 summary: >
@@ -93,6 +94,21 @@ options:
     type: number
     default: 0.45
     omit_default: true
+  - name: finale
+    label: Finale (winners rally round the VIP and emote; losers go dark and home)
+    type: bool
+    default: true
+    omit_default: true
+  - name: role_lights
+    label: Role lights in the match (white = scoring, magenta = decoy)
+    type: bool
+    default: true
+    omit_default: true
+  - name: near_miss_pause
+    label: Near miss pauses the match (off = lands everything, the old way)
+    type: bool
+    default: true
+    omit_default: true
   - name: seed
     label: Seed
     type: number
@@ -147,6 +163,11 @@ indicators:
   - {label: Result, match: '(?P<w>DEFENSE|ATTACK) WINS', value: '$w wins', tone: {DEFENSE wins: ok, ATTACK wins: warn}, initial: '--'}
   - {label: Last event, match: 't\+\s*[\d.]+s\s+(?P<e>\w+ (DOWNED|STRUCK) \w*)', value: '$e', initial: '--'}
   - {label: Safety, match: 'NEAR MISS', value: NEAR MISS, tone: {NEAR MISS: fail}, initial: ok}
+  - {label: Safety, match: 'SAFETY PAUSE --', value: SAFETY PAUSE, tone: {SAFETY PAUSE: warn}}
+  - {label: Safety, match: 'SAFETY PAUSE over', value: ok, tone: {ok: ok}}
+  - {label: Safety, match: 'MOCAP GLITCH', value: mocap glitch, tone: {mocap glitch: warn}}
+  - {label: Phase, match: 'FINALE  ', value: finale, tone: {finale: ok}}
+  - {label: VIP, match: 'VIP (?P<v>SECURE|COMPROMISED)', value: '$v', tone: {SECURE: ok, COMPROMISED: fail}, initial: '--'}
   - {label: Safety, match: 'CBF emergency', value: CBF emergency, tone: {CBF emergency: warn}}
   - {label: Hold, match: 'HOLD --', value: holding, tone: {holding: warn}, initial: '--'}
   - {label: Placement, match: 'all drones within tolerance', value: ok, tone: {ok: ok}, initial: '--'}
@@ -158,7 +179,8 @@ events:
   - 'WINS'
   - '>>> '
   - 'HOLD --'
-  - 'NEAR MISS|CBF emergency'
+  - 'NEAR MISS|CBF emergency|SAFETY PAUSE|MOCAP GLITCH'
+  - 'FINALE'
   - '\*\*\*'
   - 'landed and disarmed'
   - 'SAFETY LAYER'

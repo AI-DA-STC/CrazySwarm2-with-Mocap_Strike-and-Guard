@@ -75,13 +75,50 @@ Check a rule set with `plan_guard --rules <name>` before flying it.
 
 ## What you will see
 
-Defenders are blue and attackers red. A drone that is **taken out** turns amber and
-lands; depending on the rules, that can happen to either side. An attacker that
-holds close to the VIP **strikes** and lands too. The attack wins on a strike. The
-defence wins by taking out every attacker, or by holding until the clock runs out.
+**On the drones.** Defenders are blue and attackers red.
+- A drone turns **white** while it is scoring. For a defender, that means taking an
+  attacker out; for an attacker, it means sitting inside the strike zone.
+- An attacker sent in first as a **decoy** turns magenta.
+- A drone that is **taken out** goes dark and lands; depending on the rules, that
+  can happen to either side.
 
-In RViz, each drone's label shows how close it is to being taken out (`d40%`), and
-an attacker's how close it is to striking (`s40%`).
+The attack wins on a strike. The defence wins by taking out every attacker, or by
+holding until the clock runs out.
+
+**At the end (the finale).** Every move in the finale still goes through the safety
+layer.
+- **The losers** go dark, sink low, fly home to their marks and land.
+- **The winners** flash green and gather round the VIP:
+  - *Defence wins*: a slow honour guard with a wave running round it.
+  - *Attack wins*: a tight ring that squeezes in and out round the VIP. The attacker
+    that struck stays up for this. If the DJI moves, the ring follows it: the VIP is
+    captured.
+- Then the winners fly home, hold over their marks, and land as usual.
+
+Turn the finale off with `-p finale:=false`.
+
+**In RViz or the console's 3D view**, the map shows what each drone means to do:
+
+| You see | It means |
+|---|---|
+| blue line ending in a bar across | a defender **blocking** an attacker's way in |
+| blue curved arrow | a defender coming round the side (**pincer**) |
+| blue diamond | a defender's **post** while nothing is coming |
+| red dashed line to a small circle | an attacker going to its **staging** point |
+| thick red arrow | an attacker **striking**; magenta is the **decoy** |
+| dashed amber arrow | an attacker **feinting** (showing one side, going for another) |
+| faint red lines out from the VIP | the attack's **lanes**: dashed while staging, arrows once it commits |
+| a faint bubble round a drone | the safety layer is changing that drone's path right now |
+
+Each label shows how close the drone is to being taken out (`d40%`), and an
+attacker's how close it is to striking (`s40%`). The VIP turns green (secure) or
+red (compromised) at the end.
+
+**Near misses.** If two drones come too close, the match **pauses**. Every drone
+holds until they are apart again, then play resumes. If they come much closer, or
+the pause does not clear in a few seconds, everything lands. After each flight the
+show prints any near misses and the closest pair, and says where the run's trace
+was saved.
 
 Ctrl-C (or the console's Abort) lands everything where it is.
 

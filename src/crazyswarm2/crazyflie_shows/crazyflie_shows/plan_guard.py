@@ -151,13 +151,42 @@ def mark_problems(cfg, rules, vip, marks, defenders, attackers):
     return bad, starts
 
 
+def _measure(cfg, m, pos, vip, met):
+    """Fold this tick's aircraft positions into the safety metrics."""
+    air = [n for n in pos if pos[n][2] > 0.3]
+    for i, a in enumerate(air):
+        for b in air[i + 1:]:
+            d = float(np.linalg.norm(pos[a] - pos[b]))
+            if d < met['sep']:
+                met['sep'], met['sep_pair'] = d, f'{a}/{b}'
+            met['floor'] = min(met['floor'], safety_layer.floor_ratio(cfg, pos[a], pos[b]))
+        met['vip'] = min(met['vip'], safety_layer.separation_ratio(cfg, pos[a], vip, 'vip'))
+        if m.agents[a].active:
+            met['room'] = min(met['room'], float(escort.room_clearance(cfg, pos[a])))
+            met['z_lo'] = min(met['z_lo'], pos[a][2])
+            met['z_hi'] = max(met['z_hi'], pos[a][2])
+
+
+def _fly_lag(cfg, m, pos, setpoints, dt, tau, met):
+    """The stand-in aircraft: first-order lag; retiring ones descend."""
+    for n, (sp, _) in setpoints.items():
+        before = pos[n].copy()
+        pos[n] = pos[n] + (sp - pos[n]) * min(dt / tau, 1.0)
+        met['speed'] = max(met['speed'], float(np.linalg.norm(pos[n] - before)) / dt)
+    for n, a in m.agents.items():
+        if a.status == RETIRING:
+            pos[n][2] = max(0.0, pos[n][2] - cfg.land_speed * dt)
+
+
 def simulate(cfg, rules, dname, aname, starts, defenders, attackers, vip0, seed,
              dparams=None, aparams=None, tau=0.25, vip_move=0.0, record=False,
-             on_tick=None):
+             on_tick=None, finale=False, fparams=None):
     """One match on the stand-in aircraft. Returns (result, metrics, trace).
 
-    ``on_tick(match, vip, labels)`` is called after every tick (the --rviz
-    player uses it to draw and to pace the match in real time).
+    ``on_tick(match, vip, tick, result, banner)`` is called after every tick
+    (the --rviz player uses it to draw and to pace the match in real time).
+    ``finale``: fly guard.finale after the result, through the same engine,
+    measured like the match (``met['finale']`` is the phase it reached).
     """
     rng = np.random.default_rng(seed)
     # Nobody stands a drone exactly on its mark: jitter the starts by a few
@@ -174,44 +203,63 @@ def simulate(cfg, rules, dname, aname, starts, defenders, attackers, vip0, seed,
     met = {'sep': np.inf, 'sep_pair': '', 'floor': np.inf, 'vip': np.inf, 'room': np.inf,
            'z_lo': np.inf, 'z_hi': -np.inf, 'speed': 0.0}
     trace = [] if record else None
-    while True:
+    def vip_at(t):
         # an optional drifting VIP: a slow circle, the DJI pilot wandering
-        if vip_move > 0.0:
-            w = vip_move / 0.6
-            vip = np.asarray(vip0, float) + 0.6 * np.array(
-                [np.cos(w * m.t) - 1.0, np.sin(w * m.t), 0.0])
-            vip_v = vip_move * np.array([-np.sin(w * m.t), np.cos(w * m.t), 0.0])
-        else:
-            vip_v = np.zeros(3)
+        if vip_move <= 0.0:
+            return np.asarray(vip0, float).copy(), np.zeros(3)
+        w = vip_move / 0.6
+        return (np.asarray(vip0, float) + 0.6 * np.array(
+                    [np.cos(w * t) - 1.0, np.sin(w * t), 0.0]),
+                vip_move * np.array([-np.sin(w * t), np.cos(w * t), 0.0]))
+
+    while True:
+        vip, vip_v = vip_at(m.t)
         tk = m.step(dt, vip, vip_v, pos)
-        for n, (sp, _) in tk.setpoints.items():
-            before = pos[n].copy()
-            pos[n] = pos[n] + (sp - pos[n]) * min(dt / tau, 1.0)
-            met['speed'] = max(met['speed'], float(np.linalg.norm(pos[n] - before)) / dt)
-        for n, a in m.agents.items():
-            if a.status == RETIRING:
-                pos[n][2] = max(0.0, pos[n][2] - cfg.land_speed * dt)
-        air = [n for n in pos if pos[n][2] > 0.3]
-        for i, a in enumerate(air):
-            for b in air[i + 1:]:
-                d = float(np.linalg.norm(pos[a] - pos[b]))
-                if d < met['sep']:
-                    met['sep'], met['sep_pair'] = d, f'{a}/{b}'
-                met['floor'] = min(met['floor'], safety_layer.floor_ratio(cfg, pos[a], pos[b]))
-            met['vip'] = min(met['vip'], safety_layer.separation_ratio(cfg, pos[a], vip, 'vip'))
-            if m.agents[a].active:
-                met['room'] = min(met['room'], float(escort.room_clearance(cfg, pos[a])))
-                met['z_lo'] = min(met['z_lo'], pos[a][2])
-                met['z_hi'] = max(met['z_hi'], pos[a][2])
+        _fly_lag(cfg, m, pos, tk.setpoints, dt, tau, met)
+        _measure(cfg, m, pos, vip, met)
         if record:
             trace.append((m.t, vip.copy(), {n: pos[n].copy() for n in pos},
                           dict(tk.labels)))
         res = m.result()
         if on_tick is not None:
-            on_tick(m, vip, tk.labels, res)
+            on_tick(m, vip, tk, res, '')
         if res.winner:
-            met.update(m.stats)
-            return res, met, trace
+            break
+    met.update(m.stats)
+    met['finale'] = ''
+    if not finale:
+        return res, met, trace
+
+    # -- the finale, on the same stand-in aircraft and the same metrics
+    from crazyflie_shows.guard.engine import Tick
+    from crazyflie_shows.guard.finale import Finale
+    if res.winner == ATTACK:
+        for e in tk.events:
+            if e.kind == 'strike' and m.agents[e.who].status == RETIRING:
+                m.reinstate(e.who, pos[e.who])
+    fin = Finale(cfg, res.winner, m.agents, starts, vip, m.t, fparams)
+    t = m.t
+    while True:
+        t += dt
+        vip, vip_v = vip_at(t)
+        fs = fin.update(t, vip, m.agents)
+        for n in fs.land:
+            m.retire(n)
+        sp = m.steer(dt, vip, vip_v, fs.goals, fin.p['speed'], pos)
+        _fly_lag(cfg, m, pos, sp, dt, tau, met)
+        _measure(cfg, m, pos, vip, met)
+        if record:
+            trace.append((t, vip.copy(), {n: pos[n].copy() for n in pos},
+                          {n: fs.phase for n in fs.goals}))
+        if on_tick is not None:
+            on_tick(m, vip, Tick(sp, fs.land, [], None, [],
+                                 {n: fs.phase for n in fs.goals}), res, fs.banner)
+        if fs.done or t - m.t > 45.0:
+            break
+    met['finale'] = fs.phase
+    for k in ('emergency', 'backstop', 'not_converged'):
+        met[k] = m.stats[k]
+    return res, met, trace
 
 
 def safety_failures(cfg, met):
@@ -234,11 +282,11 @@ def safety_failures(cfg, met):
 
 
 def run_series(cfg, rules, dname, aname, starts, D, A, vip, seeds, dparams, aparams,
-               tau, vip_move, verbose):
+               tau, vip_move, verbose, finale=False, fparams=None):
     rows = []
     for s in seeds:
         res, met, _ = simulate(cfg, rules, dname, aname, starts, D, A, vip, s, dparams,
-                               aparams, tau, vip_move)
+                               aparams, tau, vip_move, finale=finale, fparams=fparams)
         bad = safety_failures(cfg, met)
         rows.append((s, res, met, bad))
         if verbose:
@@ -246,6 +294,7 @@ def run_series(cfg, rules, dname, aname, starts, D, A, vip, seeds, dparams, apar
                   f'strikes {res.strikes} downs {res.downs}  '
                   f'min sep {met["sep"]:.2f} m  VIP {met["vip"]:.2f}  '
                   f'room {met["room"]:+.2f}  CBF {met["corrected"]}'
+                  f'{"  finale " + met["finale"] if met["finale"] else ""}'
                   f'{"  *** " + "; ".join(bad) if bad else ""}')
     return rows
 
@@ -314,6 +363,11 @@ def main(argv=None):
                          '(open rviz2 -d <share>/crazyflie_shows/data/guard.rviz)')
     ap.add_argument('--speed', type=float, default=1.0,
                     help='--rviz playback speed (2 = twice real time)')
+    ap.add_argument('--no-finale', action='store_true',
+                    help='stop at the result (by default the finale is flown and '
+                         'checked too; --matrix never flies it)')
+    ap.add_argument('--fparam', action='append', metavar='KEY=VALUE',
+                    help='finale parameter (repeatable; guard/finale.py DEFAULTS)')
     a = ap.parse_args(argv)
 
     safety.require_measured_arena('plan_guard')
@@ -351,6 +405,10 @@ def main(argv=None):
                     rule_sets.make(name, _kv(a.rparam) if name == a.rules else None)
                     .problems(cfg)]
     bad_marks, starts = mark_problems(cfg, rules, vip, marks, D, A)
+    fparams = _kv(a.fparam)
+    if not a.no_finale:
+        from crazyflie_shows.guard import finale as finale_mod
+        bad_cfg += finale_mod.check(cfg, fparams)
 
     print(f'\n  GUARD - offline check   {len(D)} defenders v {len(A)} '
           f'attackers   rules: {", ".join(rule_names)}')
@@ -383,7 +441,8 @@ def main(argv=None):
     seeds = list(range(a.seed0, a.seed0 + a.seeds))
     if a.rviz:
         sets = [rules] + [rule_sets.make(n) for n in rule_names[1:]]
-        return play_rviz(cfg, sets, a, starts, D, A, vip, seeds, dparams, aparams)
+        return play_rviz(cfg, sets, a, starts, D, A, vip, seeds, dparams, aparams,
+                         fparams)
     t0 = time.time()
     if a.matrix:
         print(f'\n  MATRIX  ({len(seeds)} seeds each; defence wins / matches)')
@@ -413,7 +472,8 @@ def main(argv=None):
     print(f'\n  {a.defense} (defence) v {a.attack} (attack), seeds '
           f'{seeds[0]}..{seeds[-1]}\n')
     rows = run_series(cfg, rules, a.defense, a.attack, starts, D, A, vip, seeds,
-                      dparams, aparams, a.tau, a.vip_move, True)
+                      dparams, aparams, a.tau, a.vip_move, True,
+                      not a.no_finale, fparams)
     dw, n, t, unsafe, sep = summarise(rows)
     worst = min(rows, key=lambda r: r[2]['sep'])[2]
     print(f'\n  GAME     defence won {dw}/{n}, attack {n - dw}/{n}; mean match '
@@ -441,7 +501,8 @@ def main(argv=None):
     return 0
 
 
-def play_rviz(cfg, rule_list, a, starts, D, A, vip, seeds, dparams, aparams):
+def play_rviz(cfg, rule_list, a, starts, D, A, vip, seeds, dparams, aparams,
+              fparams=None):
     """Play each seed in real time on /guard/markers, one after another,
     rotating through every pairing (--matrix) and rule set (--rules all)."""
     import rclpy
@@ -460,15 +521,16 @@ def play_rviz(cfg, rule_list, a, starts, D, A, vip, seeds, dparams, aparams):
     else:
         pairs = [(a.defense, a.attack)]
 
-    def tick(m, vip_now, labels, res):
+    def tick(m, vip_now, tk, res, banner):
         # rclpy's signal handlers shut the context down WITHOUT raising here
         # (SIGINT and SIGTERM alike), so check, or a stopped player keeps
         # playing into a dead publisher and ignores every polite kill.
         if not rclpy.ok():
             raise KeyboardInterrupt
-        viz.publish(m.t, cfg, tick.rules, vip_now, m.agents, labels, res,
+        viz.publish(m.t, cfg, tick.rules, vip_now, m.agents, tk.labels, res,
                     f'{tick.pair[0]} v {tick.pair[1]} | {tick.rules.name} | seed {tick.seed}',
-                    m.referee.meters)
+                    m.referee.meters, tk.intents, tk.plans, m.corrected, tk.events,
+                    banner)
         clock['next'] += dt / max(a.speed, 1e-3)
         pause = clock['next'] - time.monotonic()
         if pause > 0:
@@ -487,7 +549,8 @@ def play_rviz(cfg, rule_list, a, starts, D, A, vip, seeds, dparams, aparams):
                     res, met, _ = simulate(cfg, rules, pair[0], pair[1], starts, D, A, vip,
                                            s, dparams if own else None,
                                            aparams if own else None, a.tau, a.vip_move,
-                                           on_tick=tick)
+                                           on_tick=tick, finale=not a.no_finale,
+                                           fparams=fparams)
                     bad = safety_failures(cfg, met)
                     print(f'  {rules.name:14s} {pair[0]} v {pair[1]:12s} seed {s:3d}  {res.winner:7s} '
                           f'{res.reason:28s} t={res.t:5.1f}s '

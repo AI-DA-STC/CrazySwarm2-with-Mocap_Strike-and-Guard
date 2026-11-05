@@ -89,10 +89,27 @@ class GuardConfig:
     track_error_s: float = 0.80
     vip_stale_hold_s: float = 0.4
     vip_stale_land_s: float = 2.0
-    #: Two drones' MEASURED positions inside this fraction of the hard-floor
-    #: ellipsoid land everything (0.7 = 0.25 m across, 0.43 m vertically).
-    #: The CBF works on setpoints; this is the check on the aircraft.
+    #: The near-miss watch on the MEASURED aircraft (guard/watch.py); the
+    #: CBF works on setpoints, this is the check on the aircraft. Fractions
+    #: of the hard-floor ellipsoid (min_separation across, min_separation_z
+    #: vertically).
+    #: SOFT: inside this for near_miss_ticks ticks in a row pauses the match
+    #: (0.7 = 0.25 m across, 0.43 m vertically). Until 2026-11-05 it landed
+    #: everything on one frame, which ended most hardware matches.
     near_miss_ratio: float = 0.7
+    near_miss_ticks: int = 2
+    #: HARD: inside this lands everything at once (0.55 = 0.19 m across,
+    #: 0.34 m vertically; the STL game is designed to 0.18-0.20 m).
+    near_miss_land_ratio: float = 0.55
+    #: false = the old behaviour: a soft near miss lands everything.
+    near_miss_pause: bool = True
+    #: A pause ends when every pair is back outside this fraction ...
+    near_miss_clear_ratio: float = 0.9
+    #: ... and lands everything if that takes longer than this.
+    near_miss_pause_s: float = 3.0
+    #: A measured jump bigger than this in one tick is a mocap glitch (a
+    #: swapped or ghost rigid body), not a flight: 0.30 m = 6 m/s at 20 Hz.
+    mocap_jump_m: float = 0.30
 
     # The RULES (who can be downed, strikes, the clock) are not here: they
     # are a module of their own, chosen by name (guard/rules/).
@@ -123,6 +140,18 @@ def problems(cfg):
     if not 0.0 < cfg.near_miss_ratio < 1.0:
         bad.append('near_miss_ratio must be between 0 and 1 (a fraction of '
                    'the hard floor), or ordinary tracking error lands the show')
+    if not 0.0 < cfg.near_miss_land_ratio <= cfg.near_miss_ratio:
+        bad.append('near_miss_land_ratio must be above 0 and no more than '
+                   'near_miss_ratio (the hard line is inside the soft one)')
+    if not cfg.near_miss_ratio < cfg.near_miss_clear_ratio <= 1.5:
+        bad.append('near_miss_clear_ratio must be above near_miss_ratio, or a '
+                   'pause could end with the pair still inside it')
+    if cfg.near_miss_ticks < 1 or cfg.near_miss_pause_s <= 0.0:
+        bad.append('near_miss_ticks must be >= 1 and near_miss_pause_s > 0')
+    if cfg.mocap_jump_m < 2.0 * cfg.v_max_safety / cfg.rate_hz:
+        bad.append(f'mocap_jump_m {cfg.mocap_jump_m:.2f} m is within reach of a real '
+                   f'flight at v_max_safety (twice {cfg.v_max_safety / cfg.rate_hz:.2f} '
+                   'm per tick): real moves would be ignored as glitches')
     return bad
 
 

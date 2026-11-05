@@ -34,7 +34,7 @@ first, with a cooldown) and an EVADE reflex when a defender gets inside tag rang
 
 import numpy as np
 
-from crazyflie_shows.guard.policies import Policy, register
+from crazyflie_shows.guard.policies import Intent, Policy, register
 from crazyflie_shows.guard.policies.common import (bearing, into_room, seek,
                                                    unit, wrap)
 from crazyflie_shows.guard.world import ATTACK, DEFENSE
@@ -430,6 +430,11 @@ class Coordinated(Policy):
         rules = view.rules
         v_a = view.v_max(self.team)
         out = {}
+        self.intents = {}
+        self.plan = {'phase': play['state'], 'decoy': play['decoy'] or '',
+                     'lanes': [self._lane[a.name] for a in view.attackers
+                               if a.name in self._lane],
+                     'r_stage': self.p['r_stage']}
         for a in view.attackers:
             st = self._st.setdefault(a.name, {'goal': None, 'score': -np.inf,
                                               'mode': 'stage', 'next': view.t,
@@ -452,6 +457,8 @@ class Coordinated(Policy):
                 if hunt is not None:
                     out[a.name] = seek(a.p, hunt[1], v_a, cfg.a_max)
                     self.labels[a.name] = f'gang {hunt[2]}'
+                    self.intents[a.name] = Intent('gang', np.array(hunt[1], float),
+                                                  hunt[2])
                     continue
 
             # EVADE, judged by the RULES, not by distance. Staging: leave if
@@ -482,8 +489,15 @@ class Coordinated(Policy):
                     vert = np.array([0.0, 0.0, 1.0 if hi > lo else -1.0])
                     out[a.name] = v_a * unit(unit(away) + 0.7 * tang + 0.5 * vert)
                     self.labels[a.name] = 'evade'
+                    self.intents[a.name] = Intent('evade', a.p + out[a.name] * 1.0,
+                                                  d.name)
                     continue
             goal = st['goal'] if st['goal'] is not None else a.p
             out[a.name] = seek(a.p, goal, v_a, cfg.a_max)
             self.labels[a.name] = label
+            # the picture: a staging move heads for its lane's staging point
+            # (the assembly area), not the next orbit waypoint
+            aim = (self._stage_point(view, a.name) if st['mode'] == 'stage'
+                   else goal)
+            self.intents[a.name] = Intent(label, np.array(aim, float))
         return out

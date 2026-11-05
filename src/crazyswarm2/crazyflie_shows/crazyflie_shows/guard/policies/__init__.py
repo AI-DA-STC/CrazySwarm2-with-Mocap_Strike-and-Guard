@@ -37,11 +37,37 @@ pass that module's path (``policy_module:=my_lab.strategies`` to the show,
 Strategies may keep state between ticks (``reset`` is called once, before
 the first ``act``) and may set ``self.labels[name]`` to a short word -- shown
 in logs and used for the LED cues -- saying what each drone is doing.
+
+Saying what you MEAN (optional, for the picture only): set
+``self.intents[name] = Intent(kind, goal, target)`` for a drone -- where it is
+going, which opponent it is about, and what kind of move it is -- and
+``self.plan`` for the team as a whole (``{'phase': 'stage', 'lanes':
+[(bearing_rad, dz), ...], 'decoy': name}``). The viz draws them as an
+operations map: screens, pincer hooks, staging areas, axes of attack. The
+engine hands them to the picture only; the OTHER team never sees them (that
+would be reading the opponent's mind, engine.py). A strategy that sets none
+still plays; its drones just get no intent lines.
 """
 
 import importlib
+from dataclasses import dataclass
+from typing import Optional
+
+import numpy as np
 
 from crazyflie_shows.guard.world import ATTACK, DEFENSE
+
+#: Intent kinds the viz knows how to draw (anything else gets a plain line).
+DEFENSE_KINDS = ('post', 'block', 'pincer', 'bail')
+ATTACK_KINDS = ('stage', 'strike', 'feint', 'decoy', 'evade', 'gang')
+
+
+@dataclass
+class Intent:
+    """What one drone means to do, for the picture (never for the opponent)."""
+    kind: str
+    goal: Optional[np.ndarray] = None     # where it is heading (3,)
+    target: str = ''                      # the opponent it is about, if any
 
 _REGISTRY = {DEFENSE: {}, ATTACK: {}}
 
@@ -61,6 +87,8 @@ class Policy:
                            f'{sorted(self.DEFAULTS)}')
         self.p = {**self.DEFAULTS, **params}
         self.labels = {}
+        self.intents = {}
+        self.plan = {}
 
     def reset(self, view, rng):
         """Called once before the first ``act``. ``rng``: numpy Generator."""

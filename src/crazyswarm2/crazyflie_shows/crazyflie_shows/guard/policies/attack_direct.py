@@ -5,7 +5,7 @@ has to beat, and the hardest-pressing test of a defence's geometry. It
 relies entirely on the safety layer to not hit anything.
 """
 
-from crazyflie_shows.guard.policies import Policy, register
+from crazyflie_shows.guard.policies import Intent, Policy, register
 from crazyflie_shows.guard.policies.common import seek, unit
 from crazyflie_shows.guard.world import ATTACK
 
@@ -28,4 +28,5 @@ class Direct(Policy):
             goal[2] = view.vip_p[2]
             out[a.name] = seek(a.p, goal, view.v_max(self.team), view.cfg.a_max)
             self.labels[a.name] = 'charge'
+            self.intents[a.name] = Intent('strike', goal.copy())
         return out

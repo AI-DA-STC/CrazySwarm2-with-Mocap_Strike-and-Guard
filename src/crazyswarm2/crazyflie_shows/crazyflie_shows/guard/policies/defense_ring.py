@@ -7,7 +7,7 @@ Useful as the yardstick a smarter defence has to beat.
 
 import numpy as np
 
-from crazyflie_shows.guard.policies import Policy, register
+from crazyflie_shows.guard.policies import Intent, Policy, register
 from crazyflie_shows.guard.policies.common import (assign, bearing, into_room,
                                                    seek, wrap)
 from crazyflie_shows.guard.world import DEFENSE
@@ -54,4 +54,5 @@ class Ring(Policy):
             out[D[di].name] = seek(D[di].p, slots[si], view.v_max(self.team),
                                    view.cfg.a_max, view.vip_v)
             self.labels[D[di].name] = 'ring'
+            self.intents[D[di].name] = Intent('post', np.array(slots[si], float))
         return out

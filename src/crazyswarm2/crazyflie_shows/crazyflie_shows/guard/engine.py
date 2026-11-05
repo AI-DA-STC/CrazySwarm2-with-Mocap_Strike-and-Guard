@@ -47,6 +47,7 @@ import numpy as np
 
 from crazyflie_shows import escort
 from crazyflie_shows.guard import safety_layer
+from crazyflie_shows.guard.policies.common import seek
 from crazyflie_shows.guard.rules import Referee
 from crazyflie_shows.guard.world import (ACTIVE, ATTACK, DEFENSE, RETIRING,
                                          Agent, Arena, View)
@@ -60,6 +61,10 @@ class Tick:
     safety: object                 # safety_layer.SafetyResult (or None)
     backstop: list                 # names whose setpoint the clamp moved
     labels: dict = field(default_factory=dict)
+    #: For the PICTURE only (viz, LEDs): name -> policies.Intent, and
+    #: team -> that team's plan. Never handed to the other strategy.
+    intents: dict = field(default_factory=dict)
+    plans: dict = field(default_factory=dict)
 
 
 class Match:
@@ -81,6 +86,8 @@ class Match:
         self.v_obs = {n: np.zeros(3) for n in self.agents}
         self.referee = Referee(rules)
         self.t = 0.0
+        #: names whose command the safety layer changed on the last tick
+        self.corrected = set()
         self.stats = {'ticks': 0, 'corrected': 0, 'emergency': 0,
                       'not_converged': 0, 'backstop': 0}
         # one independent random stream per team, both from the match seed
@@ -169,11 +176,13 @@ class Match:
 
         res = None
         sp_out, clamped = {}, []
+        self.corrected = set()
         if active:
             P = np.array([self.sp[n] for n in active])
             res = safety_layer.filter_commands(cfg, P, np.array(nominal),
                                                P_fix, V_fix, ax_fix)
             self.stats['corrected'] += int(np.count_nonzero(res.corrected))
+            self.corrected = {n for i, n in enumerate(active) if res.corrected[i]}
             self.stats['emergency'] += int(res.emergency)
             self.stats['not_converged'] += int(not res.converged)
             for i, n in enumerate(active):
@@ -201,6 +210,42 @@ class Match:
         vip_p, vip_v = self._begin(dt, vip_p, vip_v, measured)
         sp_out, _, _ = self._move(dt, {}, vip_p, vip_v)
         return sp_out
+
+    def steer(self, dt, vip_p, vip_v, goals, speed, measured=None):
+        """Fly the active drones to ``goals`` (name -> point) at up to
+        ``speed`` -- THROUGH the safety layer, like every other tick.
+
+        For scripted moves after the match (the finale): no strategy is
+        asked, the referee does not run, the clock does not advance. A drone
+        with no goal holds. Returns name -> (setpoint, velocity).
+        """
+        vip_p, vip_v = self._begin(dt, vip_p, vip_v, measured)
+        want = {}
+        for n, g in goals.items():
+            a = self.agents.get(n)
+            if a is not None and a.active and g is not None:
+                want[n] = seek(self.sp[n], g, speed, self.cfg.a_max)
+        sp_out, _, _ = self._move(dt, want, vip_p, vip_v)
+        return sp_out
+
+    def retire(self, name, outcome=''):
+        """Hand an active drone to the landing commander: from now on it is a
+        descending obstacle, not commanded."""
+        a = self.agents[name]
+        if a.active:
+            a.status = RETIRING
+            a.outcome = outcome or a.outcome
+            self.v[name] = np.zeros(3)
+
+    def reinstate(self, name, position=None):
+        """Bring a retiring drone back under command (the finale keeps the
+        attacker that struck the winning blow in the air). Only for a drone
+        that has NOT been told to land."""
+        a = self.agents[name]
+        a.status = ACTIVE
+        if position is not None:
+            self.sp[name] = np.asarray(position, float).copy()
+        self.v[name] = np.zeros(3)
 
     def step(self, dt, vip_p, vip_v, measured=None):
         self.t += dt
@@ -232,4 +277,10 @@ class Match:
                 retired.append(a.name)
                 sp_out.pop(a.name, None)
         labels = {**self.defense.labels, **self.attack.labels}
-        return Tick(sp_out, retired, events, res, clamped, labels)
+        intents = {n: copy.copy(i)
+                   for pol in (self.defense, self.attack)
+                   for n, i in getattr(pol, 'intents', {}).items()
+                   if n in self.agents and self.agents[n].team == pol.team}
+        plans = {pol.team: dict(getattr(pol, 'plan', {}) or {})
+                 for pol in (self.defense, self.attack)}
+        return Tick(sp_out, retired, events, res, clamped, labels, intents, plans)

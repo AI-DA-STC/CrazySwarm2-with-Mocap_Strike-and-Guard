@@ -33,10 +33,20 @@ Parameters, all ``-p name:=value``:
   (``-p v_max_attack:=1.2 -p min_separation:=0.6 -p ceiling:=4.0``).
 * ``dry_run``, ``paced`` (wait for Enter to arm and to start), ``lights``,
   ``seed``, ``check_placement``.
+* the end: ``finale`` (default true; guard/finale.py -- winners rally round
+  the VIP and emote, losers go dark and home) and ``finale_params`` as
+  ``key=value,key=value``.
+* ``role_lights`` (default true): mid-match LED cues -- white while a drone is
+  scoring (a defender tagging, an attacker in the strike zone), magenta for a
+  decoy, dark once out of play.
+* ``trace`` (default true): every tick's measured and commanded position,
+  phase and intent per drone, as guard_trace.csv in the flight's folder
+  ($FLIGHT_LOG_DIR, set by the console and scripts/record_flight.sh; else a
+  new folder under ~/.ros/flight_logs/) -- the evidence for any near miss.
 
 Gates (``paced:=true``): ARM and take off; with ``vip_mode:=mocap``, the
-PILOT takes the DJI off; START the match; at the end, the pilot lands the
-DJI (mocap) or you confirm the landing. While a gate waits, every drone holds
+PILOT takes the DJI off; START the match; the finale (no gate); at the end,
+the pilot lands the DJI (mocap) or you confirm the landing. While a gate waits, every drone holds
 through the safety layer -- it still dodges the DJI -- and every watchdog
 runs. The match itself has no legs and so no gates inside it.
 
@@ -46,7 +56,9 @@ helpers and the per-drone containment watchdog (escort), the abort and the
 supervisor go/no-go (abort, preflight). One implementation of each.
 """
 
+import os
 import sys
+import time
 from dataclasses import fields
 
 import numpy as np
@@ -55,18 +67,20 @@ from crazyflie_py import Crazyswarm
 
 from crazyflie_shows import escort, safety
 from crazyflie_shows.abort import ShowAborted, abort_land, take_signals
-from crazyflie_shows.constellation import LIGHT
+from crazyflie_shows.constellation import LIGHT, wrgb
 from crazyflie_shows.constellation_show import cue
 from crazyflie_shows.escort_show import (LAND_DURATION, LAND_HEIGHT,
                                          TAKEOFF_DURATION, TAKEOFF_HEIGHT,
                                          PointCache, PoseCache, _clock, _live,
                                          _stream, operator_gate)
 from crazyflie_shows.escort_teleop import VIP_TOPIC
-from crazyflie_shows.guard import policies, safety_layer
+from crazyflie_shows.guard import finale as finale_mod
+from crazyflie_shows.guard import policies
 from crazyflie_shows.guard import rules as rule_sets
 from crazyflie_shows.guard.config import GuardConfig, override, problems
 from crazyflie_shows.guard.engine import Match
 from crazyflie_shows.guard.viz import GuardViz
+from crazyflie_shows.guard.watch import LAND, PAUSE, NearMissWatch
 from crazyflie_shows.guard.world import ATTACK, DEFENSE
 from crazyflie_shows.plan_guard import _kv, mark_problems, vip_mark
 from crazyflie_shows.preflight import report_supervisor
@@ -74,7 +88,92 @@ from crazyflie_shows.swarm_show import _param, check_placement, wait_for_mocap
 
 LED_DEFENSE = LIGHT['deep_blue']
 LED_ATTACK = LIGHT['red']
-LED_OUT = LIGHT['amber']
+#: Out of play: DARK. It was amber, which reads as red across a room (the
+#: escort found the same, 2026-10-06), so a downed attacker looked live.
+LED_OUT = 0
+#: Scoring right now: a defender tagging, an attacker inside the strike zone.
+LED_SCORING = LIGHT['blocker']
+LED_DECOY = LIGHT['magenta']
+LED_WIN = wrgb(g=0xFF)
+TEAM_LED = {'defense': LED_DEFENSE, 'attack': LED_ATTACK}
+
+
+class Lights:
+    """LED cues that only go out when the colour CHANGES, at most one per
+    drone every ``gap`` s (each is a radio packet amid 20 Hz streaming; a
+    change that comes too soon is simply sent on a later tick)."""
+
+    def __init__(self, allcfs, fcfs, on, gap=0.25):
+        self.allcfs, self.fcfs, self.on, self.gap = allcfs, fcfs, on, gap
+        self.cur, self.last = {}, {}
+
+    def set(self, name, value, now=None):
+        if not self.on or self.cur.get(name) == value:
+            return
+        now = time.monotonic() if now is None else now
+        if now - self.last.get(name, -1e9) < self.gap:
+            return
+        cue(self.allcfs, [self.fcfs[name]], [value])
+        self.cur[name], self.last[name] = value, now
+
+
+def role_light(a, intent, meters, agents, rules):
+    """The mid-match cue for one active drone."""
+    m = meters.get(a.name, {})
+    if a.team == ATTACK:
+        if m.get('strike', 0.0) > 0.0:
+            return LED_SCORING
+        if intent is not None and intent.kind == 'decoy':
+            return LED_DECOY
+        return LED_ATTACK
+    if intent is not None and intent.target in agents:
+        t = agents[intent.target]
+        if (t.active and meters.get(t.name, {}).get('down', 0.0) > 0.0
+                and float(np.linalg.norm(t.p - a.p)) <= max(rules.reach, 1e-6)):
+            return LED_SCORING
+    return LED_DEFENSE
+
+
+class Trace:
+    """Every tick's measured and commanded position per drone, as CSV."""
+
+    def __init__(self, on):
+        self.fh = None
+        if not on:
+            return
+        try:
+            # the flight's own folder when a recorder made one (the console,
+            # scripts/record_flight.sh), else a folder of its own
+            d = os.environ.get('FLIGHT_LOG_DIR') or os.path.join(
+                os.path.expanduser(os.environ.get('FLIGHT_LOG_ROOT', '~/.ros/flight_logs')),
+                time.strftime('%Y%m%d_%H%M%S_guard_show'))
+            os.makedirs(d, exist_ok=True)
+            self.path = os.path.join(d, 'guard_trace.csv')
+            self.fh = open(self.path, 'w', encoding='utf-8')
+            self.fh.write('t,phase,name,team,status,mx,my,mz,sx,sy,sz,intent\n')
+        except OSError as e:
+            print(f'  (trace off: {e})')
+            self.fh = None
+
+    def write(self, t, phase, match, measured, intents):
+        if self.fh is None:
+            return
+        try:
+            for n, a in match.agents.items():
+                m = measured.get(n)
+                mm = ',,' if m is None else ','.join(f'{v:.4f}' for v in m)
+                sp = ','.join(f'{v:.4f}' for v in match.sp[n])
+                it = intents.get(n)
+                self.fh.write(f'{t:.3f},{phase},{n},{a.team},{a.status},{mm},{sp},'
+                              f'{it.kind if it is not None else ""}\n')
+        except Exception:                               # noqa: BLE001
+            pass
+
+    def close(self):
+        if self.fh is not None:
+            self.fh.close()
+            print(f'  trace         {self.path}')
+            self.fh = None
 
 
 def _names(node, name):
@@ -130,6 +229,10 @@ def main():
     aparams = _params_kv(_param(node, 'attack_params', ''))
     rules = rule_sets.make(str(_param(node, 'rules', 'tag')),
                            _params_kv(_param(node, 'rules_params', '')))
+    finale_on = bool(_param(node, 'finale', True))
+    fparams = _params_kv(_param(node, 'finale_params', ''))
+    role_on = bool(_param(node, 'role_lights', True))
+    trace_on = bool(_param(node, 'trace', True))
     if vip_mode not in ('point', 'mocap', 'manual'):
         raise SystemExit(f'vip_mode must be point | mocap | manual, not {vip_mode!r}')
 
@@ -166,6 +269,8 @@ def main():
           f'{cfg.v_max_attack:.2f}, safety cap {cfg.v_max_safety:.2f} m/s; band '
           f'{cfg.floor:.2f}..{cfg.ceiling:.2f} m')
     bad = problems(cfg) + rules.problems(cfg)
+    if finale_on:
+        bad += finale_mod.check(cfg, fparams)
     if vip_mode != 'mocap':
         more, _ = mark_problems(cfg, rules, vip_point, marks, D, A)
         bad += more
@@ -228,7 +333,8 @@ def main():
 
     # ------------------------------------------------------------------ fly
     armed = streaming = False
-    match = None
+    match = near = None
+    trace = Trace(False)
     streamed = set()
     try:
         take_signals()
@@ -240,11 +346,9 @@ def main():
         for n in flying:
             fcfs[n].arm(True)
         timeHelper.sleep(1.0)
-        if lights_on:
-            for n in D:
-                cue(allcfs, [fcfs[n]], [LED_DEFENSE])
-            for n in A:
-                cue(allcfs, [fcfs[n]], [LED_ATTACK])
+        leds = Lights(allcfs, fcfs, lights_on)
+        for n in flying:
+            leds.set(n, LED_DEFENSE if n in D else LED_ATTACK, 0.0)
         for n in flying:
             fcfs[n].takeoff(targetHeight=TAKEOFF_HEIGHT, duration=TAKEOFF_DURATION)
         timeHelper.sleep(TAKEOFF_DURATION + 0.5)
@@ -272,12 +376,13 @@ def main():
             raise ShowAborted('no fresh VIP pose at the start')
         match = Match(cfg, rules, dpol, apol, seeds, D, A, p_vip,
                       np.random.default_rng(seed))
-        viz = GuardViz(node)
+        viz = GuardViz(node, bodies=False)       # the real drones are in the picture
         vel = escort.VelocityEstimator()
         watch = {n: {} for n in flying}
+        near = NearMissWatch(cfg)
+        trace = Trace(trace_on)
         clk = {'last': timeHelper.time(), 't0': timeHelper.time()}
         vip_last = {'p': np.asarray(p_vip, float).copy()}
-        closest = {'d': np.inf}
         title = f'{dname} v {aname} | {rules.name}'
 
         def tick_clock():
@@ -299,11 +404,15 @@ def main():
             return vip_last['p'], vel.update(p, dt), True
 
         def observe(now, dt):
-            """The watchdogs, every tick, gates included: (measured, holding).
+            """The watchdogs, every tick, gates included:
+            (measured, holding, near-miss verdict).
 
             Per drone (the escort's contain_check): stale mocap, outside the
             room, not following its setpoint. Then the aircraft themselves:
-            the CBF holds SETPOINTS apart, this checks the measured pairs.
+            the CBF holds SETPOINTS apart, guard/watch.py checks the measured
+            pairs -- a hard near miss lands everything (raised here), a soft
+            one pauses the match (the caller holds). A drone whose mocap
+            jumped is flown on its setpoint for that tick.
             """
             measured, holding = {}, []
             for n in flying:
@@ -322,15 +431,20 @@ def main():
                     raise ShowAborted(f'CONTAINMENT {n}: {why}')
                 if act == 'hold':
                     holding.append(f'{n}: {why}')
-            live = [(n, p) for n, p in measured.items()
-                    if p is not None and p[2] > 0.3]
-            for i, (n1, p1) in enumerate(live):
-                for n2, p2 in live[i + 1:]:
-                    d = float(np.linalg.norm(p1 - p2))
-                    closest['d'] = min(closest['d'], d)
-                    if safety_layer.floor_ratio(cfg, p1, p2) < cfg.near_miss_ratio:
-                        raise ShowAborted(f'NEAR MISS {n1}/{n2} {d:.2f} m apart')
-            return measured, holding
+            g0 = near.glitches
+            nm = near.update(now - clk['t0'], measured,
+                             {n: match.sp[n] for n in flying})
+            if near.glitches > g0:
+                print(f'  [t+{now - clk["t0"]:5.1f}s] MOCAP GLITCH -- a pose jumped '
+                      f'over {cfg.mocap_jump_m:.2f} m in one tick; flying '
+                      f'{", ".join(sorted(nm.glitched))} on setpoints', flush=True)
+            if nm.action == LAND:
+                raise ShowAborted(nm.why)
+            if nm.why:
+                print(f'  [t+{now - clk["t0"]:5.1f}s] {nm.why}', flush=True)
+            for n in nm.glitched:
+                measured[n] = None
+            return measured, holding, nm
 
         def stream(setpoints):
             for n, (sp, v) in setpoints.items():
@@ -344,10 +458,12 @@ def main():
             and whenever the match itself has to pause."""
             now, dt = tick_clock()
             p, v, _ = vip_fresh(now, dt)
-            measured, _ = observe(now, dt)
+            measured, _, _ = observe(now, dt)
             stream(match.hold(dt, p, v, measured or None))
+            trace.write(now - clk['t0'], 'hold', match, measured, {})
             viz.publish(match.t, cfg, rules, p, match.agents, {}, match.result(),
-                        f'{title} | HOLDING', match.referee.meters)
+                        f'{title} | HOLDING', match.referee.meters,
+                        corrected=match.corrected)
             timeHelper.sleepForRate(cfg.rate_hz)
 
         streaming = True
@@ -361,40 +477,103 @@ def main():
             operator_gate('START the match?', pump=hold_tick)
         clk['t0'] = timeHelper.time()
         print(f'  MATCH LIVE   t0 = {_clock()}   streaming at {cfg.rate_hz:g} Hz\n')
+        intents = {}
         while True:
             now, dt = tick_clock()
             p_vip, v_vip, fresh = vip_fresh(now, dt)
-            measured, holding = observe(now, dt)
-            if not fresh or holding:
+            measured, holding, nm = observe(now, dt)
+            if not fresh or holding or nm.action == PAUSE:
                 if holding:
                     print(f'  [t+{now - clk["t0"]:5.1f}s] HOLD -- {"; ".join(holding)}',
                           flush=True)
                 stream(match.hold(dt, p_vip, np.zeros(3), measured or None))
+                trace.write(now - clk['t0'], 'pause' if nm.action == PAUSE else 'hold',
+                            match, measured, intents)
+                viz.publish(match.t, cfg, rules, p_vip, match.agents, {}, match.result(),
+                            f'{title} | {"SAFETY PAUSE" if nm.action == PAUSE else "HOLDING"}',
+                            match.referee.meters, corrected=match.corrected)
                 timeHelper.sleepForRate(cfg.rate_hz)
                 continue
 
             tk = match.step(dt, p_vip, v_vip, measured or None)
+            intents = tk.intents
             stream(tk.setpoints)
+            res = match.result()
             for n in tk.retired:
+                if (finale_on and res.winner == ATTACK
+                        and match.agents[n].outcome == 'struck'):
+                    # the winning blow: it stays up, for the finale's capture
+                    match.reinstate(n, match.sp[n])
+                    continue
                 fcfs[n].notifySetpointsStop()
                 streamed.discard(n)
                 fcfs[n].land(targetHeight=LAND_HEIGHT, duration=LAND_DURATION)
-                if lights_on:
-                    cue(allcfs, [fcfs[n]], [LED_OUT])
+                leds.set(n, LED_OUT, 1e9)            # always: out of play is final
             for e in tk.events:
-                print(f'  [{_clock()}] {e}', flush=True)
+                line = str(e)
+                if match.agents[e.who].active:          # reinstated, see above
+                    line = line.replace('-- it lands', '-- it stays up for the finale')
+                print(f'  [{_clock()}] {line}', flush=True)
             if tk.safety is not None and tk.safety.emergency:
                 print(f'  [t+{match.t:5.1f}s] CBF emergency push-apart', flush=True)
-            res = match.result()
+            if role_on:
+                for n, a in match.agents.items():
+                    if a.active:
+                        leds.set(n, role_light(a, intents.get(n), match.referee.meters,
+                                               match.agents, rules))
+            trace.write(now - clk['t0'], 'match', match, measured, intents)
             viz.publish(match.t, cfg, rules, p_vip, match.agents, tk.labels, res,
-                        title, match.referee.meters)
+                        title, match.referee.meters, intents, tk.plans,
+                        match.corrected, tk.events)
             if res.winner:
                 break
             timeHelper.sleepForRate(cfg.rate_hz)
 
-        # ------------------------------------------------------------ land
         print(f'\n  {res.winner.upper()} WINS -- {res.reason} '
               f'(t+{res.t:.1f}s, strikes {res.strikes}, downs {res.downs})', flush=True)
+
+        # ---------------------------------------------------------- finale
+        if finale_on:
+            now = timeHelper.time()
+            fin = finale_mod.Finale(cfg, res.winner, match.agents, marks,
+                                    vip_last['p'], now - clk['t0'], fparams)
+            print(f'  FINALE  {fin.banner}: winners {", ".join(fin.winners) or "none"}'
+                  f'{"; losers home: " + ", ".join(fin.losers) if fin.losers else ""}',
+                  flush=True)
+            started = now
+            while True:
+                now, dt = tick_clock()
+                p_vip, v_vip, fresh = vip_fresh(now, dt)
+                measured, holding, nm = observe(now, dt)
+                fs = fin.update(now - clk['t0'], p_vip, match.agents)
+                for n in fs.land:
+                    fcfs[n].notifySetpointsStop()
+                    streamed.discard(n)
+                    fcfs[n].land(targetHeight=LAND_HEIGHT, duration=LAND_DURATION)
+                    match.retire(n)
+                for n, how in fs.lights.items():
+                    leds.set(n, {'win': LED_WIN, 'off': LED_OUT}.get(
+                        how, TEAM_LED[match.agents[n].team]))
+                if not fresh or holding or nm.action == PAUSE:
+                    stream(match.hold(dt, p_vip, np.zeros(3), measured or None))
+                else:
+                    stream(match.steer(dt, p_vip, v_vip, fs.goals, fin.p['speed'],
+                                       measured or None))
+                trace.write(now - clk['t0'], f'finale-{fs.phase}', match, measured, {})
+                viz.publish(match.t, cfg, rules, p_vip, match.agents,
+                            {n: fs.phase for n in fs.goals}, res,
+                            f'{title} | FINALE {fs.phase}', match.referee.meters,
+                            corrected=match.corrected, banner=fs.banner)
+                if fs.done:
+                    break
+                if now - started > 60.0:
+                    print('  finale ran over 60 s -- landing from where they are',
+                          flush=True)
+                    break
+                timeHelper.sleepForRate(cfg.rate_hz)
+            print('  FINALE done -- the winners hold over their marks', flush=True)
+
+        # ------------------------------------------------------------ land
         if paced and vip_mode == 'mocap':
             # LAST OUT is the Crazyflies: the DJI comes down past drones that
             # are still holding and dodging it.
@@ -415,7 +594,8 @@ def main():
             fcfs[n].arm(False)
         armed = False
         print('  landed and disarmed -- done', flush=True)
-        _report(match, closest['d'])
+        trace.close()
+        _report(match, near)
         return 0
 
     except ShowAborted as e:
@@ -425,7 +605,8 @@ def main():
         else:
             print(f'\n  ended before arming: {e}\n', flush=True)
         if match is not None:
-            _report(match, np.inf)
+            trace.close()
+            _report(match, near)
         return 130
     except BaseException as e:                         # noqa: BLE001
         if armed:
@@ -443,14 +624,17 @@ def _stop(fcfs, streamed):
             pass
 
 
-def _report(match, min_live):
+def _report(match, near):
     s = match.stats
     print(f'\n  SAFETY LAYER  {s["ticks"]} ticks; corrected {s["corrected"]} '
           f'drone-ticks; emergency {s["emergency"]}; not converged '
           f'{s["not_converged"]}; backstop {s["backstop"]}')
-    if np.isfinite(min_live):
-        print(f'  closest pair  {min_live:.2f} m measured (floor '
-              f'{match.cfg.min_separation:.2f} across)')
+    if near is not None:
+        if near.closest is not None:
+            print(f'  closest pair  {near.closest}')
+        print(f'  near misses   {len(near.passes)}; mocap glitches {near.glitches}')
+        for p in near.passes:
+            print(f'    {p}')
     for e in match.referee.events:
         print(f'    {e}')
     print(flush=True)
