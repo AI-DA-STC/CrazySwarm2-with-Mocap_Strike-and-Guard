@@ -492,11 +492,14 @@ in it, and why, is in [server-changes.md](server-changes.md).
   mark that cannot be used until it moves. It REFUSES to write when an enabled
   drone is not streamed, is moving
   (>10 mm spread over the window), sits above 0.5 m, or when two drones are
-  <1 m apart — `--dry-run` to preview, `--force` to override, `--with-z` to
+  <0.30 m apart (marker sets merge; since 2026-11-06 the 1 m rule below only
+  WARNS, because guard/escort/STL layouts start closer and every planner checks
+  its own spacing) — `--dry-run` to preview, `--force` to override, `--with-z` to
   write the measured z instead of keeping the yaml's. Manual equivalent: read
   x/y from `ros2 topic echo /poses | grep -A5 -- '- name: cf1$'` and edit by
-  hand. Either way, restart the server (yaml read only at launch). Enabled
-  drones **≥1 m apart** (same-trajectory flight preserves start separation),
+  hand. Either way, restart the server (yaml read only at launch). For the
+  trajectory shows, enabled drones **≥1 m apart** (same-trajectory flight
+  preserves start separation; their planners check it),
   and each drone at ITS OWN yaml position — wrong-corner placement = crossing
   goTo paths = the real collision of 2026-08-04.
 - **Sim `plan_start_trajectory` arity — DO NOT ASSUME, PROBE.** This entry used

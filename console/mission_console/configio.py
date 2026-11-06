@@ -64,7 +64,11 @@ VAR_BYTES = {
     'pm.vbatMV': 2,
 }
 LOG_BLOCK_BYTES = 26
+#: The rig rule for the trajectory shows: under it is a WARNING (2026-11-06);
+#: under HARD_MIN_SEPARATION_M a fail. Same numbers as
+#: scripts/sync_initial_positions.py.
 MIN_SEPARATION_M = 1.0
+HARD_MIN_SEPARATION_M = 0.30
 URI_RE = re.compile(r'^radio://([^/]+)/(\d+)/(\d+[MK])/([0-9A-Fa-f]+)(?:/.*)?$')
 
 
@@ -366,13 +370,20 @@ def validate_crazyflies(doc):
     for i, a in enumerate(names):
         for b in names[i + 1:]:
             d = math.dist(positions[a][:2], positions[b][:2])
-            if d < MIN_SEPARATION_M:
+            if d < HARD_MIN_SEPARATION_M:
                 out.append(_finding(
                     'fail', f'{a} and {b} start {d:.2f} m apart',
-                    f'The rig rule is >= {MIN_SEPARATION_M:.1f} m between enabled drones: '
-                    'the trajectory demos preserve start separation, so a tight start '
-                    'stays tight in the air.',
+                    f'Under the {HARD_MIN_SEPARATION_M:.2f} m hard floor: marker sets this '
+                    'close can merge in Motive, and a common takeoff can touch.',
                     'Move the drones, then re-run "Sync initial positions from /poses".'))
+            elif d < MIN_SEPARATION_M:
+                out.append(_finding(
+                    'warn', f'{a} and {b} start {d:.2f} m apart',
+                    f'Under the {MIN_SEPARATION_M:.1f} m rig rule for the trajectory shows '
+                    '(swarm/constellation/serpent keep their start spacing in the air). '
+                    'Fine for guard/escort/STL layouts; the show\'s planner checks its own '
+                    'spacing.',
+                    'Run the show\'s planner (plan_guard, plan_show, ...) after the sync.'))
 
     # --- types ---
     for name, cfg in enabled.items():

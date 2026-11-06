@@ -74,7 +74,15 @@ from collections import defaultdict
 DEFAULT_SAMPLES = 50           # ~1 s at the rig's 50 Hz streaming rate
 DEFAULT_TIMEOUT = 10.0         # s to wait for that many samples
 JITTER_ABORT_M = 0.010         # 10 mm: body moving / tracking unstable -> refuse
-MIN_SEPARATION_M = 1.0         # docs/details/known-issues.md rig rule: enabled drones >= 1 m apart
+#: Under this, two enabled drones are REFUSED: marker sets this close can merge
+#: in Motive, and a common takeoff can touch. (--force still overrides.)
+HARD_MIN_SEPARATION_M = 0.30
+#: The rig rule for the TRAJECTORY shows (swarm/constellation/serpent: a
+#: same-trajectory formation keeps its start spacing in the air). Under it is a
+#: WARNING since 2026-11-06, not a refusal: the guard, escort and STL layouts
+#: legitimately start closer (guard attackers flew 0.72/0.82 m apart on 11-04),
+#: and every show's planner checks its own spacing after the sync.
+MIN_SEPARATION_M = 1.0         # docs/details/known-issues.md rig rule
 Z_SANITY_M = 0.5               # a grounded drone should not be this high
 
 DEFAULT_YAML = os.path.join(
@@ -276,14 +284,24 @@ def run_checks(enabled, means, jitter, args, writing=None, known=None):
                 "Wrong rigid body, or the Motive ground plane is off.")
 
     present = sorted(set(enabled) & set(means))
+    close = []
     for i, a in enumerate(present):
         for b in present[i + 1:]:
             d = math.dist(means[a][:2], means[b][:2])
-            if d < MIN_SEPARATION_M:
+            if d < HARD_MIN_SEPARATION_M:
                 problems.append(
-                    f"{a} and {b} are only {d:.2f} m apart (rig rule: "
-                    f">= {MIN_SEPARATION_M:.1f} m). Same-trajectory flight preserves "
-                    "start separation, so this spacing carries into the air.")
+                    f"{a} and {b} are only {d:.2f} m apart (hard floor "
+                    f"{HARD_MIN_SEPARATION_M:.2f} m): marker sets this close can merge in "
+                    "Motive, and a common takeoff can touch.")
+            elif d < MIN_SEPARATION_M:
+                close.append(f"{a} and {b} are {d:.2f} m apart")
+    if close:
+        print(f"\nwarning: under the {MIN_SEPARATION_M:.1f} m rig rule for the trajectory "
+              "shows (swarm/constellation/serpent keep their start spacing in the air):")
+        for c in close:
+            print(f"  - {c}")
+        print("  Fine for guard/escort/STL layouts. Either way, run the show's planner "
+              "after this sync -- it checks its own spacing.")
 
     # A parked drone too close to a flying one is not a refusal -- it is not in
     # the air -- but it IS a mark that cannot be used, so say so now rather than

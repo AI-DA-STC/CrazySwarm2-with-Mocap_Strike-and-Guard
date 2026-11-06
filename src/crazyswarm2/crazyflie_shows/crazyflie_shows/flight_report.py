@@ -231,8 +231,14 @@ def mocap_health(track, jump_m=0.30, v_max=1.2):
     d = np.diff(t)
     step = np.linalg.norm(np.diff(track[:, 1:4], axis=0), axis=1)
     allow = jump_m + v_max * np.maximum(0.0, d - 0.02)
+    # the recorder's own start-up (discovery, subscribing) leaves a gap in
+    # the first second of every bag, on every body at once: not a dropout
+    # (measured 2026-11-06: 0.32 s at +0.1 s, all seven drones)
+    live = t[:-1] - t[0] > 1.0
+    gaps = d[live] if live.any() else d[:0]
     return {'frames': int(len(t)), 'hz': float(1.0 / np.median(d)),
-            'dropouts': int(np.sum(d > 0.1)), 'longest_gap_s': float(d.max()),
+            'dropouts': int(np.sum(gaps > 0.1)),
+            'longest_gap_s': float(gaps.max()) if len(gaps) else 0.0,
             'jumps': int(np.sum(step > allow)),
             'jump_times': [float(x) for x in t[1:][step > allow][:50]],
             'jump_max_m': float(step[step > allow].max()) if np.any(step > allow) else 0.0}

@@ -290,10 +290,20 @@ async function startRole(role, values, sim) {
   return post('/api/mission/start', { id: MID, role, values, sim });
 }
 async function sendLine(procId, text, source = 'mission') {
+  // Remember WHICH gate this answers before waiting on the POST: a show that
+  // goes straight from one gate to the next (guard: PILOT -> START) prints
+  // the next prompt before the POST returns, and clearing "whatever gate is
+  // open" afterwards wiped the new one -- the START card never appeared
+  // (2026-11-06 flight log). Clear only the gate that was answered.
+  const before = S.derived.get(procId);
+  const answering = before && before.gate;
   await post('/api/input', { proc: procId, text: text + '\n', source });
   const p = S.procs.get(procId);
   const d = S.derived.get(procId);
-  if (d && d.gate) { d.gate = null; d.collecting = false; d.answered += 1; }
+  if (d && answering) {
+    d.answered += 1;
+    if (d.gate === answering) { d.gate = null; d.collecting = false; }
+  }
   if (p) p.partial = '';
   changed();
 }

@@ -140,6 +140,13 @@ def test_mocap_jump_is_counted_as_a_glitch(report):
     assert abs(rep['drones']['cf1']['mocap']['hz'] - 100.0) < 1.0
 
 
+def test_a_gap_while_the_recorder_starts_is_not_a_dropout():
+    t = np.r_[0.0, 0.32, np.arange(0.34, 5.0, 0.02), np.arange(5.3, 8.0, 0.02)]
+    track = np.column_stack([t, np.zeros((len(t), 4))])
+    h = flight_report.mocap_health(track)
+    assert h['dropouts'] == 1 and abs(h['longest_gap_s'] - 0.32) < 0.02   # only t 5.0
+
+
 def test_estimate_yaw_disagreement(report):
     rep, _ = report
     assert abs(rep['drones']['cf2']['estimate']['yaw_deg']['p95'] - 30.0) < 1.0
