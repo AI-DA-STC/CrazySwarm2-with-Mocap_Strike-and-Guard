@@ -94,6 +94,13 @@ options:
     type: number
     default: 0.45
     omit_default: true
+  - name: controller
+    label: Onboard controller
+    choices:
+      pid: the server's PID (default) -- trails streamed setpoints by ~0.56 s on hardware
+      mellinger: Mellinger for this show, PID restored after -- hover-test it first
+    default: pid
+    omit_default: true
   - name: finale
     label: Finale (winners rally round the VIP and emote; losers go dark and home)
     type: bool

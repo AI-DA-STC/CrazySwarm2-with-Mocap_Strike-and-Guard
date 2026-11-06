@@ -398,6 +398,31 @@ LEG_DONE_V = 0.05      # m/s, fastest commanded defender setpoint
 FENCE_HYST = 0.25
 
 
+def drain(node, n):
+    """Run up to ``n`` ready callbacks now (guard_show and escort_show, every tick).
+
+    ONE spin_once per tick starved /poses. The node also carries every
+    drone's /cfN/pose and /cfN/status (crazyflie_py subscribes to them, and
+    first), ~127 messages/s with 7 drones, while one spin per tick serves
+    ~20; sleepForRate's own spinning only helps when a tick leaves idle time,
+    and with 7 drones the tick overran (59 ms, 2026-11-06), and a paced gate
+    sits 50 ms in select() between ticks. Measured off the drones with the
+    same rates: /poses was 0.4 s old on average and up to 0.9 s, which with a
+    real 0.34 s mocap stall tripped "CONTAINMENT cf1: no mocap for 1.1 s" at
+    the START gate. Draining 16 per tick: 0-5 ms. An empty spin_once is
+    cheap, so ``n`` errs high.
+    """
+    for _ in range(n):
+        rclpy.spin_once(node, timeout_sec=0.0)
+
+
+def drain_count(n_drones, rate_hz):
+    """Callbacks to drain per tick: /poses (50 Hz) plus each drone's own
+    /cfN/pose (10 Hz) and /cfN/status (1 Hz) that crazyflie_py subscribes to,
+    twice over for slack."""
+    return max(8, 2 * int(np.ceil((50.0 + 11.0 * n_drones) / rate_hz)))
+
+
 def operator_said(block=False, timeout=0.0):
     """'' if nothing typed; else the stripped line ('' counts as Enter -> ' ')."""
     # Only what select() itself raises on a closed or odd stdin means "nothing
@@ -476,6 +501,9 @@ def main():
     allcfs = swarm.allcfs
     node = allcfs
     cfs = allcfs.crazyflies
+    # every tick drains the callbacks a whole tick brings (see drain()); one
+    # spin_once per tick let /poses go stale at the gates
+    spins = drain_count(len(cfs), float(_param(allcfs, 'rate_hz', 20.0)))
     names = [cf.prefix.lstrip('/') for cf in cfs]
 
     sim = bool(_param(node, 'use_sim_time', False))
@@ -859,7 +887,7 @@ def main():
             so a VIP dropout during a gate still lands the show, and the guards
             still clamp.
             """
-            rclpy.spin_once(node, timeout_sec=0.0)
+            drain(node, spins)
             now_h = timeHelper.time()
             dt_h = max(now_h - _hold_t['last'], 1e-3)
             _hold_t['last'] = now_h
@@ -1031,7 +1059,7 @@ def main():
         leg_anchor['p'] = np.asarray(
             _seed if _seed is not None else escort.vip_home(cfg), float).copy()
         while True:
-            rclpy.spin_once(node, timeout_sec=0.0)
+            drain(node, spins)
             now = timeHelper.time()
             t = now - t0
             if paced:

@@ -39,6 +39,14 @@ Parameters, all ``-p name:=value``:
 * ``role_lights`` (default true): mid-match LED cues -- white while a drone is
   scoring (a defender tagging, an attacker in the strike zone), magenta for a
   decoy, dark once out of play.
+* ``controller`` (default ``pid``: leave the server's setting): ``mellinger``
+  switches the flying drones' onboard controller (``stabilizer.controller``
+  2) before arming and back to PID (1) afterwards, landing or abort. Why:
+  the PID position controller OVERWRITES the streamed velocity in modeAbs,
+  so on hardware every drone trailed its setpoint by ~0.56 s (0.5-0.7 m at
+  1 m/s, 2026-11-06); Mellinger uses the full state. Hover-test it on the
+  drones before a match: the simulator always runs Mellinger, so it cannot
+  show the difference.
 * ``trace`` (default true): every tick's measured and commanded position,
   phase and intent per drone, as guard_trace.csv in the flight's folder
   ($FLIGHT_LOG_DIR, set by the console and scripts/record_flight.sh; else a
@@ -72,7 +80,8 @@ from crazyflie_shows.constellation_show import cue
 from crazyflie_shows.escort_show import (LAND_DURATION, LAND_HEIGHT,
                                          TAKEOFF_DURATION, TAKEOFF_HEIGHT,
                                          PointCache, PoseCache, _clock, _live,
-                                         _stream, operator_gate)
+                                         _stream, drain, drain_count,
+                                         operator_gate)
 from crazyflie_shows.escort_teleop import VIP_TOPIC
 from crazyflie_shows.guard import finale as finale_mod
 from crazyflie_shows.guard import policies
@@ -233,6 +242,9 @@ def main():
     fparams = _params_kv(_param(node, 'finale_params', ''))
     role_on = bool(_param(node, 'role_lights', True))
     trace_on = bool(_param(node, 'trace', True))
+    controller = str(_param(node, 'controller', 'pid')).lower()
+    if controller not in CONTROLLERS:
+        raise SystemExit(f'controller must be one of {sorted(CONTROLLERS)}, not {controller!r}')
     if vip_mode not in ('point', 'mocap', 'manual'):
         raise SystemExit(f'vip_mode must be point | mocap | manual, not {vip_mode!r}')
 
@@ -265,6 +277,8 @@ def main():
           f'{np.round(vip_point, 2).tolist() if vip_mode != "mocap" else vip_name}')
     print(f'  rules         {rules.describe()}: '
           + ', '.join(f'{k} {v}' for k, v in sorted(rules.p.items())))
+    print(f'  controller    {controller}'
+          + ('' if controller == 'pid' else ' (switched for this show, PID restored after)'))
     print(f'  speeds        defence {cfg.v_max_defense:.2f}, attack '
           f'{cfg.v_max_attack:.2f}, safety cap {cfg.v_max_safety:.2f} m/s; band '
           f'{cfg.floor:.2f}..{cfg.ceiling:.2f} m')
@@ -332,7 +346,7 @@ def main():
         return manual_vip.age(now) if vip_mode == 'manual' else poses.age(vip_name, now)
 
     # ------------------------------------------------------------------ fly
-    armed = streaming = False
+    armed = streaming = switched = False
     match = near = None
     trace = Trace(False)
     streamed = set()
@@ -343,6 +357,9 @@ def main():
             operator_gate('ARM and take off? Everyone clear of the volume, '
                           'E-STOP in hand.',
                           spin=lambda: rclpy.spin_once(node, timeout_sec=0.02))
+        if controller != 'pid':
+            set_controller(fcfs, flying, CONTROLLERS[controller])
+            switched = True
         for n in flying:
             fcfs[n].arm(True)
         timeHelper.sleep(1.0)
@@ -379,8 +396,18 @@ def main():
         # Callbacks to drain per tick: /poses (50 Hz) plus each drone's own
         # /cfN/pose (10 Hz) and /cfN/status (1 Hz) that crazyflie_py subscribes
         # to, twice over for slack.
-        spins = max(8, 2 * int(np.ceil((50.0 + 11.0 * len(cfs)) / cfg.rate_hz)))
-        viz = GuardViz(node, bodies=False)       # the real drones are in the picture
+        spins = drain_count(len(cfs), cfg.rate_hz)
+        viz = GuardViz(node, trail=20, bodies=False)   # real drones are in the picture; 2 s trails at 10 Hz
+        # Markers at ~10 Hz, not every tick: a picture needs no more, and RViz
+        # and the console redraw every marker for every message (the console
+        # fell 3.3 s behind at 20 Hz, 2026-11-06). Events between two
+        # publishes are carried to the next one, so no burst is lost.
+        viz_every = max(1, int(round(cfg.rate_hz / 10.0)))
+        vz = {'n': 0, 'events': []}
+
+        def viz_due(final=False):
+            vz['n'] += 1
+            return final or vz['n'] % viz_every == 0
         vel = escort.VelocityEstimator()
         watch = {n: {} for n in flying}
         near = NearMissWatch(cfg)
@@ -465,9 +492,10 @@ def main():
             measured, _, _ = observe(now, dt)
             stream(match.hold(dt, p, v, measured or None))
             trace.write(now - clk['t0'], 'hold', match, measured, {})
-            viz.publish(match.t, cfg, rules, p, match.agents, {}, match.result(),
-                        f'{title} | HOLDING', match.referee.meters,
-                        corrected=match.corrected)
+            if viz_due():
+                viz.publish(match.t, cfg, rules, p, match.agents, {}, match.result(),
+                            f'{title} | HOLDING', match.referee.meters,
+                            corrected=match.corrected)
             timeHelper.sleepForRate(cfg.rate_hz)
 
         streaming = True
@@ -493,9 +521,11 @@ def main():
                 stream(match.hold(dt, p_vip, np.zeros(3), measured or None))
                 trace.write(now - clk['t0'], 'pause' if nm.action == PAUSE else 'hold',
                             match, measured, intents)
-                viz.publish(match.t, cfg, rules, p_vip, match.agents, {}, match.result(),
-                            f'{title} | {"SAFETY PAUSE" if nm.action == PAUSE else "HOLDING"}',
-                            match.referee.meters, corrected=match.corrected)
+                if viz_due():
+                    viz.publish(match.t, cfg, rules, p_vip, match.agents, {},
+                                match.result(),
+                                f'{title} | {"SAFETY PAUSE" if nm.action == PAUSE else "HOLDING"}',
+                                match.referee.meters, corrected=match.corrected)
                 timeHelper.sleepForRate(cfg.rate_hz)
                 continue
 
@@ -526,9 +556,12 @@ def main():
                         leds.set(n, role_light(a, intents.get(n), match.referee.meters,
                                                match.agents, rules))
             trace.write(now - clk['t0'], 'match', match, measured, intents)
-            viz.publish(match.t, cfg, rules, p_vip, match.agents, tk.labels, res,
-                        title, match.referee.meters, intents, tk.plans,
-                        match.corrected, tk.events)
+            vz['events'].extend(tk.events)
+            if viz_due(final=bool(res.winner)):
+                viz.publish(match.t, cfg, rules, p_vip, match.agents, tk.labels, res,
+                            title, match.referee.meters, intents, tk.plans,
+                            match.corrected, vz['events'])
+                vz['events'] = []
             if res.winner:
                 break
             timeHelper.sleepForRate(cfg.rate_hz)
@@ -564,10 +597,11 @@ def main():
                     stream(match.steer(dt, p_vip, v_vip, fs.goals, fin.p['speed'],
                                        measured or None))
                 trace.write(now - clk['t0'], f'finale-{fs.phase}', match, measured, {})
-                viz.publish(match.t, cfg, rules, p_vip, match.agents,
-                            {n: fs.phase for n in fs.goals}, res,
-                            f'{title} | FINALE {fs.phase}', match.referee.meters,
-                            corrected=match.corrected, banner=fs.banner)
+                if viz_due(final=fs.done):
+                    viz.publish(match.t, cfg, rules, p_vip, match.agents,
+                                {n: fs.phase for n in fs.goals}, res,
+                                f'{title} | FINALE {fs.phase}', match.referee.meters,
+                                corrected=match.corrected, banner=fs.banner)
                 if fs.done:
                     break
                 if now - started > 60.0:
@@ -617,24 +651,26 @@ def main():
             _stop(fcfs, streamed if streaming else ())
             abort_land(allcfs, cfs, timeHelper, LAND_HEIGHT, repr(e))
         raise
+    finally:
+        if switched:
+            # after the landing: every other show expects the server's PID
+            set_controller(fcfs, flying, CONTROLLERS['pid'])
 
 
-def drain(node, n):
-    """Run up to ``n`` ready callbacks now.
+#: stabilizer.controller values (crazyflie-firmware controller.h).
+CONTROLLERS = {'pid': 1, 'mellinger': 2, 'brescianini': 4}
 
-    ONE spin_once per tick starved /poses. The node also carries every
-    drone's /cfN/pose and /cfN/status (crazyflie_py subscribes to them, and
-    first), ~127 messages/s with 7 drones, while one spin per tick serves
-    ~20; sleepForRate's own spinning only helps when a tick leaves idle time,
-    and with 7 drones the tick overran (59 ms, 2026-11-06), and a paced gate
-    sits 50 ms in select() between ticks. Measured off the drones with the
-    same rates: /poses was 0.4 s old on average and up to 0.9 s, which with a
-    real 0.34 s mocap stall tripped "CONTAINMENT cf1: no mocap for 1.1 s" at
-    the START gate. Draining 16 per tick: 0-5 ms. An empty spin_once is
-    cheap, so ``n`` errs high.
-    """
-    for _ in range(n):
-        rclpy.spin_once(node, timeout_sec=0.0)
+
+def set_controller(fcfs, names, value):
+    """Set ``stabilizer.controller`` on each drone; never raises (a failed
+    restore is reported, it must not stop a landing)."""
+    for n in names:
+        try:
+            fcfs[n].setParam('stabilizer.controller', int(value))
+        except Exception as e:                          # noqa: BLE001
+            print(f'  *** {n}: could not set stabilizer.controller={value}: {e}',
+                  flush=True)
+    print(f'  stabilizer.controller = {value} on {", ".join(names)}', flush=True)
 
 
 def _stop(fcfs, streamed):
