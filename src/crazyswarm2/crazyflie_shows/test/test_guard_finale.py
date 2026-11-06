@@ -228,7 +228,10 @@ def test_finale_slots_ring_the_vip_outside_its_keep_out():
 def test_finale_numbers_are_checked():
     assert finale_mod.check(CFG, {}) == []
     assert finale_mod.check(CFG, {'capture_r': 1.3})
-    assert finale_mod.check(CFG, {'speed': 5.0})
+    assert finale_mod.check(CFG, {'speed': 0.0})
+    slow = override(GuardConfig(), {'v_max_defense': 0.5, 'v_max_attack': 0.5})
+    assert finale_mod.check(slow, {}) == []
+    assert finale_mod.Finale(slow, DEFENSE, {}, {}, MID, 0.0).p['speed'] == 0.5
     with pytest.raises(KeyError):
         finale_mod.Finale(CFG, DEFENSE, {}, {}, MID, 0.0, {'sped': 0.5})
 

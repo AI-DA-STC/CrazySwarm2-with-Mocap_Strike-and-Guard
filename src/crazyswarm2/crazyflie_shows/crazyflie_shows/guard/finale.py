@@ -35,7 +35,7 @@ from crazyflie_shows.guard.policies.common import assign, into_room
 from crazyflie_shows.guard.world import DEFENSE, Arena
 
 DEFAULTS = {
-    'speed': 0.6,           # m/s for every finale move
+    'speed': 0.6,           # m/s for every finale move (capped at both team caps)
     'rally_s': 7.0,         # longest the winners get to reach formation
     'emote_s': 10.0,        # how long the emote runs
     'home_s': 12.0,         # longest the winners get to reach their marks
@@ -76,8 +76,8 @@ def check(cfg, params):
     if p['guard_r'] < cfg.d_vip + 0.2:
         bad.append(f'finale honour guard at {p["guard_r"]:.2f} m is inside the '
                    f'VIP keep-out + 0.2')
-    if p['speed'] > min(cfg.v_max_defense, cfg.v_max_attack) + 1e-9:
-        bad.append('finale speed must not exceed either team cap')
+    if p['speed'] <= 0.0:
+        bad.append('finale speed must be positive')
     return bad
 
 
@@ -91,6 +91,9 @@ class Finale:
             raise KeyError(f'finale has no parameter(s) {sorted(unknown)}; it has '
                            f'{sorted(DEFAULTS)}')
         self.p = {**DEFAULTS, **(params or {})}
+        # never faster than either team flew: a slowed-down show (the PID
+        # controller's ~0.6 s lag, 2026-11-06) slows its finale with it
+        self.p['speed'] = min(self.p['speed'], cfg.v_max_defense, cfg.v_max_attack)
         self.cfg = cfg
         self.arena = Arena(cfg)
         self.winner = winner
