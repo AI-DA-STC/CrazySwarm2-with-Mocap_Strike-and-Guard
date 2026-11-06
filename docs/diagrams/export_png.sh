@@ -8,7 +8,9 @@
 # diagram; the file names below are in slide order, so if you add, remove or
 # reorder slides, update NAMES to match.
 #
-# Needs LibreOffice (soffice) and poppler-utils (pdftoppm).
+# Needs LibreOffice (soffice) and poppler-utils (pdftoppm). fonts.conf maps the deck's
+# Calibri to DejaVu Sans, as every committed PNG is drawn; without it LibreOffice picks
+# whatever this machine substitutes (Noto Sans on Ubuntu 24.04) and every PNG changes.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -19,12 +21,15 @@ NAMES=(
   13-safety-filter 14-command-modes 15-attacker 16-controller-step
   17-control-tick 18-verification 19-lessons 20-lab-network
   21-two-demos 22-stl-at-a-glance 23-stl-plan-then-fly 24-stl-sequence 25-stl-lights
+  26-guard-at-a-glance 27-guard-decision-loop 28-guard-strategies 29-guard-lights
+  30-guard-lag
 )
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
-soffice --headless --convert-to pdf --outdir "$TMP" "$HERE/strike-and-guard-diagrams.pptx" >/dev/null
+FONTCONFIG_FILE="$HERE/fonts.conf" soffice --headless --convert-to pdf --outdir "$TMP" \
+  "$HERE/strike-and-guard-diagrams.pptx" >/dev/null
 pdftoppm -png -r 120 "$TMP/strike-and-guard-diagrams.pdf" "$TMP/slide"
 
 shopt -s nullglob

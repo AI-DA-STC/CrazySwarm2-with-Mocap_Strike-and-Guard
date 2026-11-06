@@ -1,5 +1,7 @@
 # Guard: how it works
 
+![The guard game seen from above](../diagrams/26-guard-at-a-glance.png)
+
 This page uses no maths. How the code is put together is in
 [details/guard-modules.md](../details/guard-modules.md); why it is that way, and what was
 measured, is in [details/guard-design-notes.md](../details/guard-design-notes.md).
@@ -30,6 +32,8 @@ The equipment is the same as for the escort ([escort/how-it-works.md](../escort/
 Every safety rule is enforced on the laptop, before a command leaves it.
 
 ## One decision, 20 times a second
+
+![One decision, 20 times a second](../diagrams/27-guard-decision-loop.png)
 
 1. **Look.** The cameras say where every drone and the DJI are.
 2. **Each team decides, on its own.** A strategy sees its own team as it commanded it,
@@ -65,6 +69,8 @@ be ganged up on.
 ## The strategies
 
 Each team plays one strategy, chosen by name. Four per side are built in.
+
+![Eight strategies to play with](../diagrams/28-guard-strategies.png)
 
 **Defence**
 
@@ -114,6 +120,8 @@ Then everyone goes home and lands.
 
 ## What the lights mean
 
+![What the lights mean](../diagrams/29-guard-lights.png)
+
 | Light | Meaning |
 |---|---|
 | blue | a defender |
@@ -140,6 +148,8 @@ No single check is trusted.
   ([details/flight-logs.md](../details/flight-logs.md)).
 
 ## Why the drones run late (and what to do about it)
+
+![Why the drones run late](../diagrams/30-guard-lag.png)
 
 Measured on 2026-11-06, every drone flies its commanded path faithfully, but about half
 a second behind it. At full speed that is half a metre or more. The cause is the drones'

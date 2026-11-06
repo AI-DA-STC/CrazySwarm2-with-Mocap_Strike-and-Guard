@@ -24,6 +24,8 @@ seconds is hard to narrate.
 | **5. The finale** | watch | Defence win: "They held: the honour guard." Attack win: "One got through. They've captured the VIP; watch them follow it." *Ask the pilot to drift the DJI slowly.* |
 | **6. DJI down** | pilot lands, then Continue | "The VIP lands first, then the escort." |
 
+![What the lights mean](../diagrams/29-guard-lights.png)
+
 The key line, if you only get one: **nobody tells the drones what to do. Each team has a
 plan, and they play it against each other live; a safety layer underneath stops anyone
 crashing, whatever the plans ask for.**
