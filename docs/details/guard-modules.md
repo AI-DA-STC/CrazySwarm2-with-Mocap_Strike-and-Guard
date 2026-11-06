@@ -80,9 +80,17 @@ Built in:
 | Name | Team | What it does |
 |---|---|---|
 | `shell` | defence (default) | Urgency-weighted 3D intercepts, pincers when outnumbering, idle posts above, below and around the VIP |
+| `zone` | defence | Each defender owns a sector (and height layer) of the VIP's sky that turns toward the attack; engages only inside it, helps a neighbour only where the rules say a 2 v 1 downs the attacker |
+| `hunter` | defence | A pair flanks one attacker out at range (only a target the rules say two hunters down, from spots where neither is outnumbered); the rest guard close. Everyone guards under `timer` |
 | `ring` | defence (baseline) | The escort's idea: a flat ring that turns to face the nearest threat |
 | `coordinated` | attack (default) | A team play (stage, commit together or behind a decoy, regroup), with each attacker planning 3D options scored by STL-style robustness, plus feints and evasion |
+| `flood` | attack | Spread to evenly spaced bearings, then all charge at once with a sideways weave; regroup from the gaps when all stall |
+| `wolfpack` | attack | Gang 2 v 1 on the loneliest defender first (never where a wolf is outnumbered), strike from spread lanes once the defence is halved; straight to the strike where defenders cannot be downed |
 | `direct` | attack (baseline) | Straight at the VIP, all at once |
+
+Every built-in sets `labels`, `intents` and (where it has a team phase) `plan`.
+Tests: `test/test_guard_strategies.py` (registration, an intent per active drone,
+only its own team commanded, deterministic per seed, a short safe match each).
 
 ## 3. `guard/safety_layer.py` + `cbf.py`: what the drones are allowed to do
 
@@ -187,7 +195,10 @@ has the full symbol table. In short:
   on a strike. The VIP turns green or red under a banner.
 
 Markers that were drawn last tick and not this one are deleted at once, so a
-changed intent never lingers. Publishing is best effort: a failed marker costs
+changed intent never lingers. `guard_show` publishes at about 10 Hz (events between
+two publishes are carried to the next), and the console's 3D view draws only the
+newest snapshot per browser frame (`latestOnly` in the mission window): at 20 Hz with
+every message drawn, it fell 3.3 s behind a match (2026-11-06). Publishing is best effort: a failed marker costs
 a picture, never a flight.
 
 ## 7a. `guard/finale.py`: the end, made obvious
@@ -257,7 +268,13 @@ them there" from "the aircraft lagged the plan".
     out of play; `role_lights:=false` turns them off;
   - the finale's lights.
 
-  Each change is sent once, at most every 0.25 s per drone. `trace:=true` (the
+  Each change is sent once, at most every 0.25 s per drone.
+
+  `controller:=mellinger` sets `stabilizer.controller` 2 on the flying drones
+  before arming and back to 1 (PID) after, landing or abort (`set_controller`,
+  in a `finally`). Every tick drains the node's ready callbacks (`drain`, shared
+  with the escort in `escort_show.py`), so `/poses` is never queued behind the
+  drones' own pose and status topics. `trace:=true` (the
   default) writes every tick's measured and commanded position, phase and intent
   per drone to `guard_trace.csv` in the flight's folder
   ([flight-logs.md](flight-logs.md)).

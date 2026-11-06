@@ -6,7 +6,9 @@ under both strategies and keeps every drone apart, out of the DJI's way and
 inside the room, whatever the strategies ask for.
 
 The shared steps (power, mocap, scanning, syncing) are in
-[../02-flight-day.md](../02-flight-day.md). This page is only what is different.
+[../02-flight-day.md](../02-flight-day.md). This page is only what is different. How the
+game works: [how-it-works.md](how-it-works.md). Showing it to guests:
+[presenting.md](presenting.md).
 
 ## 1. Check it with no drones
 
@@ -58,6 +60,25 @@ choice is a field, the waits are buttons, and the 3D view shows the match.
 For the first sessions on real drones, follow the ladder in
 [../details/guard-design-notes.md](../details/guard-design-notes.md) ("Before the
 first hardware flight"): start 1 v 1, slow and wide apart.
+
+**Speed.** On real drones, every drone runs about half a second behind its commands
+(measured 2026-11-06), so at the default 1 m/s two drones can pass right at the
+minimum distance. For a comfortable margin, set both teams to 0.6 m/s
+(`-p v_max_defense:=0.6 -p v_max_attack:=0.6`, or the two speed fields in the console).
+`-p controller:=mellinger` switches the drones to a controller that should not lag. Try
+it on a single hovering drone before using it in a match.
+
+## Choosing the strategies
+
+Add `-p defense:=<name> -p attack:=<name>` (`--defense`, `--attack` for the planner):
+
+| Defence | Attack |
+|---|---|
+| `shell` (default), `zone`, `hunter`, `ring` | `coordinated` (default), `flood`, `wolfpack`, `direct` |
+
+What each one does, and which pairings make even matches:
+[how-it-works.md](how-it-works.md#the-strategies). Check a new pairing with
+`plan_guard --defense <name> --attack <name>` first.
 
 ## Choosing the rules
 

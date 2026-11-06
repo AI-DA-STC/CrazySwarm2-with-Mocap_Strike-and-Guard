@@ -353,7 +353,142 @@ Each cue is sent only on a change, at most every 0.25 s per drone. None of it ha
 been seen on hardware yet. Magenta against red is the one most likely to be hard to
 tell apart.
 
-## Before the first hardware flight
+## The first hardware matches (2026-11-06)
+
+Seven Crazyflies (cf1-cf4 defend, cf10-cf12 attack), the DJI as the VIP (rigid body
+`dji`), `pressure` rules, paced from the console. Every run has a flight folder
+([flight-logs.md](flight-logs.md)); that is where all the numbers below come from.
+
+| Run | Ended | Why |
+|---|---|---|
+| 14:53 | abort at the START gate | `CONTAINMENT cf1: no mocap for 1.1 s`, and the console never showed the START card |
+| 15:09 | abort in the match | `cf10: 0.64 m from where it was commanded for 0.9 s` |
+| 15:13 | **attack won** | cf10 downed cf4 and cf3, then struck; capture finale |
+| 15:19 | operator landed | batteries 3.72-3.87 V at the start |
+| 15:27 | **defence won** | three downs in 12.4 s; honour-guard finale |
+
+Four causes were found and three fixed.
+
+**1. Every drone trails its setpoint by ~0.56 s (not fixed: needs a hover test).**
+Every drone, every run, followed its commanded path to within 3-5 cm, but 0.54-0.60 s
+late. So at 1 m/s it sat 0.5-0.7 m behind its setpoint. The firmware's PID position
+controller (`stabilizer.controller` 1, which the server sets) overwrites the
+setpoint velocity in `modeAbs` (`position_controller_pid.c`, the `runPid` branch), so
+`cmd_full_state`'s velocity feed-forward is thrown away and the drone moves only in
+proportion to its position error.
+
+Consequences:
+- The CBF's `TRACKING_MARGIN` (0.10 m) and `plan_guard`'s default stand-in lag
+  (0.25 s) are both optimistic for hardware.
+- The 15:09 abort was this lag.
+- Both completed runs had a closest pair at the 0.35 m floor, with the setpoints
+  further apart.
+- The simulator never showed it: `server.yaml` runs the SIL drones on Mellinger.
+
+`plan_guard --tau 0.6` is the honest check:
+- At 1 m/s, 89 of 128 pairing/rule/fleet cells are safe.
+- At 0.6 m/s, 113 of 128 are.
+- Widening `d_cc` to 0.60 m moved the problem into solver emergencies (111 of 128).
+
+The fix to try is `-p controller:=mellinger` (full-state tracking), on one hovering
+drone first. Until then fly 0.6 m/s.
+
+**2. `/poses` went stale inside the show (fixed).**
+- `crazyflie_py` subscribes every drone's `/cfN/pose` (10 Hz) and `/cfN/status` on the
+  show's node: about 127 messages/s with 7 drones.
+- The show ran one `spin_once` per tick, and a paced gate sits 50 ms in `select()`
+  between ticks.
+- Reproduced off the drones at the same rates: `/poses` was 0.3-0.4 s old on average
+  and up to 0.9 s.
+- A real 0.34 s mocap stall on top of that crossed the 1.0 s watchdog: the 14:53 abort.
+- `drain()` now runs up to `drain_count()` callbacks per tick (14 with 7 drones);
+  `/poses` is then 0-5 ms old.
+- The escort had the same pattern and now uses the same helper.
+
+**3. The console lost a gate (fixed).** Answering a gate cleared "whatever gate is open"
+after the POST returned. When the show printed the next gate in the same millisecond
+(PILOT -> START), that was the new one. The window now clears only the gate it
+answered.
+
+**4. The console's 3D view lagged (fixed).**
+- Drawing every 20 Hz marker message, it fell 0.7 s/s behind: 3.3 s late by the end of
+  the 15:27 match.
+- Then it replayed 4 s of match in 2. That was the "accelerated" attacker rush on the
+  screen recording; mocap shows the drones flew normally.
+- Now the show publishes at 10 Hz and the window draws only the newest snapshot per
+  frame.
+
+Also seen: the whole `/poses` stream froze for 0.2-0.55 s every 10-40 s, and the server
+saw it too. It is under the 1.0 s watchdog, and the cause is not known yet (network, or
+laptop load).
+
+## More strategies (2026-11-06)
+
+`zone` and `hunter` (defence), `flood` and `wolfpack` (attack); what each does is in
+[guard-modules.md](guard-modules.md). They were designed to be different ideas, not
+parameter variants, and checked offline on every pairing with all eight strategies.
+
+**Safety** (`plan_guard`, 12 seeds per cell; `tag` and `pressure`; 4 v 3, 2 v 1, 5 v 5
+and the real roster: 128 cells):
+
+| Stand-in lag | Speed | Safe cells | Failures |
+|---|---|---|---|
+| 0.25 s | 1.0 m/s | 127/128 | shell v coordinated, `pressure`, roster: 2 seeds of solver emergency (existing strategies only) |
+| 0.6 s | 1.0 m/s | 89/128 | every strategy, old and new (hunter and flood 14 cells each, shell and coordinated 10) |
+| 0.6 s | 0.6 m/s | 113/128 | hunter 8 (all `pressure`, 0.85-1.00 of the floor), flood 3, shell/ring 6 |
+
+The 0.6 s failures are cause 1 above, not the strategies. `hunter` is the most sensitive
+to it: its flanking pair closes on one attacker from both sides.
+
+**Balance** (defence wins of 12, 4 v 3, stand-in lag 0.25 s; † = mostly ran the
+clock out):
+
+| Rules | Defence | v coordinated | v direct | v flood | v wolfpack |
+|---|---|---|---|---|---|
+| `tag` | shell | 12 | 0 | 12 | 0 |
+| `tag` | ring | 4 | 5 | 0 | 0 |
+| `tag` | zone | **6** | 0 | 12 | 0 |
+| `tag` | hunter | 12 | 12 | 12 | 12 |
+| `pressure` | shell | **8** | 3 | 2 | **6** |
+| `pressure` | ring | 0 | 0 | 0 | 0 |
+| `pressure` | zone | 0 | 0 | 2 | 0 |
+| `pressure` | hunter | 0 | 12† | 1 | 2 |
+
+Even pairings for a demo:
+- zone v coordinated under `tag`: 6/12, and 9/12 from the real roster.
+- shell v wolfpack under `pressure`: 6/12, and 8/12 from the roster.
+- shell v coordinated under `pressure`: 8/12, but 0/12 from the roster.
+
+Lopsided pairings:
+- `hunter` wins every `tag` match.
+- `zone` loses to overloads under `pressure`.
+- `hunter` v `direct` under `pressure` is a clock-out standoff.
+
+**Simulator** (the SIL simulator, 4 v 3 on the real roster, a fresh launch each, all
+completed with no CBF emergency, backstop or near miss): zone v coordinated (`tag`,
+attack won), shell v wolfpack (`pressure`, defence 3 downs), hunter v flood (`pressure`,
+defence), hunter v wolfpack (`pressure`, attack struck at 6.9 s), zone v flood (`tag`,
+defence).
+
+## The simulator is fast enough to use now (2026-11-06)
+
+The SIL simulator ran at 0.06x real time with 7 drones, so a 4 v 3 match with finale
+took about 5 minutes. It is one Python thread, and the time went on per-call overhead,
+not physics. Each step still runs, at the same 0.5 ms:
+- the rigid-body step is in plain floats instead of numpy/rowan on 3-vectors;
+- roll/pitch/yaw are in closed form;
+- the setpoint is converted to a State only when the `none` backend or the `pdf`
+  visualization reads it;
+- `/clock` is published at 500 Hz and the RViz TF at 100 Hz;
+- ten physics steps run per timer callback.
+
+Each replacement was checked against the original to 1e-13 or better.
+
+The result is 0.76x even under load, and it is now paced to exactly 1.00x at half a core
+(`sim.realtime`, default true; `false` runs it flat out, about 18 s of wall time per
+match with finale).
+
+
 
 **Proven in the simulator** (which has no mocap, so poses come from setpoints):
 - the full flight path;

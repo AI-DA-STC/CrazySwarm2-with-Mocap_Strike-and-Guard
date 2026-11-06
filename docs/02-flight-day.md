@@ -1,6 +1,6 @@
 # 2. Flight day: the steps every demo shares
 
-Both demos ([escort](escort/run.md) and [STL](stl/run.md)) are flown the same way. This
+Every demo ([escort](escort/run.md), [STL](stl/run.md) and [guard](guard/run.md)) is flown the same way. This
 page is the shared part; each demo's own page adds its checks and its fly command. Open
 every terminal as shown in [setup step 5](01-setup.md#step-5-open-a-terminal-the-right-way).
 
@@ -24,6 +24,9 @@ Three rules:
   same drones.
 - There are no lights and no camera data, so the simulator checks the logic, not the
   tracking.
+- It runs at real speed. It also flies better than the real drones: it does not have
+  their half-second lag behind commands (see the guard's
+  [how-it-works](guard/how-it-works.md#why-the-drones-run-late-and-what-to-do-about-it)).
 
 ## Choose the fleet
 
