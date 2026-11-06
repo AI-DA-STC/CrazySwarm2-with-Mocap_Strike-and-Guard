@@ -129,6 +129,49 @@ const re = (src) => {
   return RE.get(src);
 };
 
+/* Draw only the NEWEST marker snapshot, once per browser frame.
+ *
+ * Every MarkerArray rebuilds every marker (~100 objects for a guard match),
+ * 20 times a second. When the browser could not keep up, messages QUEUED:
+ * on 2026-11-06 the 3D view fell 0.7 s/s behind the match, 3.3 s late by
+ * the end, then replayed four seconds of it in two -- the attackers'
+ * "accelerated" rush on the screen recording, while mocap shows the drones
+ * flew normally. Now a slow browser skips stale snapshots instead of
+ * queueing them. Each snapshot is the whole picture, except deletions: the
+ * DELETE / DELETEALL markers of skipped snapshots are applied first, so a
+ * vanished intent line cannot linger.
+ */
+export function latestOnly(apply, raf = (f) => requestAnimationFrame(f),
+                           cancelRaf = (h) => cancelAnimationFrame(h)) {
+  let pending = null;
+  let deletes = [];
+  let handle = 0;
+  const flush = () => {
+    handle = 0;
+    const msg = pending;
+    const dels = deletes;
+    pending = null;
+    deletes = [];
+    if (dels.length) apply({ markers: dels });
+    if (msg) apply(msg);
+  };
+  return {
+    push(msg) {
+      if (pending) {
+        for (const m of pending.markers || []) if (m.action === 2 || m.action === 3) deletes.push(m);
+      }
+      pending = msg;
+      if (!handle) handle = raf(flush);
+    },
+    cancel() {
+      if (handle) cancelRaf(handle);
+      handle = 0;
+      pending = null;
+      deletes = [];
+    },
+  };
+}
+
 function ingest(procId, text, ts) {
   const spec = S.mission;
   const p = S.procs.get(procId);
@@ -419,10 +462,17 @@ function Scene() {
         sc.current.setEstimate(t.child_frame_id, tr.translation, tr.rotation);
       }
     }));
+    const coalescers = [];
     for (const t of markerTopics) {
-      offs.push(b.subscribe(t, (msg) => sc.current && sc.current.setMarkers(t, msg)));
+      const c = latestOnly((msg) => sc.current && sc.current.setMarkers(t, msg));
+      coalescers.push(c);
+      offs.push(b.subscribe(t, c.push));
     }
-    return () => { offs.forEach((f) => f()); if (sc.current) sc.current.clearMarkers(); };
+    return () => {
+      offs.forEach((f) => f());
+      coalescers.forEach((c) => c.cancel());
+      if (sc.current) sc.current.clearMarkers();
+    };
   }, [fleetNames.join(','), enabled.join(','), markerTopics.join(',')]);
 
   // drone colour follows its health tile
