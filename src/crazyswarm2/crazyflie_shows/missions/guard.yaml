@@ -35,12 +35,16 @@ options:
     label: Defence strategy
     choices:
       shell: urgency-weighted 3D intercepts, pincers when outnumbering (the default)
+      zone: each defender owns a slice of the sky round the VIP and only fights there (beaten by an overload)
+      hunter: a pair goes out to outnumber one attacker; the rest guard the VIP close
       ring: the escort's idea -- a flat ring that turns to the nearest threat (a baseline)
     default: shell
   - name: attack
     label: Attack strategy
     choices:
       coordinated: team play + 3D planning scored by the rules, feints, gang-ups (the default)
+      flood: spread all round the VIP, then everyone charges at once, weaving
+      wolfpack: gang up on the loneliest defender first, strike once the defence is thin (needs pressure/zone rules to hunt)
       direct: straight at the VIP, all at once (a baseline)
     default: coordinated
   - name: vip_mode

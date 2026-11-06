@@ -136,4 +136,5 @@ def describe(team, name):
 def _load_builtins():
     # Imported lazily so this module has no import cycle with them.
     from crazyflie_shows.guard.policies import (  # noqa: F401
-        attack_coordinated, attack_direct, defense_ring, defense_shell)
+        attack_coordinated, attack_direct, attack_flood, attack_wolfpack,
+        defense_hunter, defense_ring, defense_shell, defense_zone)
