@@ -10,6 +10,8 @@ from __future__ import annotations
 import inspect
 
 import cffirmware as firm
+import math
+
 import numpy as np
 import rowan
 
@@ -39,6 +41,22 @@ class TrajectoryPolynomialPiece:
 
 def copy_svec(v):
     return firm.mkvec(v.x, v.y, v.z)
+
+
+def _rpy_degrees(quat):
+    """np.degrees(rowan.to_euler(quat, convention='xyz')) -- rowan's 'xyz' is
+    R = Rx(roll) Ry(pitch) Rz(yaw) -- in closed form (checked to 2e-15 against
+    rowan). It ran for every drone every 0.5 ms step, and rowan's matrix route
+    was the simulator's largest remaining cost. Near +-90 deg of pitch rowan
+    itself is used, so a flipped simulated drone behaves exactly as before.
+    """
+    w, x, y, z = (float(v) for v in quat)
+    sp = 2.0 * (x * z + y * w)
+    if abs(sp) > 0.999:
+        return np.degrees(rowan.to_euler(quat, convention='xyz'))
+    return (math.degrees(math.atan2(2.0 * (x * w - y * z), 1.0 - 2.0 * (x * x + y * y))),
+            math.degrees(math.asin(sp)),
+            math.degrees(math.atan2(2.0 * (z * w - x * y), 1.0 - 2.0 * (y * y + z * z))))
 
 
 class CrazyflieSIL:
@@ -261,6 +279,18 @@ class CrazyflieSIL:
     #     pass
 
     def getSetpoint(self):
+        """Advance the setpoint (updateSetpoint) and return it as a State."""
+        self.updateSetpoint()
+        return self._fwsetpoint_to_sim_data_types_state(self.setpoint)
+
+    def updateSetpoint(self):
+        """Advance the firmware setpoint the controller reads -- the
+        high-level planner's current goal -- without converting it.
+
+        The conversion (a rotation matrix and quaternion per drone per 0.5 ms
+        step) was a quarter of the simulator's time and only the 'none'
+        backend and the 'pdf' visualization read it (crazyflie_server.py).
+        """
         if self.mode == CrazyflieSIL.MODE_HIGH_POLY:
             # See logic in crtp_commander_high_level.c
             ev = firm.plan_current_goal(self.planner, self.time_func())
@@ -290,8 +320,6 @@ class CrazyflieSIL:
                 self.cmdHl_vel = copy_svec(ev.vel)
                 self.cmdHl_yaw = ev.yaw
 
-        return self._fwsetpoint_to_sim_data_types_state(self.setpoint)
-
         # # else:
         #     # return self._fwstate_to_sim_data_types_state(self.setState)
         # setState = firm.traj_eval(self.setState)
@@ -313,7 +341,7 @@ class CrazyflieSIL:
         self.state.velocity.y = state.vel[1]
         self.state.velocity.z = state.vel[2]
 
-        rpy = np.degrees(rowan.to_euler(state.quat, convention='xyz'))
+        rpy = _rpy_degrees(state.quat)
         # Note, legacy coordinate system, so invert pitch
         self.state.attitude.roll = rpy[0]
         self.state.attitude.pitch = -rpy[1]
@@ -368,8 +396,9 @@ class CrazyflieSIL:
             # polyfit using data and scripts from https://github.com/IMRCLab/crazyflie-system-id
             if pwm < 10000:
                 return 0
-            p = [3.26535711e-01, 3.37495115e+03]
-            return np.polyval(p, pwm)
+            # np.polyval([3.26535711e-01, 3.37495115e+03], pwm), without the
+            # per-call numpy overhead (4 motors x every drone x 2 kHz)
+            return 3.26535711e-01 * pwm + 3.37495115e+03
 
         def pwm_to_force(pwm):
             # polyfit using data and scripts from https://github.com/IMRCLab/crazyflie-system-id

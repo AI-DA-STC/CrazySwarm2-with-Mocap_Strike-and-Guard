@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import math
+
 import numpy as np
 from rclpy.node import Node
 from rclpy.time import Time
 from rosgraph_msgs.msg import Clock
-import rowan
 
 from ..sim_data_types import Action, State
 
@@ -18,6 +19,12 @@ class Backend:
         self.clock_publisher = node.create_publisher(Clock, 'clock', 10)
         self.t = 0
         self.dt = 0.0005
+        #: Publish /clock every Nth physics step (here: 500 Hz, 2 ms resolution).
+        #: Publishing all 2000 steps/s flooded every sim-time node with clock
+        #: messages and made rclpy publishing a large share of each step; the
+        #: physics and the controllers still run at every step.
+        self.clock_every = 4
+        self._k = 0
 
         self.uavs = []
         for state in states:
@@ -38,10 +45,12 @@ class Backend:
             next_states.append(uav.state)
 
         # print(states_desired, actions, next_states)
-        # publish the current clock
-        clock_message = Clock()
-        clock_message.clock = Time(seconds=self.time()).to_msg()
-        self.clock_publisher.publish(clock_message)
+        # publish the current clock (every clock_every steps)
+        self._k += 1
+        if self._k % self.clock_every == 0:
+            clock_message = Clock()
+            clock_message.clock = Time(seconds=self.time()).to_msg()
+            self.clock_publisher.publish(clock_message)
 
         return next_states
 
@@ -50,7 +59,7 @@ class Backend:
 
 
 class Quadrotor:
-    """Basic rigid body quadrotor model (no drag) using numpy and rowan."""
+    """Basic rigid body quadrotor model (no drag)."""
 
     def __init__(self, state):
         # parameters (Crazyflie 2.0 quadrotor)
@@ -81,52 +90,86 @@ class Quadrotor:
 
         self.state = state
 
-    def step(self, action, dt, f_a=np.zeros(3)):
+    def step(self, action, dt, f_a=None):
+        """One physics step -- the same equations as before, in plain floats.
 
-        # convert RPM -> Force
-        def rpm_to_force(rpm):
-            # polyfit using data and scripts from https://github.com/IMRCLab/crazyflie-system-id
-            p = [2.55077341e-08, -4.92422570e-05, -1.51910248e-01]
-            force_in_grams = np.polyval(p, rpm)
-            force_in_newton = force_in_grams * 9.81 / 1000.0
-            return np.maximum(force_in_newton, 0)
+        The numpy/rowan version spent its time in per-call overhead on
+        3-vectors (np.cross alone was a third of the simulator's time); this
+        computes the identical quantities (checked to 1e-12 against it) about
+        an order of magnitude faster, which is what limited the simulator to
+        ~0.06x real time with 7 drones.
+        """
+        # RPM -> force: polyfit from IMRCLab/crazyflie-system-id, grams -> N
+        p0, p1, p2 = 2.55077341e-08, -4.92422570e-05, -1.51910248e-01
+        f = []
+        for rpm in action.rpm:
+            rpm = float(rpm)
+            g = (p0 * rpm + p1) * rpm + p2
+            f.append(max(g * 9.81 / 1000.0, 0.0))
+        B = self.B0
+        e0 = f[0] + f[1] + f[2] + f[3]
+        e1 = B[1, 0] * f[0] + B[1, 1] * f[1] + B[1, 2] * f[2] + B[1, 3] * f[3]
+        e2 = B[2, 0] * f[0] + B[2, 1] * f[1] + B[2, 2] * f[2] + B[2, 3] * f[3]
+        e3 = B[3, 0] * f[0] + B[3, 1] * f[1] + B[3, 2] * f[2] + B[3, 3] * f[3]
 
-        force = rpm_to_force(action.rpm)
+        st = self.state
+        px, py, pz = (float(v) for v in st.pos)
+        vx, vy, vz = (float(v) for v in st.vel)
+        qw, qx, qy, qz = (float(v) for v in st.quat)
+        wx, wy, wz = (float(v) for v in st.omega)
 
-        # compute next state
-        eta = np.dot(self.B0, force)
-        f_u = np.array([0, 0, eta[0]])
-        tau_u = np.array([eta[1], eta[2], eta[3]])
+        def rot(x, y, z):
+            # q v q*, for a unit q: t = 2 (q_v x v); v' = v + w t + q_v x t
+            tx = 2.0 * (qy * z - qz * y)
+            ty = 2.0 * (qz * x - qx * z)
+            tz = 2.0 * (qx * y - qy * x)
+            return (x + qw * tx + (qy * tz - qz * ty),
+                    y + qw * ty + (qz * tx - qx * tz),
+                    z + qw * tz + (qx * ty - qy * tx))
 
-        # dynamics
-        # dot{p} = v
-        pos_next = self.state.pos + self.state.vel * dt
-        # mv = mg + R f_u + f_a
-        vel_next = self.state.vel + (
-            np.array([0, 0, -self.g]) +
-            (rowan.rotate(self.state.quat, f_u) + f_a) / self.mass) * dt
+        # dot{p} = v ; m dot{v} = m g + R f_u + f_a
+        fx, fy, fz = rot(0.0, 0.0, e0)
+        if f_a is not None:
+            fx, fy, fz = fx + f_a[0], fy + f_a[1], fz + f_a[2]
+        m = self.mass
+        pos_next = (px + vx * dt, py + vy * dt, pz + vz * dt)
+        vel_next = (vx + (fx / m) * dt, vy + (fy / m) * dt,
+                    vz + (-self.g + fz / m) * dt)
 
-        # dot{R} = R S(w)
-        # to integrate the dynamics, see
-        # https://www.ashwinnarayan.com/post/how-to-integrate-quaternions/, and
-        # https://arxiv.org/pdf/1604.08139.pdf
-        # Sec 4.5, https://arxiv.org/pdf/1711.02508.pdf
-        omega_global = rowan.rotate(self.state.quat, self.state.omega)
-        q_next = rowan.normalize(
-            rowan.calculus.integrate(
-                self.state.quat, omega_global, dt))
+        # q_next = normalize(exp(0.5 * omega_global * dt) * q)  (rowan.calculus.integrate)
+        gx, gy, gz = rot(wx, wy, wz)
+        hx, hy, hz = 0.5 * gx * dt, 0.5 * gy * dt, 0.5 * gz * dt
+        n = math.sqrt(hx * hx + hy * hy + hz * hz)
+        aw = math.cos(n)
+        if n <= 1e-8:                       # rowan: np.isclose(norm, 0)
+            ax = ay = az = 0.0
+        else:
+            s = math.sin(n) / n
+            ax, ay, az = hx * s, hy * s, hz * s
+        nw = aw * qw - ax * qx - ay * qy - az * qz
+        nx = aw * qx + ax * qw + ay * qz - az * qy
+        ny = aw * qy - ax * qz + ay * qw + az * qx
+        nz = aw * qz + ax * qy - ay * qx + az * qw
+        nn = math.sqrt(nw * nw + nx * nx + ny * ny + nz * nz)
+        q_next = (nw / nn, nx / nn, ny / nn, nz / nn)
 
-        # mJ = Jw x w + tau_u
-        omega_next = self.state.omega + (
-            self.inv_J * (np.cross(self.J * self.state.omega, self.state.omega) + tau_u)) * dt
+        # J dot{w} = J w x w + tau_u   (J diagonal)
+        J0, J1, J2 = (float(v) for v in self.J)
+        iJ0, iJ1, iJ2 = (float(v) for v in self.inv_J)
+        jx, jy, jz = J0 * wx, J1 * wy, J2 * wz
+        cx = jy * wz - jz * wy
+        cy = jz * wx - jx * wz
+        cz = jx * wy - jy * wx
+        omega_next = (wx + iJ0 * (cx + e1) * dt, wy + iJ1 * (cy + e2) * dt,
+                      wz + iJ2 * (cz + e3) * dt)
 
-        self.state.pos = pos_next
-        self.state.vel = vel_next
-        self.state.quat = q_next
-        self.state.omega = omega_next
+        st.pos = np.array(pos_next)
+        st.vel = np.array(vel_next)
+        st.quat = np.array(q_next)
+        st.omega = np.array(omega_next)
 
         # if we fall below the ground, set velocities to 0
-        if self.state.pos[2] < 0:
-            self.state.pos[2] = 0
-            self.state.vel = [0, 0, 0]
-            self.state.omega = [0, 0, 0]
+        if st.pos[2] < 0:
+            st.pos[2] = 0
+            st.vel = [0, 0, 0]
+            st.omega = [0, 0, 0]

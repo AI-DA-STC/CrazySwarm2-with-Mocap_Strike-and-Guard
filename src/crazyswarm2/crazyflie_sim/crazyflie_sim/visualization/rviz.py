@@ -25,7 +25,14 @@ class Visualization:
         self.reference_frames = reference_frames
         self.tfbr = TransformBroadcaster(self.node)
 
+    #: Publish the TF every Nth physics step (here: 100 Hz). Every step (2 kHz)
+    #: cost far more than RViz can show.
+    every = 20
+
     def step(self, t, states: list[State], states_desired: list[State], actions: list[Action]):
+        self._k = getattr(self, '_k', 0) + 1
+        if self._k % self.every:
+            return
         # publish transformation to visualize in rviz
         msgs = []
         for name, state, reference_frame in zip(self.names, states, self.reference_frames):

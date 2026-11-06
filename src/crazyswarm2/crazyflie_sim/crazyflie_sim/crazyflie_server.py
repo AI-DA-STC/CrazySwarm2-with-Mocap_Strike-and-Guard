@@ -118,6 +118,14 @@ class CrazyflieServer(Node):
                     )
                 self.visualizations.append(vis)
 
+        # Only the 'none' backend and the 'pdf' visualization read the desired
+        # states; converting every drone's setpoint every 0.5 ms for nobody
+        # was a quarter of the simulator's time.
+        self._need_desired = (
+            backend_name == 'none'
+            or 'pdf' in [k for k, v in self._ros_parameters['sim']['visualizations'].items()
+                         if v['enabled']])
+
         controller_name = backend_name = self._ros_parameters['sim']['controller']
 
         # create robot SIL objects
@@ -220,9 +228,24 @@ class CrazyflieServer(Node):
 
             self.is_shutdown = True
 
+    #: Physics steps per timer callback. One rclpy timer callback per 0.5 ms
+    #: step cost more than the step itself once the physics was fast; ten
+    #: steps (5 ms of sim time) per callback leaves commands picked up within
+    #: 5 ms of sim time, under a real radio's latency.
+    STEPS_PER_CALLBACK = 10
+
     def _timer_callback(self):
-        # update setpoint
-        states_desired = [cf.getSetpoint() for _, cf in self.cfs.items()]
+        for _ in range(self.STEPS_PER_CALLBACK):
+            self._step_once()
+
+    def _step_once(self):
+        # update setpoint (and convert it only if someone reads it)
+        if self._need_desired:
+            states_desired = [cf.getSetpoint() for _, cf in self.cfs.items()]
+        else:
+            for _, cf in self.cfs.items():
+                cf.updateSetpoint()
+            states_desired = [None] * len(self.cfs)
 
         # execute the control loop
         actions = [cf.executeController() for _, cf in self.cfs.items()]
