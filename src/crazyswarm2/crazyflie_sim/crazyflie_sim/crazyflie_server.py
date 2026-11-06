@@ -217,7 +217,16 @@ class CrazyflieServer(Node):
         # step as fast as possible
         max_dt = 0.0 if 'max_dt' not in self._ros_parameters['sim'] \
             else self._ros_parameters['sim']['max_dt']
-        self.timer = self.create_timer(max_dt, self._timer_callback)
+        # realtime (default): one callback per STEPS_PER_CALLBACK physics steps
+        # of WALL time, so sim time never runs ahead of the clock on the wall
+        # -- what a person watching RViz or the console expects. Since the
+        # 2026-11-06 speed-up the simulator can run faster than real time;
+        # realtime: false runs it flat out (batch testing; shows follow
+        # /clock with use_sim_time, so they keep up either way).
+        realtime = bool(self._ros_parameters['sim'].get('realtime', True))
+        period = (self.STEPS_PER_CALLBACK * getattr(self.backend, 'dt', 0.0005)
+                  if realtime and not max_dt else max_dt)
+        self.timer = self.create_timer(period, self._timer_callback)
         self.is_shutdown = False
 
     def on_shutdown_callback(self):
