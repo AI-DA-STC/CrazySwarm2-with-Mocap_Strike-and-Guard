@@ -32,8 +32,9 @@ ros2 launch crazyflie_examples launch.py script:=hello_world
 ```
 
 > Any script that streams setpoints or sleeps on a schedule (the escort included)
-> **requires** `--ros-args -p use_sim_time:=true` in the sim: the sim clock runs
-> ~4x slower than wall time and the script otherwise races ahead of the physics.
+> **requires** `--ros-args -p use_sim_time:=true` in the sim: the sim clock is paced
+> to wall time only approximately (`sim.realtime`, default true) and runs flat out with
+> `sim.realtime:=false`, so a script on the wall clock drifts away from the physics.
 
 RViz opens by default (`rviz:=false` to disable) and shows the simulated drone.
 The [preflight GUI](preflight-gui.md) also opens by default; in sim there is no mocap so

@@ -30,7 +30,7 @@ Symptom, cause and fix for everything this rig is known to do. The short version
 | Symptom | Cause / fix |
 |---------|-------------|
 | Sim server **crashes with a `TypeError`** the moment a script calls `start_trajectory` | `plan_start_trajectory`'s binding arity differs between cffirmware builds. On this box the binding built from tag 2025.02 is **5-arg** (`p, trajectory, reversed, relative, start_from`, verified 2026-09-17), and calling it with 7 arguments raises `TypeError: takes 5 positional arguments but 7 were given`, which kills the sim server at the first `startTrajectory`. `crazyflie_sim/crazyflie_sil.py` now picks the call by `inspect.signature` arity at import, so either binding works — never hard-code either. **Sim-only; hardware unaffected.** Re-vendoring an older crazyswarm2 reintroduces the crash. |
-| In sim, a flight script finishes in seconds / commands fire before the previous motion completes | The sim clock runs **~4x slower than wall time** (no realtime pacing) and the script slept on wall clock, racing ahead of the physics. Run it with `--ros-args -p use_sim_time:=true` ([running.md section A](running.md#a-simulation-no-hardware-no-mocap)). On hardware run **without** the flag. |
+| In sim, a flight script finishes in seconds / commands fire before the previous motion completes | The script slept on wall clock instead of the sim clock (`/clock`), which is only paced to wall time (`sim.realtime`) and runs flat out with `sim.realtime:=false`. Run it with `--ros-args -p use_sim_time:=true` ([running.md section A](running.md#a-simulation-no-hardware-no-mocap)). On hardware run **without** the flag. |
 
 ## Crazyradio / drones
 

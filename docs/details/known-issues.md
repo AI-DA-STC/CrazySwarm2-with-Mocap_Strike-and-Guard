@@ -516,8 +516,9 @@ in it, and why, is in [server-changes.md](server-changes.md).
   hardware unaffected.
 - **Sim runs need `--ros-args -p use_sim_time:=true`** for any script that
   streams setpoints or sleeps on a schedule (the escort included) — the sim clock is
-  ~4x slower than wall time, so without the flag the script races ahead of the
-  physics. Hardware runs WITHOUT the flag.
+  only paced to wall time (`sim.realtime`, default true; it was ~4x slower before the
+  2026-11 speed-up) and runs flat out with `sim.realtime:=false`, so without the flag
+  the script drifts away from the physics. Hardware runs WITHOUT the flag.
 - **LED convention: green = drone connected and ready for command; red =
   drones are in flight / a script is controlling them.** The server turns the
   Color LED deck green on connect (and off on clean disconnect); every
