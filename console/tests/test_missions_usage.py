@@ -5,7 +5,6 @@ the mission window. Stdlib only, no ROS needed:
 """
 
 import os
-import signal
 import sys
 import tempfile
 import textwrap

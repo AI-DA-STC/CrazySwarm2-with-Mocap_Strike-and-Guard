@@ -165,32 +165,6 @@ all:
       status:
         frequency: 1 # Hz
     custom_topics:
-      # estimator:
-      #   frequency: 5 #was 50
-      #   vars:
-      #     - stateEstimate.x
-      #     - stateEstimate.y
-      #     - stateEstimate.z
-      #     - stateEstimate.yaw   # values[3], degrees (Kalman-estimated heading)
-      # # MOCAP-FREE onboard telemetry for safety_watchdog.py. Deliberately NO
-      # # stateEstimate.* here: with estimator=2 that position is fused with the
-      # # mocap pose and inherits mocap drift. These are pure IMU / baro / firmware
-      # # supervisor signals, valid even when the mocap frame has drifted.
-      # safety_att:                 # 5 floats = 20 B (log-block limit is 26 B)
-      #   frequency: 20 # Hz
-      #   vars:
-      #     - stabilizer.roll       # deg   (attitude est: gyro+accel)
-      #     - stabilizer.pitch      # deg
-      #     - gyro.x                # deg/s (raw rate gyro)
-      #     - gyro.y                # deg/s
-      #     - gyro.z                # deg/s
-      # safety_sys:                 # 3 floats + uint16 = 14 B
-      #   frequency: 20 # Hz
-      #   vars:
-      #     - stabilizer.thrust     # 0..65535 (controller collective thrust)
-      #     - baro.asl              # m     (barometric altitude)
-      #     - pm.vbat               # V
-      #     - supervisor.info       # bitfield: is_flying/is_tumbled/is_crashed
       kalman_preflight:           # preflight plotter; 22 B of 26 B log-block budget
         # every var below must exist in each enabled drone's firmware log TOC.
         # motion.*/range.* are present in stock firmware even with no flow

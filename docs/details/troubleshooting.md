@@ -94,6 +94,7 @@ Symptom, cause and fix for everything this rig is known to do. The short version
 | Symptom | Cause / fix |
 |---------|-------------|
 | Deck never lights green on connect | Server log says `No Color LED deck detected … skipping LED set` — deck missing/loose, or the firmware doesn't expose the `colorLedBot` params. |
+| Which drones actually have a Color LED deck fitted? | `python3 scripts/deck_check.py` (server **stopped**: it opens the radio itself). Read-only: for every enabled drone in `crazyflies.yaml` it prints which decks the firmware detected and what the LEDs are showing. |
 | `led.sh` / `color_led` warn that no `…colorLedBot.wrgb8888` params were found | `firmware_params: query_all_values_on_connect` must be `True` in `config/server.yaml` (default in this repo — don't set it back to `False`); also confirm the drone actually connected and carries the deck. |
 | `color_led` exits with `/crazyflie_server/set_parameters not available after 10s` | The server isn't running (`ros2 launch crazyflie launch.py`) or your shell is on a different `ROS_DOMAIN_ID`. |
 | Color command "succeeds" but nothing changes under `backend:=sim` | Expected — LED control is hardware-only; the sim backend declares no firmware params. |
@@ -110,4 +111,10 @@ pgrep -f motion_capture_tracking   # leftover frozen mocap process?
 ros2 topic echo /cf1/status --once          # battery / supervisor / link
 ros2 run tf2_tools view_frames               # TF tree
 ros2 node list ; ros2 topic list
+```
+
+```bash
+./scripts/which_server.sh                # hardware server, sim server, both, or none?
+./scripts/which_server.sh --require sim  # non-zero exit unless ONLY the sim is up (2 = both: never fly)
+python3 scripts/check_mocap_yaw.py       # live yaw of every rigid body, to square them in Motive
 ```

@@ -133,25 +133,6 @@ class YamlText:
             lo, hi = body_lo, body_hi
         return result
 
-    def keys_under(self, keys):
-        """Direct child keys of a mapping (commented-out lines are ignored)."""
-        found = self.find(keys)
-        if found is None:
-            return []
-        _, _, lo, hi = found
-        indent = self._child_indent(lo, hi)
-        if indent is None:
-            return []
-        out = []
-        for i in range(lo, hi):
-            line = self.lines[i]
-            if self._is_content(line) and self._indent(line) == indent:
-                m = re.match(r'^\s*([A-Za-z0-9_./-]+):', line)
-                if m:
-                    out.append(m.group(1))
-        return out
-
-    # -- mutation ----------------------------------------------------------
     def set_value(self, keys, raw_value):
         """Replace the scalar/flow value of a key, keeping any inline comment."""
         found = self.find(keys)

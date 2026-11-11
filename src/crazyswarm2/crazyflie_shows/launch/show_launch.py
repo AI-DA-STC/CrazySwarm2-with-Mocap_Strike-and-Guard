@@ -62,7 +62,6 @@ def generate_launch_description():
     show = LaunchConfiguration('show')
     rviz = LaunchConfiguration('rviz')
 
-    pkg = get_package_share_directory('crazyflie_shows')
     crazyflies_yaml = LaunchConfiguration('crazyflies_yaml_file')
     mocap_yaml = LaunchConfiguration('motion_capture_yaml_file')
 

@@ -778,10 +778,6 @@ def build_catalog(fleet):
     return acts
 
 
-def catalog_index(acts):
-    return {a['id']: a for a in acts}
-
-
 #: Parameters that are ONE setting, whichever card or button shows them: the
 #: launch arguments, and which drone a per-drone command targets. Every other
 #: parameter is specific to its action (a takeoff height is not a landing

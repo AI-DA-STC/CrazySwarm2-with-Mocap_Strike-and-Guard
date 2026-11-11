@@ -37,7 +37,7 @@ Why it is safe to fly fast, in the same terms as the other shows:
 """
 
 from dataclasses import dataclass, field
-from math import atan2, cos, pi, sin
+from math import cos, pi, sin
 
 import numpy as np
 

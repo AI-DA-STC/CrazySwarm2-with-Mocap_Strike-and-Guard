@@ -352,23 +352,11 @@ class ProcessManager:
             procs = list(self.procs.values())
         return [p.summary() for p in sorted(procs, key=lambda p: p.started)]
 
-    def running_actions(self):
-        """Set of action ids with at least one live process (drives the UI badges)."""
-        return {p.action_id for p in self.procs.values() if p.running}
-
     def find_running(self, action_id):
         for p in self.procs.values():
             if p.running and p.action_id == action_id:
                 return p
         return None
-
-    def output_of(self, action_id, max_lines=400):
-        """Recent output of the newest process for an action (for log diagnosis)."""
-        matches = [p for p in self.procs.values() if p.action_id == action_id]
-        if not matches:
-            return []
-        newest = max(matches, key=lambda p: p.started)
-        return [text for _, _, text in newest.tail()][-max_lines:]
 
     def prune(self):
         """Drop finished processes, keeping the newest few for reference."""

@@ -13,14 +13,8 @@ above and below the VIP as well as around it.
 import numpy as np
 
 from crazyflie_shows.guard.policies import Intent, Policy, register
-from crazyflie_shows.guard.policies.common import (assign, into_room, seek,
-                                                   unit)
+from crazyflie_shows.guard.policies.common import assign, into_room, rot_z, seek, unit
 from crazyflie_shows.guard.world import ATTACK, DEFENSE
-
-
-def _rot_z(v, ang):
-    c, s = np.cos(ang), np.sin(ang)
-    return np.array([c * v[0] - s * v[1], s * v[0] + c * v[1], v[2]])
 
 
 @register
@@ -107,7 +101,7 @@ class Shell(Policy):
                 # the blocker's side, so both defenders are within reach of it
                 # -- under a majority rule one defender alone downs nobody.
                 side = 1.0 if kind % 2 else -1.0
-                w = _rot_z(-u, side * np.radians(p['pincer_deg']) * ((kind + 1) // 2))
+                w = rot_z(-u, side * np.radians(p['pincer_deg']) * ((kind + 1) // 2))
                 q = pred + w * press
                 r_q = float(np.linalg.norm(q - vip))
                 if r_q < p['r_shell']:

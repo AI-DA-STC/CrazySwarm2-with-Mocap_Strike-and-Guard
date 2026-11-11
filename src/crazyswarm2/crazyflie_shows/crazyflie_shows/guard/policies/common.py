@@ -33,6 +33,12 @@ def bearing(p, about):
     return float(np.arctan2(d[1], d[0]))
 
 
+def rot_z(v, ang):
+    """``v`` turned by ``ang`` radians about the vertical axis."""
+    c, s = np.cos(ang), np.sin(ang)
+    return np.array([c * v[0] - s * v[1], s * v[0] + c * v[1], v[2]])
+
+
 def wrap(a):
     return (a + np.pi) % (2.0 * np.pi) - np.pi
 

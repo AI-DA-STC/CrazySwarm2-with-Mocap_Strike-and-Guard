@@ -29,15 +29,10 @@ hunt for, so everyone guards.
 import numpy as np
 
 from crazyflie_shows.guard.policies import Intent, Policy, register
-from crazyflie_shows.guard.policies.common import (assign, bearing, into_room,
+from crazyflie_shows.guard.policies.common import (assign, bearing, into_room, rot_z,
                                                    seek, unit)
 from crazyflie_shows.guard.policies.defense_shell import Shell
 from crazyflie_shows.guard.world import ATTACK, DEFENSE
-
-
-def _rot_z(v, ang):
-    c, s = np.cos(ang), np.sin(ang)
-    return np.array([c * v[0] - s * v[1], s * v[0] + c * v[1], v[2]])
 
 
 @register
@@ -121,7 +116,7 @@ class Hunter(Policy):
         toward = unit(vip - pred)
         out = []
         for side in (-1.0, 1.0):
-            q = pred + _rot_z(toward, side * np.radians(p['flank_deg']) / 2.0) * (reach - p['gap'])
+            q = pred + rot_z(toward, side * np.radians(p['flank_deg']) / 2.0) * (reach - p['gap'])
             q[2] = pred[2]
             r = float(np.linalg.norm((q - vip)[:2]))
             if r < p['r_hunt_min']:

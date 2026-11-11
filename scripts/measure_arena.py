@@ -65,7 +65,6 @@ def _sectors(r, p, centre, t, dropouts, gaps, n=8):
     """Per-direction coverage. The volume is not a circle, and the escort puts
     a drone near the edge on purpose, so which WAY it is near the edge matters.
     """
-    import math
     ang = (np.degrees(np.arctan2(p[:, 1] - centre[1], p[:, 0] - centre[0])) % 360)
     width = 360.0 / n
     out = []

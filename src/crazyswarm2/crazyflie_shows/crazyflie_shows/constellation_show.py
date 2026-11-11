@@ -55,14 +55,8 @@ import numpy as np
 from crazyflie_py import Crazyswarm
 
 from crazyflie_shows import constellation, plan_show, safety
-# The abort machinery and the supervisor check used to be defined HERE, which
-# is why they were the constellation's alone. They are re-exported below so
-# that `from crazyflie_shows.constellation_show import ShowAborted, ...` keeps
-# working, but new code should import them from their own modules.
-from crazyflie_shows.abort import (ABORT_LAND_DURATION, ShowAborted,  # noqa: F401
-                                   abort_land, take_signals)
-from crazyflie_shows.preflight import (check_supervisor,  # noqa: F401
-                                       report_supervisor)
+from crazyflie_shows.abort import ShowAborted, abort_land, take_signals
+from crazyflie_shows.preflight import report_supervisor
 from crazyflie_shows.swarm_show import (_param, check_placement,
                                         wait_for_mocap)
 

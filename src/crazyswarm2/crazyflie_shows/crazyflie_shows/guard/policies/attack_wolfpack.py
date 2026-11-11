@@ -22,14 +22,9 @@ meter passes ``evade_share`` (outside the strike circle) breaks off.
 import numpy as np
 
 from crazyflie_shows.guard.policies import Intent, Policy, register
-from crazyflie_shows.guard.policies.common import (assign, bearing, into_room,
+from crazyflie_shows.guard.policies.common import (assign, bearing, into_room, rot_z,
                                                    seek, unit, wrap)
 from crazyflie_shows.guard.world import ATTACK, DEFENSE
-
-
-def _rot_z(v, ang):
-    c, s = np.cos(ang), np.sin(ang)
-    return np.array([c * v[0] - s * v[1], s * v[0] + c * v[1], v[2]])
 
 
 @register
@@ -69,7 +64,7 @@ class Wolfpack(Policy):
         angs = [np.radians(self.p['spread_deg']) * (k - (n - 1) / 2.0) for k in range(n)]
         pts = []
         for ang in angs:
-            q = prey.p + _rot_z(face, ang) * (reach - self.p['gap'])
+            q = prey.p + rot_z(face, ang) * (reach - self.p['gap'])
             q[2] = prey.p[2]
             pts.append(into_room(q, view.arena, 0.4))
         cost = np.array([[float(np.linalg.norm(q - a.p)) for q in pts] for a in A])

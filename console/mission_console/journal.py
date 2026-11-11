@@ -122,12 +122,6 @@ class Journal:
     def recent(self, n=100):
         return list(self.events)[-n:]
 
-    def last_estop(self):
-        for ev in reversed(self.events):
-            if ev['verb'] == 'emergency':
-                return ev
-        return None
-
     def stop(self):
         self._stop = True
         p = getattr(self, 'proc', None)
