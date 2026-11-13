@@ -1,9 +1,10 @@
 # Launching, checks and LEDs
 
-General rig commands that belong to neither demo: the launch, a one-drone test flight,
+General rig commands that belong to none of the demos: the launch, a one-drone test flight,
 health checks, LEDs and every launch argument. The demos are in
-[../02-flight-day.md](../02-flight-day.md), [../escort/run.md](../escort/run.md) and
-[../stl/run.md](../stl/run.md).
+[../02-flight-day.md](../02-flight-day.md), [../escort/run.md](../escort/run.md),
+[../stl/run.md](../stl/run.md) and [../guard/run.md](../guard/run.md); the serpent
+show's own page is [serpent-show.md](serpent-show.md).
 
 Activate the workspace in every terminal first:
 

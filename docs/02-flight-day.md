@@ -37,6 +37,7 @@ Three rules:
 |---|---|---|
 | Escort | 4 (3 defenders + 1 attacker) | one Crazyradio |
 | STL | 10 (5 defenders + 5 intruders, cf10-cf14) | two: cf10-cf14 use a second Crazyradio |
+| Guard | 7 (4 defenders cf1-cf4 + 3 attackers cf10-cf12) | two: cf10-cf12 use a second Crazyradio |
 
 Print what is enabled now: `./scripts/scan_fleet.sh --list`.
 

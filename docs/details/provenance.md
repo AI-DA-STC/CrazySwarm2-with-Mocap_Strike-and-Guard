@@ -13,7 +13,7 @@ maintaining a divergent copy of upstream.
 | Motive, NatNet | **OptiTrack** | How poses leave the Motive PC. |
 | ROS 2 architecture | **IMRCLab**: [crazyswarm2](https://github.com/IMRCLab/crazyswarm2), [motion_capture_tracking](https://github.com/IMRCLab/motion_capture_tracking) | Package layout; Motive → `/poses` → server → poses broadcast to every drone; the `crazyflie_py` API; the three config files; the simulator. |
 | Rig tooling | **AI-DA-STC** team repo ([CrazySwarm2-with-Mocap](https://github.com/AI-DA-STC/CrazySwarm2-with-Mocap)) | Preflight GUI, three examples, RViz/Foxglove in the launch, live parameter pushes, LED on connect. |
-| Hardening and the demos | **This project** | Server and radio-library robustness, Motive auto-discovery, the mocap driver patches, the escort and the STL show wrapper (`crazyflie_shows`), `console/`. |
+| Hardening and the demos | **This project** | Server and radio-library robustness, Motive auto-discovery, the mocap driver patches, the escort, the STL port, the guard game (safety layer vendored from AirStack) and the serpent show (`crazyflie_shows`), `console/`. |
 
 ## The measurements
 
@@ -40,9 +40,12 @@ This project's server and library changes are itemised, with reasons, in
 [server-changes.md](server-changes.md). The mocap driver's patches are in
 [`src/motion_capture_tracking/VENDORED.md`](../../src/motion_capture_tracking/VENDORED.md).
 
-Wholly our own code (lines): the escort, 4,209; the STL port, show and planner (`stl_game`, `stl_show`, `plan_stl`), 1,721, around a colleague's algorithm (his original, 1,246 lines, is kept unchanged in `crazyflie_examples`); the shared show safety code (`abort`,
+Wholly our own code (lines, as of 2026-10-19): the escort, 4,209; the STL port, show and planner (`stl_game`, `stl_show`, `plan_stl`), 1,721, around a colleague's algorithm (his original, 1,246 lines, is kept unchanged in `crazyflie_examples`); the shared show safety code (`abort`,
 `preflight`, `safety`), 893; the older carousel and constellation shows, 3,108;
-`console/`, 10,484; `scripts/`, 4,328.
+`console/`, 10,484; `scripts/`, 4,328. Added since that snapshot, measured the same
+way on 2026-11-13: the guard game (`guard/`, `guard_show`, `plan_guard`), 5,076,
+around AirStack's CBF filter (`cbf.py`, 573 lines, vendored unchanged); the serpent
+show (`serpent`, `serpent_show`), 437.
 
 ## What this means for refactoring
 

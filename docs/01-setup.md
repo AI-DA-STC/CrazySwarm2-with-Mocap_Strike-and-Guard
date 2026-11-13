@@ -100,7 +100,7 @@ Check it worked:
 ros2 pkg prefix motion_capture_tracking   # must print a path inside ~/strike-and-guard/install
 ```
 
-Next: [the flight-day routine](02-flight-day.md), then pick a demo: [escort](escort/run.md) or [STL game](stl/run.md).
+Next: [the flight-day routine](02-flight-day.md), then pick a demo: [escort](escort/run.md), [STL game](stl/run.md) or [guard](guard/run.md).
 
 ---
 

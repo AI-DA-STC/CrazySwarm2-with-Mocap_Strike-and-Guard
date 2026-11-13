@@ -43,6 +43,14 @@ The problems people actually hit, most common first. The full list, with causes,
 | `not on the server: cf10, ...` | The intruders are not enabled, or the second Crazyradio is not plugged in. Enable all ten in `crazyflies.yaml`, plug in both radios, scan, relaunch. |
 | Every other launch now hangs | cf10-cf14 are still enabled from an STL session. Set them back to `enabled: false`. |
 
+## Guard
+
+| What you see | What to do |
+|---|---|
+| Abort at the start gate: `CONTAINMENT cf1: no mocap for 1.1 s` | The cameras lost that drone for about a second. Check its markers and the camera view, then fly again. This ended the first hardware match on 2026-11-06. |
+| Abort in the match: `cf10: 0.64 m from where it was commanded for 0.9 s` | The drone flew its path, about half a second late: every drone trails its setpoint by ~0.56 s, so at 1 m/s it sits over half a metre behind. Fly 0.6 m/s (`-p v_max_defense:=0.6 -p v_max_attack:=0.6`), or try `-p controller:=mellinger` on one hovering drone first. Why: [guard/how-it-works.md](guard/how-it-works.md#why-the-drones-run-late-and-what-to-do-about-it). |
+| The match pauses and every drone holds | A near miss: the safety layer is keeping the drones apart, and play resumes by itself. If the pause does not clear in a few seconds, everything lands. Expected, not a fault. The long story: [details/guard-design-notes.md](details/guard-design-notes.md). |
+
 ## The preflight window
 
 | What you see | What to do |

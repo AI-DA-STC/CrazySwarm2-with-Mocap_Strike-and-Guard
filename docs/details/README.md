@@ -25,7 +25,7 @@ before changing code.
 |---|---|
 | [stl-design-notes.md](stl-design-notes.md) | How the colleague's game is ported and checked, what was measured, and how to bring in a new version |
 
-**The rig, shared by both**
+**The rig, shared by every demo and show**
 
 | File | What it covers |
 |---|---|

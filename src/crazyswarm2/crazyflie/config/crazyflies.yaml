@@ -58,13 +58,14 @@ robots:
     initial_position: [-1.6232, -1.6414, 0.0]
     type: cf21  # see robot_types
 
-  # cf10-cf14: the STL show's intruders (docs/stl/run.md), on a SECOND
+  # cf10-cf14: the STL game's intruders (docs/stl/run.md) and the guard
+  # game's attackers (cf10-cf12, docs/guard/run.md), on a SECOND
   # Crazyradio -- radio://1, channel 90, 2M. 90 is 10 channels clear of the
   # first dongle's 80 (two dongles need >= 2 at 2M, see CLAUDE.md). 2M, not
   # the 1M the historical two-dongle cf11 used: these answered at 2M when the
-  # STL game flew on 2026-10-13. Disabled by default because enabling ANY of
-  # them makes every launch need the second dongle; enable all five (plus
-  # the defenders) for an STL session. Marks are UNSYNCED placeholders from
+  # STL game flew on 2026-10-13. cf10-cf12 are committed enabled (left on for
+  # the guard game), so every launch needs the second dongle; cf13-cf14 stay
+  # disabled -- enable them too (plus the defenders) for an STL session. Marks are UNSYNCED placeholders from
   # the colleague's layout -- run scripts/sync_initial_positions.py before
   # flying; stl_show's placement check refuses until they match mocap.
   cf10:

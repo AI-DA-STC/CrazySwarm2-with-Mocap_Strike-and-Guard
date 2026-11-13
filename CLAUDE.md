@@ -4,14 +4,21 @@ Guidance for Claude Code in this repository.
 
 ## What this repo is
 
-A ROS 2 workspace for two Crazyflie 2.1 demos of one problem, defending against
-attackers:
+A ROS 2 workspace for three Crazyflie 2.1 demos of one problem, defending against
+attackers, plus choreographed shows:
 
 - **Escort**: three defenders hold a ring around a VIP (a hand-flown DJI, or a fixed
   point) and turn it to block a fourth Crazyflie. Reactive, closed loop on mocap.
 - **STL game**: five defenders stop five intruders (cf10-cf14, on a second Crazyradio)
   reaching a goal line. A colleague's algorithm, open loop: the seed fixes the flight,
   which is checked before arming.
+- **Guard**: N defenders protect a VIP (a DJI or a fixed point) against M attackers;
+  strategies and rule sets plug in by name, and every command passes a CBF safety
+  layer. Reactive, closed loop on mocap. First hardware matches 2026-11-06
+  (4 defenders cf1-cf4 v 3 attackers cf10-cf12, DJI as the VIP): the attack and the
+  defence won one each.
+- **Serpent**: a one-minute choreographed big-arena show, five drones
+  (docs/details/serpent-show.md).
 
 OptiTrack/Motive gives every position; one laptop commands every drone. All source is
 vendored in `src/` and committed; `build/`, `install/`, `log/` are generated and
@@ -22,6 +29,8 @@ Motive ──NatNet multicast 50 Hz──► motion_capture_tracking ──/pose
                                                               │                ▲
                                                               ▼                │
                      escort_show (reads /poses every tick) ── cmd_full_state ──┤ 20 Hz per drone
+                     guard_show (reads /poses every tick; guard/safety_layer.py filters
+                     every command) ── cmd_full_state ──┤
                      stl_show (reads /poses only for the preflight checks) ── goTo
 ```
 
@@ -45,7 +54,9 @@ Motive ──NatNet multicast 50 Hz──► motion_capture_tracking ──/pose
     Tests: `PYTHONPATH=src/crazyswarm2/crazyflie_shows python3 -m pytest -q
     src/crazyswarm2/crazyflie_shows/test`.
 - `src/crazyswarm2/crazyflie/config/`: `crazyflies.yaml` is the ONLY fleet roster
-  (cf10-cf14 committed `enabled: false`); `arena.yaml` is the measured room
+  (cf10-cf12 committed `enabled: true` -- the guard game's attackers, so every
+  launch needs the second dongle; cf13-cf14 `enabled: false`); `arena.yaml` is
+  the measured room
   (`measured: false` makes the escort planner refuse; the STL game ignores it).
 - `src/crazyswarm2/crazyflie/src/crazyflie_server.cpp`: heavily patched; read
   `docs/details/server-changes.md` before touching it.
@@ -57,7 +68,7 @@ Motive ──NatNet multicast 50 Hz──► motion_capture_tracking ──/pose
   Drives the `ros2` CLI as subprocesses, never in-process rclpy. Each demo's window is
   `src/crazyswarm2/crazyflie_shows/missions/<demo>.yaml`. Read `console/README.md` first.
 - `docs/01-setup.md`, `docs/02-flight-day.md`, `docs/escort/`, `docs/stl/`,
-  `docs/troubleshooting.md`: beginner guides. `docs/details/`: everything
+  `docs/guard/`, `docs/troubleshooting.md`: beginner guides. `docs/details/`: everything
   implementation-specific. `docs/diagrams/strike-and-guard-diagrams.pptx`: the source of
   every diagram (no mermaid); `docs/diagrams/export_png.sh` regenerates the PNGs.
 
@@ -70,6 +81,10 @@ ros2 launch crazyflie launch.py backend:=sim
 ros2 run crazyflie_shows plan_escort
 ros2 run crazyflie_shows escort_show --ros-args -p use_sim_time:=true -p vip_mode:=point -p paced:=true
 ros2 run crazyflie_shows plan_stl       # refuses v3 at the default 0.15 m floor; that is known
+ros2 run crazyflie_shows plan_guard --defenders 4 --attackers 3
+ros2 run crazyflie_shows guard_show --ros-args -p use_sim_time:=true \
+    -p defenders:=cf1,cf2,cf3,cf4 -p attackers:=cf5,cf6,cf7   # hardware 2026-11-06: cf10-cf12 attacked, add -p vip_mode:=mocap
+ros2 run crazyflie_shows plan_serpent   # then serpent_show: the one-minute big-arena show
 ```
 
 ## Rules that prevent real accidents

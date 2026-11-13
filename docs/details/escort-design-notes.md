@@ -271,6 +271,7 @@ code's. `plan_escort` prints the consequences of whatever is chosen.
    **If a HUMAN ever stands in as the VIP, put `R` back to 1.5 m** and accept
    that the demo then does not fit this room.
 4. **The arena — MEASURED 2026-10-01, no longer open.**
+   *(Old-room numbers, measured 2026-10-01; see "The big arena (2026-11-03)" above.)*
    The tested radius is 2.00 m. The escort PLANS to
    `arena_radius = safety.ARENA_RADIUS_PLAN` (1.90 m, tested minus the tracking
    margin), `ceiling = 1.85 m`, and `room_center = safety.ARENA_CENTRE`,
@@ -359,7 +360,8 @@ about 8 s instead of 4 s, which is slower to watch but costs no separation.
 Raising `v_max` is the one that needs a written safety argument, because it is
 the speed the defenders fly at next to whatever they are escorting.
 
-**The arena lever has now been pulled, and it went the wrong way.** The volume
+**The arena lever has now been pulled, and it went the wrong way.**
+*(Old room, measured 2026-10-01; see "The big arena (2026-11-03)" above.)* The volume
 measures 2.24 m to first dropout, not the 3.5 m that would have made this
 comfortable, so the arena was set from the 2.00 m tested radius -- planned to
 `ARENA_RADIUS_PLAN` = 1.90 m, keeping the 0.10 m tracking margin -- and every
