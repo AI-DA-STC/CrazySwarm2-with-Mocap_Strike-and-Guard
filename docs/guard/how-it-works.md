@@ -2,9 +2,10 @@
 
 ![The guard game seen from above](../diagrams/26-guard-at-a-glance.png)
 
-This page uses no maths. How the code is put together is in
-[details/guard-modules.md](../details/guard-modules.md); why it is that way, and what was
-measured, is in [details/guard-design-notes.md](../details/guard-design-notes.md).
+This page uses no maths. The maths, and the reason behind every design choice, are in
+[details/guard-theory.md](../details/guard-theory.md). How the code is put together is in
+[details/guard-modules.md](../details/guard-modules.md); what was
+measured is in [details/guard-design-notes.md](../details/guard-design-notes.md).
 
 ## The game
 

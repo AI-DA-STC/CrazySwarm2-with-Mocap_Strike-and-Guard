@@ -16,6 +16,7 @@ before changing code.
 
 | File | What it covers |
 |---|---|
+| [guard-theory.md](guard-theory.md) | The maths and the reason behind the design: the safety contract, the CBF filter, the strategies, the rules |
 | [guard-modules.md](guard-modules.md) | Every module, what it may and may not do, and how one tick flows through them |
 | [guard-design-notes.md](guard-design-notes.md) | Why it is built this way: the CBF ported from AirStack, the separation floor, the rules and their measured balance, writing your own strategy |
 
