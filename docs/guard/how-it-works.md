@@ -56,6 +56,8 @@ can swap them freely, and compare them fairly.
 
 Choose the rules before the match. Each one only changes who can be taken out, and how.
 
+![Rules: everything is a meter](../diagrams/34-guard-rules.png)
+
 | Rules | Who can be taken out | How |
 |---|---|---|
 | **tag** | attackers | a defender stays close to an attacker for about a second |
@@ -135,6 +137,8 @@ Then everyone goes home and lands.
 ## Layers of safety
 
 No single check is trusted.
+
+![Guard: layers of safety](../diagrams/33-guard-safety-layers.png)
 
 - **Before arming,** the show refuses to fly if the plan does not fit the measured room,
   if drones stand too close to the VIP or each other, or if a drone is not on its mark.

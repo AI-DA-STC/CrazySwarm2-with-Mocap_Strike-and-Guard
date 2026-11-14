@@ -8,6 +8,8 @@ measurements, the balance, the lessons), read
 
 All the code is under `src/crazyswarm2/crazyflie_shows/crazyflie_shows/`.
 
+![How the guard code fits together](../diagrams/41-guard-modules.png)
+
 ## One tick
 
 Every 50 ms (20 Hz), in this order:

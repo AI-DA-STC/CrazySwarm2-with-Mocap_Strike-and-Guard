@@ -5,6 +5,8 @@ Code: `src/crazyswarm2/crazyflie_shows/crazyflie_shows/serpent.py` (the plan, pu
 and `serpent_show.py` (flies it through `constellation_show.run`, the same loop,
 checks and abort as the constellation).
 
+![The serpent: one minute, the whole arena](../diagrams/42-serpent.png)
+
 ## What it does
 
 | phase | what the audience sees |

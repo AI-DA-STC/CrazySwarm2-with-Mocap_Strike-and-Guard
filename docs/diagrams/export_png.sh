@@ -20,9 +20,11 @@ NAMES=(
   09-safety-layers 10-show-sequence 11-light-legend 12-flight-day
   13-safety-filter 14-command-modes 15-attacker 16-controller-step
   17-control-tick 18-verification 19-lessons 20-lab-network
-  21-two-demos 22-stl-at-a-glance 23-stl-plan-then-fly 24-stl-sequence 25-stl-lights
+  21-three-demos 22-stl-at-a-glance 23-stl-plan-then-fly 24-stl-sequence 25-stl-lights
   26-guard-at-a-glance 27-guard-decision-loop 28-guard-strategies 29-guard-lights
-  30-guard-lag
+  30-guard-lag 31-guard-flight-day 32-guard-match-sequence 33-guard-safety-layers
+  34-guard-rules 35-guard-borrowed 36-guard-one-solve 37-guard-how-close 38-guard-shell
+  39-guard-attack-play 40-guard-speed-sweep 41-guard-modules 42-serpent
 )
 
 TMP="$(mktemp -d)"

@@ -10,6 +10,8 @@ The shared steps (power, mocap, scanning, syncing) are in
 game works: [how-it-works.md](how-it-works.md). Showing it to guests:
 [presenting.md](presenting.md).
 
+![Guard flight day, in order](../diagrams/31-guard-flight-day.png)
+
 ## 1. Check it with no drones
 
 ```bash
@@ -53,6 +55,8 @@ On the drones, run the same command without `use_sim_time`, first with
 Enter before arming, before the match starts and before landing. With the DJI, it
 also waits while the pilot takes it off and lands it; the drones hold and keep
 out of its way during every wait.
+
+![The guard match, step by step](../diagrams/32-guard-match-sequence.png)
 
 Or use the web console (`./console/run.sh`), **Missions → Guard (N v M)**: every
 choice is a field, the waits are buttons, and the 3D view shows the match.

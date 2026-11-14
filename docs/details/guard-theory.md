@@ -15,6 +15,8 @@ wrong command is a collision. The borrowed pieces are §3 (AirStack's solver) an
 STL game's playing theory); the contract (§2) and the constraint set built for the borrowed
 solver (§4) are what this project adds.
 
+![Borrowed pieces, one system](../diagrams/35-guard-borrowed.png)
+
 ---
 
 ## Notation
@@ -224,6 +226,8 @@ extension point its docstring names. This is the theory that is genuinely new he
 new algorithm, but the fitting together of a borrowed solver with this show's bodies, room
 and referee.
 
+![One solve keeps every rule at once](../diagrams/36-guard-one-solve.png)
+
 ### 4.1 Aircraft pairs: an ellipsoidal barrier
 
 AirStack's barrier is spherical. Drones in a downwash are not: a drone under another's
@@ -307,6 +311,8 @@ Three details that the corners forced:
 ---
 
 ## 5. What the filter guarantees, and what it does not
+
+![How close is too close](../diagrams/37-guard-how-close.png)
 
 ### 5.1 It holds setpoints apart, not aircraft
 
@@ -438,6 +444,8 @@ attack never committed.
 
 The default defence is the same theory played the other way (`policies/defense_shell.py`):
 
+![The shell defence, from above](../diagrams/38-guard-shell.png)
+
 * **Urgency** ranks threats: $0.6\,(1 - \mathrm{clip}(r/4.0)) + 0.4\,\mathrm{clip}(\text{closing}, 0, 1)$
   — how close ($r$, against $d_{\text{ref}}$ = 4.0 m) and how fast it closes
   ($v_{\text{ref}}$ = 1.0 m/s), both clipped to $[0, 1]$.
@@ -455,6 +463,8 @@ The default defence is the same theory played the other way (`policies/defense_s
 * **Idle posts** spread the rest round the VIP, alternating 0.6 m above and below it.
 
 ### 6.6 The team play: lanes, commit, decoy, regroup
+
+![The attack plays as a team](../diagrams/39-guard-attack-play.png)
 
 The default attack (`policies/attack_coordinated.py`) plays as a team: **STAGE** on lanes —
 bearings spread round the VIP, each at its own height, outside the defence's reach (4.2 m) —
@@ -478,6 +488,8 @@ converge on that defender.
 ---
 
 ## 7. Rules as rates
+
+![Rules: everything is a meter](../diagrams/34-guard-rules.png)
 
 ### 7.1 Meters
 
@@ -559,6 +571,8 @@ The honest check is a sweep, and the sweep is why the speed caps follow:
 * widening $d_{\text{cc}}$ to 0.60 m instead moved the failures into solver emergencies
   (111 of 128) — a wider keep-out makes the constraints themselves conflict, so the gap
   cannot be bought with distance alone.
+
+![Why the advice is 0.6 m/s](../diagrams/40-guard-speed-sweep.png)
 
 Hence the shipped advice: fly 0.6 m/s until a different onboard controller (Mellinger,
 full-state tracking) is tried on a hovering drone; the lag then needs re-measuring, not

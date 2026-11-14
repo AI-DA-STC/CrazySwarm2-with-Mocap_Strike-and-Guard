@@ -2,7 +2,7 @@
 
 Small drones defending something against attackers, in three demos.
 
-![Strike and guard: one problem, two demos](docs/diagrams/21-two-demos.png)
+![Strike and guard: one problem, three demos](docs/diagrams/21-three-demos.png)
 
 The drones are **Crazyflies**: palm-sized, about 30 g each, with no sensors to see one
 another. Motion-capture cameras on the walls track every drone. One laptop decides where

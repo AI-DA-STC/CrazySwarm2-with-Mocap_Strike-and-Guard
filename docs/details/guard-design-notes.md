@@ -390,6 +390,8 @@ Consequences:
 - At 0.6 m/s, 113 of 128 are.
 - Widening `d_cc` to 0.60 m moved the problem into solver emergencies (111 of 128).
 
+![Why the advice is 0.6 m/s](../diagrams/40-guard-speed-sweep.png)
+
 The fix to try is `-p controller:=mellinger` (full-state tracking), on one hovering
 drone first. Until then fly 0.6 m/s.
 
