@@ -240,3 +240,5 @@ a{color:var(--accent)}
 .ev .tag{align-self:flex-start;line-height:1.5;font-size:9.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--accent2);border:1px solid var(--line2);
   border-radius:4px;padding:0 4px;margin-right:2px;flex:none}
 .ev.fleet span{color:var(--fg)}
+/* ?clean=1 (recording, presenting): the scene alone, no console overlays */
+.scene.clean .scenebar,.scene.clean .legend,.scene.clean .scenenote,.scene.clean .lbl.drone{display:none}

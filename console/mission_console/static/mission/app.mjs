@@ -404,7 +404,7 @@ function Scene() {
   const host = useRef(null);
   const sc = useRef(null);
   const [view, setView] = useState(() => { try { return localStorage.getItem('mw_view') || 'iso'; } catch (e) { return 'iso'; } });
-  const [trails, setTrails] = useState(true);
+  const [trails, setTrails] = useState(!Q.has('clean'));
   const b = bridge();
 
   useEffect(() => {
@@ -491,7 +491,7 @@ function Scene() {
   } else if (!b.byTopic.has('/poses') && !enabled.some((n) => b.byTopic.has(`/${n}/pose`))) {
     note = html`Bridge connected, but no <code>/poses</code> and no <code>/cfX/pose</code> yet.`;
   }
-  return html`<div class="scene">
+  return html`<div class=${Q.has('clean') ? 'scene clean' : 'scene'}>
     <div class="scenehost" ref=${host}></div>
     <div class="scenebar">
       <div class="seg" hidden=${sc.current && sc.current.kind === '2d'}>

@@ -24,6 +24,11 @@ import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { asShapes, boundsOf } from './boundary.mjs';
 
+// `?clean=1`: a view for recording and presenting -- no parking marks, no
+// escort geometry circle, no world axes (and, in app.mjs, no trails or
+// overlays). Without it nothing changes.
+const CLEAN = typeof location !== 'undefined' && new URLSearchParams(location.search).has('clean');
+
 const C = {
   floor: 0x0b1017, grid: 0x1c2735, grid2: 0x141c27, tested: 0xd8a11d, lost: 0xf0564f,
   cage: 0x2f3b4d, drone: 0x7ee0ff, droneOff: 0x7e8c9f, body: 0xe9eff7, est: 0x58a6ff,
@@ -144,9 +149,11 @@ export function createScene(host, opts = {}) {
         arenaG.add(poly(loop(0), C.tested, 2.2));
         arenaG.add(poly(loop(ceil), C.cage, 1.2, { dashed: true, opacity: 0.55 }));
         arenaG.add(posts(P, ceil, C.cage));
-        add(poly(circlePoints(rt), C.tested, 1.0, { dashed: true, opacity: 0.5 }), cx, cy);
-        tag(`arena polygon, ceiling ${ceil.toFixed(2)} m`, x1, y0, 0.02);
-        tag(`circle ${rt.toFixed(2)} m`, cx + rt * Math.cos(-0.6), cy + rt * Math.sin(-0.6), 0.02);
+        if (!CLEAN) {
+          add(poly(circlePoints(rt), C.tested, 1.0, { dashed: true, opacity: 0.5 }), cx, cy);
+          tag(`arena polygon, ceiling ${ceil.toFixed(2)} m`, x1, y0, 0.02);
+          tag(`circle ${rt.toFixed(2)} m`, cx + rt * Math.cos(-0.6), cy + rt * Math.sin(-0.6), 0.02);
+        }
       } else if (sh.kind === 'room') {
         const { cx, cy, rt, rl, ceil } = sh;
         floorG(new THREE.CircleGeometry(rl + 0.35, 96), cx, cy);
@@ -193,7 +200,7 @@ export function createScene(host, opts = {}) {
     grid.position.set(Math.round(b.cx), Math.round(b.cy), 0);
     arenaG.add(grid);
     const axes = [[0.5, 0, 0, C.axisX, 'x'], [0, 0.5, 0, C.axisY, 'y'], [0, 0, 0.5, C.axisZ, 'z']];
-    for (const [x, y, z, col, name] of axes) {
+    for (const [x, y, z, col, name] of CLEAN ? [] : axes) {
       const g = new LineGeometry();
       g.setPositions([0, 0, 0.002, x, y, z + 0.002]);
       arenaG.add(new Line2(g, lineMat(col, 2.5)));
@@ -204,6 +211,7 @@ export function createScene(host, opts = {}) {
 
   function setMarks(fleet) {
     marksG.clear();
+    if (CLEAN) return;
     for (const d of fleet || []) {
       if (!d.initial_position) continue;
       const [x, y] = d.initial_position;
@@ -220,6 +228,7 @@ export function createScene(host, opts = {}) {
 
   // --------------------------------------------------------- the fleet
   const bodies = new Map();       // name -> {...}
+  let trailsOn = true;
   const armGeo = new THREE.BoxGeometry(0.092, 0.008, 0.006);
   const hubGeo = new THREE.BoxGeometry(0.03, 0.03, 0.012);
   const propGeo = new THREE.TorusGeometry(0.022, 0.0035, 6, 20);
@@ -277,6 +286,7 @@ export function createScene(host, opts = {}) {
     const est = isDrone ? new THREE.Mesh(new THREE.SphereGeometry(0.035, 12, 8),
       new THREE.MeshBasicMaterial({ color: C.est, wireframe: true, transparent: true, opacity: 0.8 })) : null;
     if (est) { est.visible = false; bodiesG.add(est); }
+    trail.visible = trailsOn;          // a body that appears after trails were switched off
     bodiesG.add(g, dropL, shadow, trail);
     g.add(tag);
     tag.position.set(0, 0, 0.09);
@@ -453,12 +463,27 @@ export function createScene(host, opts = {}) {
         continue;
       }
       if (mk.action === 2) { removeMarker(key); continue; }
+      if (CLEAN && mk.ns === 'trail') continue;          // a show's own trails too
+      const life = mk.lifetime ? mk.lifetime.sec + mk.lifetime.nanosec * 1e-9 : 0;
+      const expires = life > 0 ? now + life * 1000 : 0;
+      // Text is updated IN PLACE: a label rebuilt on every message (10 Hz from
+      // guard_show) is a fresh DOM element that renders unpositioned for a
+      // frame, so every label in the view flickered.
+      const old = markers.get(key);
+      if (mk.type === 9 && old && old.text) {
+        const col = mk.color || { r: 1, g: 1, b: 1 };
+        old.text.element.textContent = mk.text || '';
+        old.text.element.style.color = `rgb(${Math.round(col.r * 255)},${Math.round(col.g * 255)},${Math.round(col.b * 255)})`;
+        const p = (mk.pose || {}).position;
+        if (p) old.obj.position.set(p.x, p.y, p.z);
+        old.expires = expires;
+        continue;
+      }
       removeMarker(key);
       let obj;
       try { obj = buildMarker(mk); } catch (e) { obj = null; }
       if (!obj) continue;
-      const life = mk.lifetime ? mk.lifetime.sec + mk.lifetime.nanosec * 1e-9 : 0;
-      markers.set(key, { obj, expires: life > 0 ? now + life * 1000 : 0, ns: mk.ns });
+      markers.set(key, { obj, expires, ns: mk.ns, text: mk.type === 9 ? obj.children[0] : null });
       markersG.add(obj);
     }
   }
@@ -528,7 +553,7 @@ export function createScene(host, opts = {}) {
   return {
     setArena, setMarks, setPose, setEstimate, setTone, setMarkers, clearMarkers,
     setView, resetView,
-    setTrails(on) { for (const b of bodies.values()) b.trail.visible = on; },
+    setTrails(on) { trailsOn = on; for (const b of bodies.values()) b.trail.visible = on; },
     clearTrails() { for (const b of bodies.values()) { b.trailN = 0; b.trail.geometry.setDrawRange(0, 0); } },
     // age: of mocap truth; estAge: of the onboard estimate (/cfX/pose or /tf).
     // In the simulator only the estimate exists and it drives the model.
