@@ -65,6 +65,15 @@ keyboard mode, so the physical keys drive it; the pad stays **locked** until the
 script prints the spec's `enable_after` line (for the escort, `ESCORT LIVE` —
 the operator rule "start the teleop, then touch nothing until the show is live").
 
+**A clean scene for recording or a projector:** add `&clean=1` to a mission
+window's URL (e.g. `/mission?m=crazyflie_shows/guard&clean=1`). The scene then
+drops everything that is about the rig rather than the show: trails (the console's
+and a show's own `trail` markers), parking marks, the escort's geometry circle and the arena's text tags, the
+world axes, the view bar, the legend, the "no poses yet" notice and the console's
+per-drone altitude tags (a show's own labels stay). Without it nothing changes.
+The guard clips in [guard/how-it-works.md](../guard/how-it-works.md) were filmed
+this way.
+
 ## Editing a mission file: the spec format
 
 One YAML file per mission. Everything except `title` and `run` is optional. The

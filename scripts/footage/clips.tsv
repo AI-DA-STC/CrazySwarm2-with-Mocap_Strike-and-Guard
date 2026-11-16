@@ -1,0 +1,13 @@
+# The docs clips: name<TAB>mission values (JSON)<TAB>title headline<TAB>title line.
+# Seeds were picked from `plan_guard --matrix` runs for each policy's typical outcome; the
+# simulator does not always agree (docs/details/guard-footage.md). Run: clips.sh [names...]
+shell	{"rules":"tag","defense":"shell","attack":"coordinated","seed":0}	SHELL  (defence)  v coordinated  ·  rules: tag	Meet each attacker out on its line to the VIP, at its own height; with a spare defender, send one round the side (a pincer).
+zone	{"rules":"tag","defense":"zone","attack":"coordinated","seed":0}	ZONE  (defence)  v coordinated  ·  rules: tag	Each defender owns a slice of the sky round the VIP and only fights inside it. Weak when several attackers crowd one slice.
+hunter	{"rules":"tag","defense":"hunter","attack":"coordinated","seed":0}	HUNTER  (defence)  v coordinated  ·  rules: tag	Two defenders pair up to go out and outnumber one attacker; the rest guard the VIP close.
+ring	{"rules":"tag","defense":"ring","attack":"coordinated","seed":3}	RING  (defence, baseline)  v coordinated  ·  rules: tag	The escort's idea: a flat ring round the VIP that turns to face the nearest attacker.
+coordinated	{"rules":"pressure","defense":"shell","attack":"coordinated","seed":2}	COORDINATED  (attack)  v shell  ·  rules: pressure	Take up positions all round, then go in together, behind a decoy or after a feint; back off and come again when blocked.
+flood	{"rules":"tag","defense":"shell","attack":"flood","seed":0}	FLOOD  (attack)  v shell  ·  rules: tag	Spread out evenly round the VIP, then everyone charges at once, weaving.
+wolfpack	{"rules":"pressure","defense":"zone","attack":"wolfpack","seed":0}	WOLFPACK  (attack)  v zone  ·  rules: pressure	Gang up on the loneliest defender first; go for the VIP once the defence is thinned out.
+direct	{"rules":"tag","defense":"shell","attack":"direct","seed":0}	DIRECT  (attack, baseline)  v shell  ·  rules: tag	Straight at the VIP, at full speed, all at once.
+rules-zone_pressure	{"rules":"zone_pressure","defense":"shell","attack":"coordinated","seed":3}	Rules: ZONE_PRESSURE  ·  shell v coordinated	Outnumber a drone two to one to take it out, but only on the other side's ground (near the VIP is the defence's).
+rules-timer	{"rules":"timer","defense":"hunter","attack":"flood","seed":0,"extra":"rules_params:=duration=30"}	Rules: TIMER (30 s clock)  ·  hunter v flood	Nobody is taken out: the defence can only get in the way, and wins by holding out until the clock runs out.

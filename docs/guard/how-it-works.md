@@ -69,6 +69,20 @@ Choose the rules before the match. Each one only changes who can be taken out, a
 **pressure** gives the most two-sided matches: defenders that leave the VIP to chase can
 be ganged up on.
 
+The clips on this page are matches flown in the simulator, seen in the console's 3D view
+from behind the attackers. The legend under each one explains the colours and symbols.
+**tag** and **pressure** appear in the strategy clips further down; here are the other two:
+
+![zone_pressure: shell v coordinated](../img/guard/rules-zone_pressure.webp)
+
+*zone_pressure.* Either side can be taken out, but only on the other side's ground.
+Here the attack comes in together and strikes after 13 s.
+
+![timer: hunter v flood](../img/guard/rules-timer.webp)
+
+*timer, with a 30 s clock.* Nobody can be taken out. The defence blocks wave after wave
+and wins by holding out until the clock runs out.
+
 ## The strategies
 
 Each team plays one strategy, chosen by name. Four per side are built in.
@@ -84,6 +98,28 @@ Each team plays one strategy, chosen by name. Four per side are built in.
 | **hunter** | Two defenders pair up to go out and outnumber one attacker; the rest guard the VIP close. |
 | **ring** | The escort's idea: a ring that turns to face the nearest attacker. A baseline to compare against. |
 
+Each defence against the default attack (coordinated), under tag:
+
+![shell v coordinated](../img/guard/shell.webp)
+
+*shell.* Blocks and pincers meet each attacker on its way in. All three attackers are
+taken out after 13 s.
+
+![zone v coordinated](../img/guard/zone.webp)
+
+*zone.* Each defender holds its own slice (the diamonds are its post) and only goes out
+inside it. The attack commits behind a decoy and strikes after 13 s.
+
+![hunter v coordinated](../img/guard/hunter.webp)
+
+*hunter.* Defenders go out to outnumber the attackers while the rest stay close to the
+VIP. All three attackers are taken out after 14 s.
+
+![ring v coordinated](../img/guard/ring.webp)
+
+*ring.* The ring turns towards the threat, but it cannot face every side at once: the
+attack comes in from several sides and strikes after 13 s.
+
 **Attack**
 
 | Strategy | The idea |
@@ -92,6 +128,29 @@ Each team plays one strategy, chosen by name. Four per side are built in.
 | **flood** | Spread out evenly round the VIP, then everyone charges at once, weaving. |
 | **wolfpack** | Gang up on the loneliest defender first, and only go for the VIP once the defence is thinned out. It needs rules where defenders can be taken out. |
 | **direct** | Straight at the VIP, all at once. A baseline. |
+
+Each attack against the default defence (shell), except wolfpack:
+
+![coordinated v shell](../img/guard/coordinated.webp)
+
+*coordinated, under pressure.* The attack takes up positions round the VIP, then goes in
+together behind a decoy (magenta) and strikes after 12 s.
+
+![flood v shell](../img/guard/flood.webp)
+
+*flood, under tag.* The attackers spread out round the VIP, then all charge at once.
+Here the shell takes all three out after 10 s.
+
+![wolfpack v zone](../img/guard/wolfpack.webp)
+
+*wolfpack, against zone under pressure.* All three attackers gang up on the defender that
+has gone out alone, take it out, and strike through the gap after 6 s. (Against the
+shell, in the simulator, wolfpack rarely gets that far.)
+
+![direct v shell](../img/guard/direct.webp)
+
+*direct, under tag.* All three fly straight at the VIP. Here the shell meets them on the
+way in and takes them all out in under 4 s.
 
 **Which matches are worth showing.** Some pairings are one-sided: hunter beats every
 attack under tag, for example. The most even ones, measured over many simulated matches,
