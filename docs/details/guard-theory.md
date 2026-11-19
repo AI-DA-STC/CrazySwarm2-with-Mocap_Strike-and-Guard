@@ -45,7 +45,7 @@ their own "where" legend directly under them. Values are the shipped `GuardConfi
 | $\eta$ | hard separation floor across (`min_separation`) | 0.35 m |
 | $\eta_z$ | hard separation floor vertically (`min_separation_z`) | 0.62 m |
 | $\mathrm{TM}$ | tracking margin: how far an aircraft may trail its setpoint | 0.10 m |
-| $\tau$ | first-order tracking lag of an aircraft behind its setpoint | 0.25 s assumed; 0.54–0.60 s measured |
+| $\tau$ | first-order tracking lag of an aircraft behind its setpoint | 0.54–0.60 s measured; `plan_guard` default 0.6 s since 2026-11-19 (0.25 s before) |
 | $n$ | inward unit normal of a wall | geometric |
 | $T$ | down time: seconds of filling that downs a drone | 1.1 s |
 | $\rho$ | reach: distance within which an opponent counts against a drone | 1.15 m `tag`, 1.2 m `pressure` |
@@ -362,7 +362,10 @@ $d$, so 1 means exactly on it.
 
 The per-drone watchdog is the escort's `contain_check`, shared rather than copied: stale
 mocap (0.3 s hold, 1.0 s land), outside the room (0.25 m margin), or not following its
-setpoint (0.60 m of error for 0.80 s) each lands the show. That last check is the escort's
+setpoint (0.60 m from every setpoint of the last 1.0 s, for 0.80 s) each lands the show.
+The 1.0 s window (`track_lag_s`) is the measured ~0.6 s tracking lag plus margin: a drone
+that follows late is still near where the command just was; one that stops, or leaves
+the commanded path, is not. That last check is the escort's
 lesson again: **check the plant, not the command** — a drone that stops following is the
 earliest warning there is.
 
@@ -554,8 +557,9 @@ is *safe*.
 ![Why the drones run late](../diagrams/30-guard-lag.png)
 
 Offline, `plan_guard` models each aircraft as a **first-order lag** $\tau$ behind its
-setpoint — the same stand-in the escort's verifier uses. The shipped default is $\tau$ =
-0.25 s, and it was always labelled a stand-in, not a measurement. At speed $v$ the aircraft
+setpoint — the same stand-in the escort's verifier uses. The default was $\tau$ =
+0.25 s, labelled a stand-in, not a measurement, until 2026-11-19; it is now 0.6 s, the
+hardware figure below. At speed $v$ the aircraft
 then sits $\tau\, v$ behind its commanded point.
 
 Hardware measured it on 2026-11-06: **every drone, every run, followed its commanded path to

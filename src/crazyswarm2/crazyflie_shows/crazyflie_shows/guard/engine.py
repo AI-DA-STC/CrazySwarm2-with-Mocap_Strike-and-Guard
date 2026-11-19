@@ -17,7 +17,10 @@ Per tick, in this order (the order is the design):
 5. Integrate into setpoints.
 6. The referee integrates the rule set's meters from the AIRCRAFT positions;
    downed drones (either team, if the rules allow) and striking attackers
-   start RETIRING (the caller lands them) and become obstacles.
+   start RETIRING: out of play at once, but first EXITING under the engine's
+   command (brake, let the aircraft catch up, get clear of the VIP), and only
+   then handed to the caller to land (:meth:`Match.pop_landing`), after which
+   they are descending obstacles.
 
 What a strategy may know -- the platform is pointless if a team can read the
 other's intent, so this is enforced here, not left to good manners:
@@ -47,7 +50,7 @@ import numpy as np
 
 from crazyflie_shows import escort
 from crazyflie_shows.guard import safety_layer
-from crazyflie_shows.guard.policies.common import seek
+from crazyflie_shows.guard.policies.common import into_room, seek
 from crazyflie_shows.guard.rules import Referee
 from crazyflie_shows.guard.world import (ACTIVE, ATTACK, DEFENSE, RETIRING,
                                          Agent, Arena, View)
@@ -85,6 +88,10 @@ class Match:
         self._est = {n: escort.VelocityEstimator() for n in self.agents}
         self.v_obs = {n: np.zeros(3) for n in self.agents}
         self.referee = Referee(rules)
+        #: retired drones still under command (name -> seconds exiting), and
+        #: the ones whose exit is over, waiting for the caller to land them
+        self.exiting = {}
+        self._land_due = []
         self.t = 0.0
         #: names whose command the safety layer changed on the last tick
         self.corrected = set()
@@ -139,21 +146,63 @@ class Match:
         # its descent in the setpoint, so that with no mocap (the simulator)
         # it is still an obstacle where it really is, not frozen in mid-air.
         for n, a in self.agents.items():
-            if a.status == RETIRING:
+            if a.status == RETIRING and n not in self.exiting:
                 self.sp[n][2] = max(0.0, self.sp[n][2] - self.cfg.land_speed * dt)
         self._observe(dt, measured)
         return np.asarray(vip_p, float), np.asarray(vip_v, float)
 
+    def _exit_goal(self, n, vip_p):
+        """Where an exiting drone goes: nowhere (brake and hold) if it is
+        already clear of the VIP, else straight out from the VIP to just past
+        the landing rim, at its height, inside the room."""
+        cfg = self.cfg
+        rim = cfg.d_vip + cfg.exit_land_clear
+        sp = self.sp[n]
+        out = sp[:2] - vip_p[:2]
+        r = float(np.linalg.norm(out))
+        if r >= rim:
+            return None
+        out = out / r if r > 1e-6 else np.array([1.0, 0.0])
+        g = np.r_[vip_p[:2] + out * (rim + 0.2), sp[2]]
+        return into_room(g, Arena(cfg), 0.4)
+
+    def _advance_exits(self, dt, vip_p):
+        """An exit is over once it has lasted exit_min_s (the aircraft has
+        caught up with a braked setpoint) and the drone is clear of the
+        VIP's landing rim -- or after exit_max_s whatever (a room corner)."""
+        cfg = self.cfg
+        rim = cfg.d_vip + cfg.exit_land_clear
+        for n in list(self.exiting):
+            self.exiting[n] += dt
+            clear = float(np.linalg.norm(self.sp[n][:2] - vip_p[:2])) >= rim
+            if ((self.exiting[n] >= cfg.exit_min_s and clear)
+                    or self.exiting[n] >= cfg.exit_max_s):
+                del self.exiting[n]
+                self.v[n] = np.zeros(3)
+                self._land_due.append(n)
+
+    def pop_landing(self):
+        """Retired drones whose exit is over: the caller lands them NOW (once
+        each). From here on they are descending obstacles."""
+        due, self._land_due = self._land_due, []
+        return due
+
     def _move(self, dt, want, vip_p, vip_v):
         """Requests -> caps -> ONE joint safety solve -> setpoints."""
         cfg = self.cfg
-        active = [n for n, a in self.agents.items() if a.active]
-        retiring = [n for n, a in self.agents.items() if a.status == RETIRING]
+        self._advance_exits(dt, vip_p)
+        active = [n for n, a in self.agents.items() if a.active or n in self.exiting]
+        retiring = [n for n, a in self.agents.items()
+                    if a.status == RETIRING and n not in self.exiting]
         nominal = []
         for n in active:
             a = self.agents[n]
             v = want.get(n, np.zeros(3))
             cap = cfg.v_max_defense if a.team == DEFENSE else cfg.v_max_attack
+            if n in self.exiting:
+                g = self._exit_goal(n, vip_p)
+                cap = cfg.exit_speed
+                v = np.zeros(3) if g is None else seek(self.sp[n], g, cap, cfg.a_max)
             s = float(np.linalg.norm(v))
             if s > cap:
                 v = v * (cap / s)
@@ -229,8 +278,9 @@ class Match:
         return sp_out
 
     def retire(self, name, outcome=''):
-        """Hand an active drone to the landing commander: from now on it is a
-        descending obstacle, not commanded."""
+        """Hand an active drone to the landing commander at once (no exit):
+        from now on it is a descending obstacle, not commanded. For the
+        finale's losers, which it has already flown somewhere clear."""
         a = self.agents[name]
         if a.active:
             a.status = RETIRING
@@ -243,6 +293,9 @@ class Match:
         that has NOT been told to land."""
         a = self.agents[name]
         a.status = ACTIVE
+        self.exiting.pop(name, None)
+        if name in self._land_due:
+            self._land_due.remove(name)
         if position is not None:
             self.sp[name] = np.asarray(position, float).copy()
         self.v[name] = np.zeros(3)
@@ -271,11 +324,18 @@ class Match:
         for e in events:
             a = self.agents[e.who]
             if a.status == ACTIVE:
+                # out of play now; it keeps its setpoint and velocity, and
+                # exits under command (_move brakes it at a_max) before it
+                # is landed -- see exit_* in guard/config.py
                 a.status = RETIRING
                 a.outcome = 'downed' if e.kind == 'down' else 'struck'
-                self.v[a.name] = np.zeros(3)
                 retired.append(a.name)
-                sp_out.pop(a.name, None)
+                if self.cfg.exit_min_s > 0.0:
+                    self.exiting[a.name] = 0.0
+                else:
+                    self.v[a.name] = np.zeros(3)
+                    self._land_due.append(a.name)
+                    sp_out.pop(a.name, None)
         labels = {**self.defense.labels, **self.attack.labels}
         intents = {n: copy.copy(i)
                    for pol in (self.defense, self.attack)

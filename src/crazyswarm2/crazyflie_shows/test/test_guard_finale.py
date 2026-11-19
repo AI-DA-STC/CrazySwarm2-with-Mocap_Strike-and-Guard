@@ -46,7 +46,10 @@ def test_every_active_drone_says_what_it_means_and_only_its_own_team():
                 assert m.agents[it.target].team != m.agents[n].team
         seen.append({n: it.kind for n, it in tk.intents.items()})
 
-    simulate(CFG, rules, 'shell', 'coordinated', starts, D, A, vip, 0, on_tick=spy)
+    # pinned to 1.0 m/s, whatever the default: at 0.6 this seed is over
+    # before the attack ever stages
+    fast = override(GuardConfig(), {'v_max_defense': 1.0, 'v_max_attack': 1.0})
+    simulate(fast, rules, 'shell', 'coordinated', starts, D, A, vip, 0, on_tick=spy)
     kinds = {k for s in seen for k in s.values()}
     assert {'block', 'stage'} <= kinds
     assert all(len(s) >= 1 for s in seen[:20])

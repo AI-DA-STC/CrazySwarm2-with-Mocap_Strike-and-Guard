@@ -40,7 +40,10 @@ Every 50 ms (20 Hz), in this order:
 - **`Agent`:** name, team, observed position, velocity, status and outcome.
   - Velocity, for your own team, is what you commanded. For an opponent, it is
     estimated from its observed positions, never its command.
-  - Status is active or retiring. Outcome is downed or struck.
+  - Status is active or retiring. Outcome is downed or struck. A retiring drone first
+    *exits* under the engine's command (`Match.exiting`; brake, then clear of the VIP)
+    and is handed to the caller to land by `Match.pop_landing()`; see
+    guard-design-notes.md, "Landing out of the way".
 - **`View`:** the time, the VIP's position and velocity, every agent, the arena, the
   config (limits and safety), the rule set in play, everybody's meters, and the public
   events so far.

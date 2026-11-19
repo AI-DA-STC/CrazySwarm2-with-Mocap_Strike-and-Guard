@@ -35,7 +35,10 @@ class GuardConfig:
     # -- aircraft ----------------------------------------------------------
     rate_hz: float = 20.0
     #: Per-team speed caps, applied to each strategy's request before the
-    #: safety layer. The escort flew at 0.6 m/s; these are the first step up.
+    #: safety layer. 1.0 m/s, the user's choice (11-19). The aircraft trail
+    #: their setpoints by ~0.6 s on the PID controller; with that lag
+    #: plan_guard finds 23 of 80 matrix cells unsafe at 1.0 on the 11-17
+    #: marks (5 of 80 at 0.6) -- check a pairing with plan_guard first.
     v_max_defense: float = 1.0
     v_max_attack: float = 1.0
     #: Hard cap the safety layer may use while dodging. Never below either
@@ -76,6 +79,19 @@ class GuardConfig:
     #: Class-K gain: how fast a gap may close, per metre of gap (1/s). The
     #: AirStack default.
     alpha: float = 2.5
+    #: A downed or struck drone used to be landed on the spot, at once. Two
+    #: hazards (2026-11-19): it stops dead while its neighbours' aircraft,
+    #: ~0.6 s behind their setpoints, carry on into it; and a hand-flown DJI
+    #: can drift over a drone that is being landed (it cannot dodge). Now it
+    #: EXITS first, still commanded through the safety layer: it brakes, and
+    #: if it is inside exit_land_clear beyond the VIP keep-out it flies out
+    #: past that at exit_speed; it is landed once it has exited for at least
+    #: exit_min_s and is clear (or after exit_max_s, whatever). exit_min_s 0
+    #: = the old immediate landing.
+    exit_min_s: float = 1.0
+    exit_max_s: float = 6.0
+    exit_speed: float = 0.5
+    exit_land_clear: float = 0.8
     #: Gain for the walls, floor and ceiling.
     alpha_wall: float = 2.0
     #: How far inside the room clamp and the band the CBF holds setpoints.
@@ -87,6 +103,12 @@ class GuardConfig:
     self_stale_land_s: float = 1.0
     track_error_m: float = 0.60
     track_error_s: float = 0.80
+    #: "Not following" is judged against the nearest setpoint of the last
+    #: track_lag_s seconds, not the current one (escort.contain_check). The
+    #: aircraft trail their setpoints by ~0.6 s on the PID controller; against
+    #: the current setpoint, any stretch at 1 m/s read as 0.6 m "not
+    #: following" and aborted the 17-11 matches seconds after START.
+    track_lag_s: float = 1.0
     vip_stale_hold_s: float = 0.4
     vip_stale_land_s: float = 2.0
     #: The near-miss watch on the MEASURED aircraft (guard/watch.py); the

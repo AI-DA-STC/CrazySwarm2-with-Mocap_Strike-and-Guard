@@ -84,6 +84,7 @@ from crazyflie_shows.escort_show import (LAND_DURATION, LAND_HEIGHT,
                                          operator_gate)
 from crazyflie_shows.escort_teleop import VIP_TOPIC
 from crazyflie_shows.guard import finale as finale_mod
+from crazyflie_shows.guard import formation as formation_mod
 from crazyflie_shows.guard import policies
 from crazyflie_shows.guard import rules as rule_sets
 from crazyflie_shows.guard.config import GuardConfig, override, problems
@@ -240,6 +241,13 @@ def main():
                            _params_kv(_param(node, 'rules_params', '')))
     finale_on = bool(_param(node, 'finale', True))
     fparams = _params_kv(_param(node, 'finale_params', ''))
+    # Form up round the VIP before START (guard/formation.py): the match starts
+    # from a fair formation built round where the VIP actually is, not over
+    # the floor marks. plan_guard flies the same (--no-form-up for neither).
+    form_up_on = bool(_param(node, 'form_up', True))
+    # mocap VIP: the form-up starts once the DJI is above this (m; 0 = at once)
+    vip_airborne_z = float(_param(node, 'vip_airborne_z', 0.3))
+    uparams = formation_mod.params_of(_params_kv(_param(node, 'form_up_params', '')))
     role_on = bool(_param(node, 'role_lights', True))
     trace_on = bool(_param(node, 'trace', True))
     controller = str(_param(node, 'controller', 'pid')).lower()
@@ -286,7 +294,8 @@ def main():
     if finale_on:
         bad += finale_mod.check(cfg, fparams)
     if vip_mode != 'mocap':
-        more, _ = mark_problems(cfg, rules, vip_point, marks, D, A)
+        more, _ = mark_problems(cfg, rules, vip_point, marks, D, A,
+                                reach=not form_up_on)
         bad += more
     for b in bad:
         print(f'  *** {b}')
@@ -453,7 +462,7 @@ def main():
                         raise ShowAborted(f'{n}: never seen on /poses')
                     continue
                 measured[n] = poses.get(n, now, cfg.self_stale_s)
-                if not a.active:
+                if not a.active and n not in match.exiting:
                     continue
                 act, why = escort.contain_check(cfg, poses.pos.get(n),
                                                 poses.age(n, now), match.sp[n],
@@ -481,6 +490,12 @@ def main():
             for n, (sp, v) in setpoints.items():
                 _stream(fcfs[n], sp, v)
                 streamed.add(n)
+            # a retired drone is landed once its exit is over (engine.py):
+            # braked, caught up with its setpoint, clear of the VIP
+            for n in match.pop_landing():
+                fcfs[n].notifySetpointsStop()
+                streamed.discard(n)
+                fcfs[n].land(targetHeight=LAND_HEIGHT, duration=LAND_DURATION)
 
         def hold_tick():
             """One paused tick: the drones hold where they are THROUGH the
@@ -505,8 +520,83 @@ def main():
             operator_gate('PILOT: take off the DJI now and bring it to the VIP '
                           'spot. The drones hold and dodge it. Continue when it '
                           'is steady.', pump=hold_tick)
+        follow = None
+        if form_up_on and vip_mode == 'mocap' and vip_airborne_z > 0.0:
+            # The formation is built round the DJI, so it waits for the DJI
+            # to be up: a gate passed with the DJI still on the floor would
+            # otherwise lay the ring out round its take-off spot.
+            now, dt = tick_clock()
+            p_now, _, _ = vip_fresh(now, dt)
+            if p_now[2] < vip_airborne_z:
+                print(f'  FORM-UP      waiting for the DJI to be airborne (above '
+                      f'{vip_airborne_z:.2f} m; it is at {p_now[2]:.2f} m) -- the '
+                      f'drones hold and dodge it', flush=True)
+                while vip_last['p'][2] < vip_airborne_z:
+                    hold_tick()
+        if form_up_on:
+            # FORM UP: everyone flies to a fair formation round the VIP,
+            # through the safety layer, and the formation FOLLOWS the VIP --
+            # it is re-placed round the DJI's live position every tick, here
+            # and through the START gate (guard/formation.py Follow). The
+            # match is then rebuilt from where they are at START, so the
+            # strategies plan from the formation, not the marks.
+            now, dt = tick_clock()
+            p_now, _, _ = vip_fresh(now, dt)
+            here = {n: np.asarray(match.sp[n], float).copy() for n in flying}
+            follow = formation_mod.Follow(
+                cfg, rules, D, A,
+                lambda g, v: mark_problems(cfg, rules, v, g, D, A)[0], uparams)
+            ok, why = follow.build(p_now, here)
+            if not ok:
+                follow = None
+                print(f'  FORM-UP skipped -- no fair formation fits round the VIP '
+                      f'here ({why}); the match starts where the drones are')
+            else:
+                print(f'  FORM-UP      defenders {uparams["r_def"]:.1f} m round the VIP, '
+                      f'attackers up to {uparams["r_att"]:.1f} m out on their side'
+                      f'{f" (turned {follow.turn:+d} deg)" if follow.turn else ""}, '
+                      f'{uparams["speed"]:.1f} m/s, following the VIP', flush=True)
+
+                def follow_tick():
+                    """One form-up tick: the slots round the VIP as it is now."""
+                    now, dt = tick_clock()
+                    p, v, _ = vip_fresh(now, dt)
+                    measured, _, _ = observe(now, dt)
+                    goals = follow.goals(p, match.sp)
+                    stream(match.steer(dt, p, v, goals, uparams['speed'],
+                                       measured or None))
+                    trace.write(now - clk['t0'], 'form-up', match, measured, {})
+                    if viz_due():
+                        viz.publish(match.t, cfg, rules, p, match.agents, {},
+                                    match.result(), f'{title} | FORM-UP',
+                                    match.referee.meters, corrected=match.corrected)
+                    timeHelper.sleepForRate(cfg.rate_hz)
+                    return now, goals
+
+                t_end = now + uparams['timeout_s']
+                while True:
+                    now, goals = follow_tick()
+                    if formation_mod.arrived(goals, match.sp, uparams['reached']):
+                        print('  FORM-UP      in position', flush=True)
+                        break
+                    if now > t_end:
+                        print(f'  FORM-UP      not all in position after '
+                              f'{uparams["timeout_s"]:.0f} s -- '
+                              + ('still following; START when ready' if paced
+                                 else 'starting from where they are'), flush=True)
+                        break
         if paced:
-            operator_gate('START the match?', pump=hold_tick)
+            operator_gate('START the match?',
+                          pump=follow_tick if follow is not None else hold_tick)
+        if follow is not None:
+            if follow.rebuilds:
+                print(f'  FORM-UP      re-laid {follow.rebuilds} time(s) to fit the room '
+                      f'round the moving VIP', flush=True)
+            now, dt = tick_clock()
+            p_now, _, _ = vip_fresh(now, dt)
+            match = Match(cfg, rules, dpol, apol,
+                          {n: np.asarray(match.sp[n], float).copy() for n in flying},
+                          D, A, p_now, np.random.default_rng(seed))
         clk['t0'] = timeHelper.time()
         print(f'  MATCH LIVE   t0 = {_clock()}   streaming at {cfg.rate_hz:g} Hz\n')
         intents = {}
@@ -539,9 +629,8 @@ def main():
                     # the winning blow: it stays up, for the finale's capture
                     match.reinstate(n, match.sp[n])
                     continue
-                fcfs[n].notifySetpointsStop()
-                streamed.discard(n)
-                fcfs[n].land(targetHeight=LAND_HEIGHT, duration=LAND_DURATION)
+                # out of play: dark now; it exits under command and stream()
+                # lands it when the exit is over
                 leds.set(n, LED_OUT, 1e9)            # always: out of play is final
             for e in tk.events:
                 line = str(e)
@@ -625,7 +714,7 @@ def main():
                 fcfs[n].notifySetpointsStop()
         streaming = False
         for n in flying:
-            if match.agents[n].active:
+            if match.agents[n].active or n in match.exiting:
                 fcfs[n].land(targetHeight=LAND_HEIGHT, duration=LAND_DURATION)
         timeHelper.sleep(LAND_DURATION + 0.5)
         for n in flying:

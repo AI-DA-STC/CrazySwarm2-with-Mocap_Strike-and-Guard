@@ -634,7 +634,24 @@ def contain_check(cfg, p_live, age, sp, dt, state):
     Pure: no ROS, no drones. The order is deliberate -- staleness first,
     because a stale pose makes the other two meaningless, and there is no
     point reporting "outside the arena" from a reading that is a second old.
+
+    "Not following" is measured against the setpoint NOW, unless the config
+    has ``track_lag_s`` > 0: then against the nearest setpoint of the last
+    ``track_lag_s`` seconds. A Crazyflie on the PID controller trails a
+    streamed setpoint by ~0.6 s (measured 11-06 and 11-17), so at 1 m/s it
+    sits ~0.6 m behind its current setpoint while following perfectly; the
+    window asks "is it anywhere the command has just been?" instead. A drone
+    that leaves the commanded path, or stops while the command moves on,
+    still trips it. The escort keeps the old rule (no ``track_lag_s``).
     """
+    if sp is not None:
+        win = float(getattr(cfg, 'track_lag_s', 0.0))
+        if win > 0.0:
+            clock = state['clock'] = state.get('clock', 0.0) + float(dt)
+            hist = state.setdefault('sp_hist', [])
+            hist.append((clock, np.asarray(sp, float)[:2].copy()))
+            while hist[0][0] < clock - win:
+                hist.pop(0)
     bad = float(age) > cfg.self_stale_land_s
     if bad:
         return 'land', f'no mocap for {age:.1f} s'
@@ -648,11 +665,17 @@ def contain_check(cfg, p_live, age, sp, dt, state):
         return 'land', (f'{out:.2f} m outside the arena edge, past the '
                         f'{cfg.contain_margin:.2f} m containment')
     if sp is not None:
-        err = float(np.linalg.norm(p[:2] - np.asarray(sp, float)[:2]))
+        hist = state.get('sp_hist')
+        if hist:
+            err = min(float(np.linalg.norm(p[:2] - q)) for _, q in hist)
+            where = f'from everywhere it was commanded in the last {cfg.track_lag_s:.1f} s'
+        else:
+            err = float(np.linalg.norm(p[:2] - np.asarray(sp, float)[:2]))
+            where = 'from where it was commanded'
         if err > cfg.track_error_m:
             state['drift'] = state.get('drift', 0.0) + float(dt)
             if state['drift'] >= cfg.track_error_s:
-                return 'land', (f'{err:.2f} m from where it was commanded for '
+                return 'land', (f'{err:.2f} m {where}, for '
                                 f'{state["drift"]:.1f} s -- not following')
         else:
             state['drift'] = 0.0

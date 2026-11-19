@@ -65,9 +65,10 @@ For the first sessions on real drones, follow the ladder in
 [../details/guard-design-notes.md](../details/guard-design-notes.md) ("Before the
 first hardware flight"): start 1 v 1, slow and wide apart.
 
-**Speed.** On real drones, every drone runs about half a second behind its commands
-(measured 2026-11-06), so at the default 1 m/s two drones can pass right at the
-minimum distance. For a comfortable margin, set both teams to 0.6 m/s
+**Speed.** Both teams fly at 1 m/s by default. On real drones, every drone runs about
+half a second behind its commands (measured 2026-11-06 and 2026-11-17), so at 1 m/s
+two drones can pass closer than the minimum distance in some pairings: check yours
+with `plan_guard` first. For more margin, set both teams to 0.6 m/s
 (`-p v_max_defense:=0.6 -p v_max_attack:=0.6`, or the two speed fields in the console).
 `-p controller:=mellinger` switches the drones to a controller that should not lag. Try
 it on a single hovering drone before using it in a match.
@@ -100,12 +101,22 @@ Check a rule set with `plan_guard --rules <name>` before flying it.
 
 ## What you will see
 
+**Form-up.** Just before START (after the DJI gate when there is one), every
+drone flies slowly to a starting formation round the VIP: defenders in a ring
+round it, attackers backed off on their own side. With the DJI as the VIP, the
+form-up waits until the DJI is in the air, and then the whole formation **follows
+the DJI** wherever the pilot takes it, until START. The match starts from where
+they are at START, not from the floor marks, so where the pilot parks the DJI no
+longer decides the game. Turn it off with `-p form_up:=false`
+(and `--no-form-up` for the planner).
+
 **On the drones.** Defenders are blue and attackers red.
 - A drone turns **white** while it is scoring. For a defender, that means taking an
   attacker out; for an attacker, it means sitting inside the strike zone.
 - An attacker sent in first as a **decoy** turns magenta.
-- A drone that is **taken out** goes dark and lands; depending on the rules, that
-  can happen to either side.
+- A drone that is **taken out** goes dark, stops, and lands about a second later. If it
+  was close to the DJI, it first moves out away from the DJI and lands there. Depending
+  on the rules, that can happen to either side.
 
 The attack wins on a strike. The defence wins by taking out every attacker, or by
 holding until the clock runs out.

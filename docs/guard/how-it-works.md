@@ -16,7 +16,8 @@ are on each side, which strategy each team plays, and which rules decide who is 
 - An attacker **strikes** by staying close to the VIP for about a second. One strike
   wins the match for the attack.
 - A drone is **taken out** when the other team keeps it under pressure for about a
-  second. It goes dark and lands. Depending on the rules, that can happen to either side.
+  second. It goes dark, stops, and lands, first moving away from the VIP if it is close
+  to it. Depending on the rules, that can happen to either side.
 - The defence wins when no attacker is left, or when it holds out until the clock runs
   out.
 

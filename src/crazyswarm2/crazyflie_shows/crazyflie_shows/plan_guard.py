@@ -17,9 +17,10 @@
 
 Runs whole matches through the SAME engine guard_show flies
 (crazyflie_shows.guard.engine), against a stand-in for the aircraft: each
-drone follows its setpoint with a first-order lag (``--tau``, 0.25 s), and a
-retiring one descends at the land speed. The stand-in is not a measured
-model; it exists so that "the setpoints were safe" and "the aircraft were
+drone follows its setpoint after a pure delay (``--delay``, 0.4 s) and a
+first-order lag (``--tau``, 0.2 s) -- the fit to the 11-06/11-17 hardware
+traces (until 11-19: a 0.25 s lag alone) -- and a retiring one descends at
+the land speed. The stand-in is not a full model of the aircraft; it exists so that "the setpoints were safe" and "the aircraft were
 safe" are checked separately, which is the difference that matters.
 
 Two verdicts, kept apart on purpose:
@@ -37,11 +38,12 @@ import argparse
 import ast
 import sys
 import time
+from collections import deque
 
 import numpy as np
 
 from crazyflie_shows import escort, safety
-from crazyflie_shows.guard import policies, safety_layer
+from crazyflie_shows.guard import formation, policies, safety_layer
 from crazyflie_shows.guard import rules as rule_sets
 from crazyflie_shows.guard.config import GuardConfig, override, problems
 from crazyflie_shows.guard.engine import Match
@@ -123,8 +125,12 @@ def live_marks(names, wait=4.0):
     return {n: got[n] for n in names}
 
 
-def mark_problems(cfg, rules, vip, marks, defenders, attackers):
-    """Why these floor marks cannot start a match (empty = fine)."""
+def mark_problems(cfg, rules, vip, marks, defenders, attackers, reach=True):
+    """Why these floor marks cannot start a match (empty = fine).
+
+    ``reach=False`` skips the start-reach rule: with the form-up
+    (guard/formation.py) the match starts from the formation, which is held
+    to that rule instead; the marks only have to be safe to lift off from."""
     bad = []
     names = list(defenders) + list(attackers)
     starts = {n: np.array([marks[n][0], marks[n][1], cfg.start_height]) for n in names}
@@ -142,7 +148,7 @@ def mark_problems(cfg, rules, vip, marks, defenders, attackers):
         c = float(escort.room_clearance(cfg, starts[a]))
         if c < 0.2:
             bad.append(f'{a} starts {c:.2f} m from the arena edge')
-    for a in attackers:
+    for a in attackers if reach else ():
         near = min(float(np.linalg.norm(starts[a] - starts[d])) for d in defenders) \
             if defenders else np.inf
         if rules.DOWNABLE and near < rules.reach + 0.5:
@@ -167,28 +173,55 @@ def _measure(cfg, m, pos, vip, met):
             met['z_hi'] = max(met['z_hi'], pos[a][2])
 
 
-def _fly_lag(cfg, m, pos, setpoints, dt, tau, met):
-    """The stand-in aircraft: first-order lag; retiring ones descend."""
-    for n, (sp, _) in setpoints.items():
-        before = pos[n].copy()
-        pos[n] = pos[n] + (sp - pos[n]) * min(dt / tau, 1.0)
-        met['speed'] = max(met['speed'], float(np.linalg.norm(pos[n] - before)) / dt)
-    for n, a in m.agents.items():
-        if a.status == RETIRING:
-            pos[n][2] = max(0.0, pos[n][2] - cfg.land_speed * dt)
+class _Plant:
+    """The stand-in aircraft: each follows its streamed setpoint DELAYED by
+    ``delay`` and then through a first-order lag ``tau``; a retiring one
+    descends at the land speed.
+
+    The hardware (PID controller, 11-06 and 11-17 traces) fits a ~0.4 s pure
+    delay plus a ~0.2 s lag (together the ~0.6 s the flight reports call
+    "lag"). The difference matters: a pure delay replays the safe setpoint
+    pattern late, still apart, while the lag rounds corners, and two drones
+    swinging round each other at close range come out closer than their
+    setpoints were. A first-order lag alone (tau 0.6, the old stand-in)
+    gets that wrong in both directions."""
+
+    def __init__(self, tau, delay=0.0):
+        self.tau, self.delay = float(tau), float(delay)
+        self.q = {}
+
+    def fly(self, cfg, m, pos, setpoints, dt, met):
+        nd = int(round(self.delay / dt))
+        for n, (sp, _) in setpoints.items():
+            q = self.q.setdefault(n, deque())
+            q.append(np.asarray(sp, float).copy())
+            while len(q) > nd + 1:
+                q.popleft()
+            before = pos[n].copy()
+            pos[n] = pos[n] + (q[0] - pos[n]) * min(dt / self.tau, 1.0)
+            met['speed'] = max(met['speed'], float(np.linalg.norm(pos[n] - before)) / dt)
+        for n, a in m.agents.items():
+            if a.status == RETIRING and n not in setpoints:
+                pos[n][2] = max(0.0, pos[n][2] - cfg.land_speed * dt)
+                self.q.pop(n, None)
 
 
 def simulate(cfg, rules, dname, aname, starts, defenders, attackers, vip0, seed,
              dparams=None, aparams=None, tau=0.25, vip_move=0.0, record=False,
-             on_tick=None, finale=False, fparams=None):
+             on_tick=None, finale=False, fparams=None, form_up=None, delay=0.0):
     """One match on the stand-in aircraft. Returns (result, metrics, trace).
 
     ``on_tick(match, vip, tick, result, banner)`` is called after every tick
     (the --rviz player uses it to draw and to pace the match in real time).
     ``finale``: fly guard.finale after the result, through the same engine,
     measured like the match (``met['finale']`` is the phase it reached).
+    ``form_up``: formation parameters (guard/formation.py), or None for none.
+    As guard_show does: from the lifted marks, everyone flies to the
+    formation round the VIP through the safety layer (measured like the
+    match), then the match starts from there.
     """
     rng = np.random.default_rng(seed)
+    plant = _Plant(tau, delay)
     # Nobody stands a drone exactly on its mark: jitter the starts by a few
     # cm per seed, so seeds differ even before any strategy rolls a die.
     jit = np.random.default_rng(10_000 + seed)
@@ -203,6 +236,8 @@ def simulate(cfg, rules, dname, aname, starts, defenders, attackers, vip0, seed,
     met = {'sep': np.inf, 'sep_pair': '', 'floor': np.inf, 'vip': np.inf, 'room': np.inf,
            'z_lo': np.inf, 'z_hi': -np.inf, 'speed': 0.0}
     trace = [] if record else None
+    met['form_up_s'] = 0.0
+
     def vip_at(t):
         # an optional drifting VIP: a slow circle, the DJI pilot wandering
         if vip_move <= 0.0:
@@ -212,10 +247,44 @@ def simulate(cfg, rules, dname, aname, starts, defenders, attackers, vip0, seed,
                     [np.cos(w * t) - 1.0, np.sin(w * t), 0.0]),
                 vip_move * np.array([-np.sin(w * t), np.cos(w * t), 0.0]))
 
+    t_off = 0.0          # the VIP keeps drifting through the form-up
+    if form_up is not None:
+        fp = formation.params_of(form_up)
+        follow = formation.Follow(
+            cfg, rules, defenders, attackers,
+            lambda g, v: mark_problems(cfg, rules, v, g, defenders, attackers)[0], fp)
+        if follow.build(vip, pos)[0]:
+            from crazyflie_shows.guard.engine import Tick
+            t_f = 0.0
+            while t_f < fp['timeout_s']:
+                vip, vip_v = vip_at(t_f)
+                goals = follow.goals(vip, m.sp)
+                sp = m.steer(dt, vip, vip_v, goals, fp['speed'], pos)
+                plant.fly(cfg, m, pos, sp, dt, met)
+                _measure(cfg, m, pos, vip, met)
+                t_f += dt
+                if record:
+                    trace.append((t_f - fp['timeout_s'], vip.copy(),
+                                  {n: pos[n].copy() for n in pos},
+                                  {n: 'form-up' for n in goals}))
+                if on_tick is not None:
+                    on_tick(m, vip, Tick(sp, [], [], None, [],
+                                         {n: 'form-up' for n in goals}),
+                            m.result(), 'FORM-UP')
+                if formation.arrived(goals, m.sp, fp['reached']):
+                    break
+            met['form_up_s'] = t_f
+            met['form_up_rebuilds'] = follow.rebuilds
+            t_off = t_f
+            m = Match(cfg, rules, policies.make(DEFENSE, dname, dparams),
+                      policies.make(ATTACK, aname, aparams),
+                      {n: m.sp[n].copy() for n in m.sp}, defenders, attackers,
+                      vip, np.random.default_rng(seed))
     while True:
-        vip, vip_v = vip_at(m.t)
+        vip, vip_v = vip_at(t_off + m.t)
         tk = m.step(dt, vip, vip_v, pos)
-        _fly_lag(cfg, m, pos, tk.setpoints, dt, tau, met)
+        m.pop_landing()       # nothing to command: the plant descends them
+        plant.fly(cfg, m, pos, tk.setpoints, dt, met)
         _measure(cfg, m, pos, vip, met)
         if record:
             trace.append((m.t, vip.copy(), {n: pos[n].copy() for n in pos},
@@ -236,17 +305,18 @@ def simulate(cfg, rules, dname, aname, starts, defenders, attackers, vip0, seed,
     if res.winner == ATTACK:
         for e in tk.events:
             if e.kind == 'strike' and m.agents[e.who].status == RETIRING:
-                m.reinstate(e.who, pos[e.who])
+                m.reinstate(e.who, m.sp[e.who])   # as guard_show: it never stopped
     fin = Finale(cfg, res.winner, m.agents, starts, vip, m.t, fparams)
     t = m.t
     while True:
         t += dt
-        vip, vip_v = vip_at(t)
+        vip, vip_v = vip_at(t_off + t)
         fs = fin.update(t, vip, m.agents)
         for n in fs.land:
             m.retire(n)
         sp = m.steer(dt, vip, vip_v, fs.goals, fin.p['speed'], pos)
-        _fly_lag(cfg, m, pos, sp, dt, tau, met)
+        m.pop_landing()
+        plant.fly(cfg, m, pos, sp, dt, met)
         _measure(cfg, m, pos, vip, met)
         if record:
             trace.append((t, vip.copy(), {n: pos[n].copy() for n in pos},
@@ -282,11 +352,13 @@ def safety_failures(cfg, met):
 
 
 def run_series(cfg, rules, dname, aname, starts, D, A, vip, seeds, dparams, aparams,
-               tau, vip_move, verbose, finale=False, fparams=None):
+               tau, vip_move, verbose, finale=False, fparams=None, form_up=None,
+               delay=0.0):
     rows = []
     for s in seeds:
         res, met, _ = simulate(cfg, rules, dname, aname, starts, D, A, vip, s, dparams,
-                               aparams, tau, vip_move, finale=finale, fparams=fparams)
+                               aparams, tau, vip_move, finale=finale, fparams=fparams,
+                               form_up=form_up, delay=delay)
         bad = safety_failures(cfg, met)
         rows.append((s, res, met, bad))
         if verbose:
@@ -335,8 +407,11 @@ def main(argv=None):
                          'at DJI height)')
     ap.add_argument('--seeds', type=int, default=12)
     ap.add_argument('--seed0', type=int, default=0)
-    ap.add_argument('--tau', type=float, default=0.25,
-                    help='aircraft lag behind the setpoint, s')
+    ap.add_argument('--tau', type=float, default=0.2,
+                    help='aircraft first-order lag behind the setpoint, s')
+    ap.add_argument('--delay', type=float, default=0.4,
+                    help='aircraft pure delay behind the setpoint, s (0.4 + tau 0.2 '
+                         'fits the 11-06/11-17 hardware traces on the PID controller)')
     ap.add_argument('--vip-move', type=float, default=0.0,
                     help='VIP drifts on a 0.6 m circle at this speed, m/s')
     ap.add_argument('--set', action='append', metavar='FIELD=VALUE',
@@ -368,6 +443,12 @@ def main(argv=None):
                          'checked too; --matrix never flies it)')
     ap.add_argument('--fparam', action='append', metavar='KEY=VALUE',
                     help='finale parameter (repeatable; guard/finale.py DEFAULTS)')
+    ap.add_argument('--no-form-up', action='store_true',
+                    help='start the match over the floor marks (as before 2026-11-17, '
+                         'guard_show -p form_up:=false) instead of forming up round the '
+                         'VIP first (guard/formation.py)')
+    ap.add_argument('--uparam', action='append', metavar='KEY=VALUE',
+                    help='form-up parameter (repeatable; guard/formation.py DEFAULTS)')
     a = ap.parse_args(argv)
 
     safety.require_measured_arena('plan_guard')
@@ -404,7 +485,21 @@ def main(argv=None):
         bad_cfg += [f'rules {name}: {b}' for b in
                     rule_sets.make(name, _kv(a.rparam) if name == a.rules else None)
                     .problems(cfg)]
-    bad_marks, starts = mark_problems(cfg, rules, vip, marks, D, A)
+    form_up = None if a.no_form_up else formation.params_of(_kv(a.uparam))
+    bad_marks, starts = mark_problems(cfg, rules, vip, marks, D, A,
+                                      reach=form_up is None)
+    form_note = 'off: the match starts over the floor marks'
+    if form_up is not None and not bad_marks:
+        goals, turn, why = formation.formation(
+            cfg, rules, vip, starts, D, A,
+            lambda g: mark_problems(cfg, rules, vip, g, D, A)[0], form_up)
+        if goals is None:
+            bad_marks.append(f'no fair starting formation fits round this VIP: {why}')
+        else:
+            form_note = (f'defenders {form_up["r_def"]:.1f} m round the VIP, attackers '
+                         f'up to {form_up["r_att"]:.1f} m out on their side'
+                         f'{f" (turned {turn:+d} deg to fit the room)" if turn else ""}, '
+                         f'at {form_up["speed"]:.1f} m/s')
     fparams = _kv(a.fparam)
     if not a.no_finale:
         from crazyflie_shows.guard import finale as finale_mod
@@ -422,9 +517,12 @@ def main(argv=None):
           f'{f", drifting at {a.vip_move:.2f} m/s" if a.vip_move else ", still"}')
     print(f'  speeds        defence {cfg.v_max_defense:.2f}, attack '
           f'{cfg.v_max_attack:.2f}, dodging up to {cfg.v_max_safety:.2f} m/s')
+    print(f'  aircraft      follow their setpoints {a.delay:.2f} s late, then a '
+          f'{a.tau:.2f} s lag')
     print(f'  keep-outs     drone {cfg.d_cc:.2f} m across x '
           f'{cfg.d_cc * cfg.cc_z_ratio:.2f} m up/down; VIP {cfg.d_vip:.2f} x '
           f'{cfg.d_vip * cfg.vip_z_ratio:.2f} m')
+    print(f'  form-up       {form_note}')
     if len(rule_names) == 1:
         print(f'  rules         {rules.describe()}: '
               + ', '.join(f'{k} {v}' for k, v in sorted(rules.p.items())))
@@ -456,7 +554,8 @@ def main(argv=None):
                 cells = []
                 for at in an:
                     rows = run_series(cfg, rs, d, at, starts, D, A, vip, seeds,
-                                      None, None, a.tau, a.vip_move, False)
+                                      None, None, a.tau, a.vip_move, False,
+                                      form_up=form_up, delay=a.delay)
                     dw, n, t, unsafe, sep = summarise(rows)
                     lost = sum(sum(e.kind == 'down' and e.who in D
                                    for e in r[1].events) for r in rows)
@@ -473,7 +572,7 @@ def main(argv=None):
           f'{seeds[0]}..{seeds[-1]}\n')
     rows = run_series(cfg, rules, a.defense, a.attack, starts, D, A, vip, seeds,
                       dparams, aparams, a.tau, a.vip_move, True,
-                      not a.no_finale, fparams)
+                      not a.no_finale, fparams, form_up, delay=a.delay)
     dw, n, t, unsafe, sep = summarise(rows)
     worst = min(rows, key=lambda r: r[2]['sep'])[2]
     print(f'\n  GAME     defence won {dw}/{n}, attack {n - dw}/{n}; mean match '
@@ -492,7 +591,8 @@ def main(argv=None):
     print(f'  ({time.time() - t0:.0f} s)')
     if a.plot:
         _, _, tr = simulate(cfg, rules, a.defense, a.attack, starts, D, A, vip,
-                            seeds[0], dparams, aparams, a.tau, a.vip_move, True)
+                            seeds[0], dparams, aparams, a.tau, a.vip_move, True,
+                            form_up=form_up, delay=a.delay)
         plot(tr, cfg, D, A, a.plot)
     if unsafe:
         print(f'\n  SAFETY FAILED on {len(unsafe)} seed(s) -- do not fly this.\n')
@@ -550,7 +650,9 @@ def play_rviz(cfg, rule_list, a, starts, D, A, vip, seeds, dparams, aparams,
                                            s, dparams if own else None,
                                            aparams if own else None, a.tau, a.vip_move,
                                            on_tick=tick, finale=not a.no_finale,
-                                           fparams=fparams)
+                                           fparams=fparams, delay=a.delay,
+                                           form_up=(None if a.no_form_up else
+                                                    formation.params_of(_kv(a.uparam))))
                     bad = safety_failures(cfg, met)
                     print(f'  {rules.name:14s} {pair[0]} v {pair[1]:12s} seed {s:3d}  {res.winner:7s} '
                           f'{res.reason:28s} t={res.t:5.1f}s '

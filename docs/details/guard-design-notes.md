@@ -77,7 +77,12 @@ themselves:
   inside `near_miss_ratio` (0.7) of the floor ellipsoid: 0.25 m across, 0.43 m
   vertically.
 - The escort's per-drone `contain_check` handles staleness, leaving the room, and
-  not following.
+  not following. For the guard, "not following" is measured against the nearest
+  setpoint of the last `track_lag_s` (1.0 s), not the current one: the aircraft
+  trail their setpoints by ~0.6 s, and against the current setpoint every 1 m/s
+  stretch read as 0.6 m off and aborted the 17-11 matches seconds after START
+  (11 false aborts in 7 of the 14 hardware traces, 0 with the window; worst windowed
+  error in any trace 0.59 m for a single tick). The collision checks are untouched.
 
 This is a first-order (velocity) CBF. AirStack's docstring describes the
 acceleration-level upgrade (an HOCBF) as a builder swap with the same solver. It
@@ -522,3 +527,55 @@ each step, and a dry run (`-p dry_run:=true`) before the first:
 | 4 | with the DJI | `vip_mode:=mocap`, paced, all gates |
 
 Before going faster than 1 m/s, build the acceleration-level CBF (HOCBF).
+
+## Landing out of the way, and what the planner flies (2026-11-19)
+
+**The planner's aircraft.** `plan_guard` now flies each drone through a pure delay
+(`--delay`, 0.4 s) and then a first-order lag (`--tau`, 0.2 s), the best fit to the
+11-06/11-17 match traces (both flight days measured ~0.6 s in total). Until 11-19 it
+was a 0.25 s lag alone. The split matters. A delay that every commanded drone shares
+is harmless: the aircraft replay a safe setpoint pattern late, still apart. The lag
+rounds corners, so two drones swinging past each other come out a little closer than
+their setpoints were. And a body that does NOT share the delay (the DJI, a drone
+being landed) can be run into for the length of it. On this plant the old behaviour
+fails far more than the old stand-in said (shell v coordinated, `pressure`, 1 m/s,
+with the finale: 10 of 12 seeds).
+
+**Landing out of the way.** A downed or struck drone used to be landed on the spot,
+at once. It stopped dead while its neighbours' aircraft carried on into it, and a
+hand-flown DJI could drift over it while it came down and could not dodge (flagged
+11-05). Now it EXITS first: out of play at once (dark, ignored by the strategies and
+the referee), but still commanded through the safety layer. It brakes at `a_max`; if
+it is inside `exit_land_clear` (0.8 m) beyond the VIP keep-out it flies out past that
+at `exit_speed` (0.5 m/s); it is landed once it has exited for `exit_min_s` (1.0 s,
+time for the aircraft to catch up with a braked setpoint) and is clear, or after
+`exit_max_s` (6 s) whatever. `exit_min_s:=0.0` is the old immediate landing.
+`guard_show` lands it from `Match.pop_landing()`; the containment watchdog covers it
+while it exits.
+
+Matrix, 1 m/s, 17-11 marks, form-up, 12 seeds, 80 cells (4 x 4 strategies x 5 rule
+sets) per row, the new plant; "unsafe" = a cell with any safety failure:
+
+| VIP | exit off: unsafe, closest pair | exit on: unsafe, closest pair |
+|---|---|---|
+| default mark | 14/80, 0.08 m | 1/80, 0.34 m |
+| the DJI's 17-11 hover (-0.20, -2.07, 1.10) | 10/80, 0.09 m | 1/80, 0.37 m |
+| default, drifting 0.2 m/s | 23/80, 0.20 m | 5/80, 0.25 m |
+
+Defence wins were unchanged (214 v 215, 231 v 224, 213 v 212 of 960): the fix does
+not change the game. Simulator: one paced 7-drone match at 1 m/s, the downed drones
+landed 1.0-1.3 s after their down events, 0 CBF emergencies, 0 near misses.
+
+**Tried and dropped** (on the same plant): commanding each drone ahead along its
+velocity (cancels the lag only when the lead matches tau exactly, and the traces
+cannot pin tau down; at 0.1 or 0.3 s it was worse than none); padding the keep-out
+by relative speed, on every pair or only against the VIP and landing drones (a
+keep-out that grows suddenly can swallow a drone: up to 194 solver emergencies and
+worse VIP passes); a 1.5 s brake-and-hold before the finale (no measurable effect
+once the planner reinstated the winning striker the way `guard_show` does, at its
+setpoint, not where its aircraft was).
+
+**Left open:** with a drifting DJI, 5/80 cells still fail, mostly an active drone
+running into one being landed, or the DJI coming to ~1 m of a landing drone. The
+real cure for both is less lag: Mellinger (hover-test first) or an acceleration-level
+CBF.
