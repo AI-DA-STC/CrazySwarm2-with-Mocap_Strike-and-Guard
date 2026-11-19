@@ -209,9 +209,25 @@ log topics so the 2 Mbit/s radio is not maxed out.
    frame rate, and must match `poses.qos.deadline: 50.0` in
    `config/motion_capture.yaml`.
 
+**When Motive must stay fast (since 2026-11-17).** The Starlings share the volume
+and need Motive at 240 Hz, so 3a is no longer an option. The vendored node then
+limits itself instead: `max_rate: 55.0` in `config/motion_capture.yaml` (local patch
+0006, `src/motion_capture_tracking/VENDORED.md`). It still reads every frame off the
+socket, so nothing queues and each published frame is the newest, but it runs the
+tracker and publishes `/poses`, `/tf` and `pointCloud` on a fixed schedule of at most
+55 Hz. It only steps down: at 50 Hz from Motive every frame passes untouched (measured
+50.2 in, 50.2 out; a 50.0 ceiling would drop about one frame in 250, since Motive
+really sends 50.2 Hz), and it never repeats a frame to fill a gap, which would hide a
+real dropout from the server.
+Without it, on 2026-11-17 the server received about 117 `/poses` per second, every
+one forwarded over both Crazyradios, with low-receive-rate warnings from every drone.
+`max_rate: 0` restores one message per Motive frame.
+
 ### 3b. Match the ROS side to 50 Hz
 
 These are already set in this repo — keep them consistent if you change the rate:
+
+- **`config/motion_capture.yaml`** → `max_rate: 55.0` (see above).
 
 - **`pose_bridge.py`** → `PUBLISH_HZ = 50.0` (was 240). The publish timer and QoS
   deadline both derive from this. Publishing faster than Motive streams only

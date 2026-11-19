@@ -9,6 +9,14 @@
     #   ros2 launch crazyflie launch.py mocap_hostname:=192.168.9.152
     #   export CRAZYSWARM_MOCAP_HOST=192.168.9.152
     hostname: "auto"
+    # Ceiling on /poses (0 = every Motive frame). Every /poses message becomes a
+    # radio broadcast to the drones, and Motive may run at 240 Hz when the
+    # Starlings share the volume. Steps down only: at Motive's 50 Hz every frame
+    # passes untouched (55, not 50, because Motive really sends 50.2 Hz and a
+    # 50 ceiling drops one frame in ~250); at 240 Hz it gives 55, inside the
+    # server's 40-60 Hz warning band. Vendored-node patch 0006
+    # (src/motion_capture_tracking/VENDORED.md).
+    max_rate: 55.0
 
     topics:
       frame_id: "world" #mocap

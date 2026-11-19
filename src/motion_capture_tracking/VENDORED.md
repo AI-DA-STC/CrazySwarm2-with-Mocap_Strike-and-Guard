@@ -24,6 +24,21 @@ shadow this build.
 
 ## Local patches applied on top of upstream
 
+`patches/0006-node-max-rate.patch` — upstream publishes `/poses`, `/tf` and
+`pointCloud` (and runs the marker tracker) on every Motive frame. When Motive
+streams at 240 Hz for other aircraft sharing the volume (the Starlings, from
+2026-11-17), every one of those becomes a Crazyradio broadcast in
+`crazyflie_server`. The patch adds a `max_rate` parameter (Hz, default 0 = every
+frame, i.e. upstream behaviour): every frame is still read off the socket so
+nothing queues, but processing and publishing run on a fixed schedule that
+averages at most `max_rate` and never bursts to catch up after a gap. A frame may
+be up to half a period early, so input at or below `max_rate` passes untouched
+despite jitter; nothing is ever repeated. The rig sets `max_rate: 55.0` in
+`crazyflie/config/motion_capture.yaml`. Applies with:
+
+    git apply --directory=src/motion_capture_tracking \
+        src/motion_capture_tracking/patches/0006-node-max-rate.patch
+
 `patches/0005-libmotioncapture-natnet-connect-timeout-and-logging.patch` —
 upstream blocks forever in `connect()` when Motive does not answer on UDP 1510
 (stale address after a DHCP move, streaming off, Windows firewall): the node

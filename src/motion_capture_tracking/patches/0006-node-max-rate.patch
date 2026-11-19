@@ -1,0 +1,66 @@
+diff --git a/motion_capture_tracking/src/motion_capture_tracking_node.cpp b/motion_capture_tracking/src/motion_capture_tracking_node.cpp
+index abdd2ce..62acb17 100644
+--- a/motion_capture_tracking/src/motion_capture_tracking_node.cpp
++++ b/motion_capture_tracking/src/motion_capture_tracking_node.cpp
+@@ -71,6 +71,12 @@ int main(int argc, char **argv)
+   node->declare_parameter<std::string>("topics.tf.child_frame_id", "{}");
+ 
+   node->declare_parameter<std::string>("logfilepath", "");
++  // Local patch 0006: publish at most this many frames per second (0 = every
++  // frame, upstream behaviour). Motive may stream faster than this consumer
++  // needs (240 Hz when other aircraft share the volume); every frame is still
++  // read off the socket, so nothing queues and the frame that is published is
++  // always the newest one.
++  node->declare_parameter<double>("max_rate", 0.0);
+ 
+   std::string motionCaptureType = node->get_parameter("type").as_string();
+   std::string motionCaptureHostname = node->get_parameter("hostname").as_string();
+@@ -81,6 +87,7 @@ int main(int argc, char **argv)
+   double poses_deadline = node->get_parameter("topics.poses.qos.deadline").as_double();
+   std::string tf_child_frame_id = node->get_parameter("topics.tf.child_frame_id").as_string();
+   std::string logFilePath = node->get_parameter("logfilepath").as_string();
++  const double max_rate = node->get_parameter("max_rate").as_double();
+ 
+   auto node_parameters_iface = node->get_node_parameters_interface();
+   const std::map<std::string, rclcpp::ParameterValue> &parameter_overrides =
+@@ -228,10 +235,40 @@ int main(int argc, char **argv)
+ 
+   pcl::PointCloud<pcl::PointXYZ>::Ptr markers(new pcl::PointCloud<pcl::PointXYZ>);
+ 
++  // Rate limiter (patch 0006). A fixed schedule rather than "period since the
++  // last publish": with Motive at 240 Hz and max_rate 50 the latter yields 48 Hz
++  // (every 5th frame), and with 120 Hz input 40 Hz. The schedule averages
++  // exactly max_rate whenever input is faster, and never bursts to catch up.
++  // A frame may be up to half a period early: when Motive streams AT max_rate,
++  // network jitter would otherwise make every other frame look early and halve
++  // the rate. It only steps down -- input slower than max_rate passes through
++  // untouched; nothing is ever repeated to fill a gap.
++  const bool rate_limited = max_rate > 0.0;
++  const auto publish_period = std::chrono::duration_cast<std::chrono::steady_clock::duration>(
++      std::chrono::duration<double>(rate_limited ? 1.0 / max_rate : 0.0));
++  const auto early_slack = publish_period / 2;
++  auto next_publish = std::chrono::steady_clock::now();
++  if (rate_limited) {
++    RCLCPP_INFO(node->get_logger(), "publishing at most %.1f Hz (max_rate)", max_rate);
++  }
++
+   for (size_t frameId = 0; rclcpp::ok(); ++frameId) {
+ 
+     // Get a frame
+     mocap->waitForNextFrame();
++
++    if (rate_limited) {
++      const auto steady_now = std::chrono::steady_clock::now();
++      if (steady_now < next_publish - early_slack) {
++        rclcpp::spin_some(node);
++        continue;
++      }
++      next_publish += publish_period;
++      if (next_publish < steady_now) {
++        next_publish = steady_now;  // after a gap: resume, do not catch up
++      }
++    }
++
+     auto chrono_now = std::chrono::high_resolution_clock::now();
+     rclcpp::Time time;
+     if (header_time == "ros") {
