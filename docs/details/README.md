@@ -38,6 +38,7 @@ before changing code.
 | [console.md](console.md) | The web console: every button and the command it runs |
 | [mission-window.md](mission-window.md) | Each demo's own screen in the web console, and the spec file behind it |
 | [troubleshooting.md](troubleshooting.md) | Every known symptom, cause and fix |
+| [radio-link-2026-11-17.md](radio-link-2026-11-17.md) | The 17 November session: radio replies lost and poses arriving late, what was measured and ruled out, what to try next |
 | [known-issues.md](known-issues.md) | The long story behind each silent failure, with evidence |
 | [server-changes.md](server-changes.md) | What this repo changed in the Crazyswarm2 server, and why |
 | [provenance.md](provenance.md) | Who owns each layer (Bitcraze, OptiTrack, IMRCLab, AI-DA-STC, this project), measured against upstream |
