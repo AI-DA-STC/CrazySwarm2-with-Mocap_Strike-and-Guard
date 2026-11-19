@@ -11,19 +11,19 @@ robots:
     # more Crazyflies can not be found", so NOTHING comes up (2026-10-02).
     # This rig has one dongle, so the wildcard bought nothing.
     uri: radio://0/80/2M/E7E7E7E701
-    initial_position: [1.741, 1.7013, 0.0]
+    initial_position: [1.1806, 0.5833, 0.0]
     type: cf21  # see robot_types
 
   cf2:
     enabled: true
     uri: radio://0/80/2M/E7E7E7E702
-    initial_position: [1.6598, -1.6808, 0.0]
+    initial_position: [1.1033, -0.8791, 0.0]
     type: cf21  # see robot_types
 
   cf3:
     enabled: true
     uri: radio://0/80/2M/E7E7E7E703
-    initial_position: [-1.7187, 1.559, 0.0]
+    initial_position: [-1.0934, 0.574, 0.0]
     type: cf21  # see robot_types
 
   cf5:
@@ -55,7 +55,7 @@ robots:
     # claimed 0.89 m and "every planner will refuse"; both were wrong, and a
     # comment that tells the operator a passing check is failing trains them
     # to distrust the file that IS ground truth.)
-    initial_position: [-1.6232, -1.6414, 0.0]
+    initial_position: [-1.0222, -0.8722, 0.0]
     type: cf21  # see robot_types
 
   # cf10-cf14: the STL game's intruders (docs/stl/run.md) and the guard
@@ -71,19 +71,19 @@ robots:
   cf10:
     enabled: true
     uri: radio://1/90/2M/E7E7E7E710
-    initial_position: [-3.8141, 1.6819, 0.0]
+    initial_position: [-2.9469, 0.275, 0.0]
     type: cf21  # see robot_types
 
   cf11:
     enabled: true
     uri: radio://1/90/2M/E7E7E7E711
-    initial_position: [-3.8686, 2.4043, 0.0]
+    initial_position: [-3.0459, 1.5727, 0.0]
     type: cf21  # see robot_types
 
   cf12:
     enabled: true
     uri: radio://1/90/2M/E7E7E7E712
-    initial_position: [-3.8275, 3.231, 0.0]
+    initial_position: [-2.2722, 2.058, 0.0]
     type: cf21  # see robot_types
 
   cf13:
