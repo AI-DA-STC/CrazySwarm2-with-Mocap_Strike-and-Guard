@@ -14,8 +14,18 @@ drone flies to a formation built round the VIP's position at that moment,
 THROUGH the safety layer (``Match.steer``), and holds there until START:
 
 * defenders on a ring ``r_def`` from the VIP, one of them facing the attack;
-* attackers on an arc ``r_att`` out on the far side, ``spacing`` apart along
-  it, pulled in (never past the start-reach rule) where the room is short.
+* attackers either HOLD where they are hovering (``attackers='hold'``, the
+  default since 2026-11-23), or fly to an arc ``r_att`` out on the far side,
+  ``spacing`` apart along it, pulled in (never past the start-reach rule)
+  where the room is short (``attackers='follow'``, 11-17..11-19).
+
+Why hold (2026-11-23 hardware): the pilot moves the DJI AWAY from the
+attackers to open distance before START. With the arc, the attackers came
+along (and the 12 rebuilds as the DJI moved swung cf10 5.7 m right round to
+the far side). Holding, the defenders follow the DJI and the gap opens. The
+start-reach rule (no attacker inside a defender's reach at START) then does
+not decide whether a formation exists -- it decides whether the start is FAIR,
+which the pilot fixes by moving the DJI on; ``Follow.unfair`` reports it.
 
 The attack side is wherever the attackers already are (the bearing from the
 VIP to their centroid), so nobody crosses over. Who goes to which slot is a
@@ -39,7 +49,10 @@ DEFAULTS = {
     'speed': 0.4,        # m/s for the move (slow: the drones lag their setpoints)
     'reached': 0.15,     # m: a drone this close to its slot has arrived
     'timeout_s': 25.0,   # s: hold where they are after this, arrived or not
+    'attackers': 'hold', # hold: stay where they hover | follow: arc round the VIP
 }
+
+ATTACKER_MODES = ('hold', 'follow')
 
 #: rotations tried, in degrees, when the layout straight on does not fit
 _TURNS = (0, 15, -15, 30, -30, 45, -45, 60, -60, 90, -90)
@@ -76,11 +89,13 @@ def formation(cfg, rules, vip, pos, defenders, attackers, check, params=None):
     """(goals, turn_deg, why).
 
     ``goals``: name -> 3D slot at the start height, or None when nothing fits.
-    ``check(goals) -> list of problems``: the caller's start checks (the same
-    ``plan_guard.mark_problems`` the floor marks pass), so a formation is held
-    to exactly the rules a start is.
+    ``check(goals, reach) -> list of problems``: the caller's start checks (the
+    same ``plan_guard.mark_problems`` the floor marks pass), so a formation is
+    held to exactly the rules a start is; ``reach`` False leaves out the
+    start-reach rule, which held attackers are not judged by here.
     """
-    p = dict(DEFAULTS, **(params or {}))
+    p = params_of(params)
+    hold = p['attackers'] == "hold"
     defenders, attackers = list(defenders), list(attackers)
     v = np.asarray(vip, float)
     if attackers:
@@ -96,8 +111,12 @@ def formation(cfg, rules, vip, pos, defenders, attackers, check, params=None):
                                 len(attackers), p, min_att_r)
         goals = {}
         goals.update(_match_slots(pos, defenders, dslots))
-        goals.update(_match_slots(pos, attackers, aslots))
-        bad = check(goals)
+        if hold:
+            goals.update({a: np.r_[np.asarray(pos[a], float)[:2], cfg.start_height]
+                          for a in attackers})
+        else:
+            goals.update(_match_slots(pos, attackers, aslots))
+        bad = check(goals, not hold)
         if not bad:
             return goals, turn, ''
         why = '; '.join(bad)
@@ -118,11 +137,15 @@ class Follow:
     walked it into a wall) is it rebuilt round the VIP where it is now, from
     where the drones are; if nothing fits there either, the last good goals
     are held (the safety layer still keeps everyone off the VIP).
+
+    With ``attackers='hold'`` (2026-11-23) only the defenders' slots move with
+    the VIP; each attacker's slot stays where it was hovering when the form-up
+    began, through every rebuild.
     """
 
     def __init__(self, cfg, rules, defenders, attackers, check, params=None):
-        # check(goals, vip) -> list of problems: the start checks, round the
-        # VIP where it is now
+        # check(goals, vip, reach) -> list of problems: the start checks,
+        # round the VIP where it is now (reach: with the start-reach rule)
         self.cfg, self.rules = cfg, rules
         self.defenders, self.attackers = list(defenders), list(attackers)
         self.check = check
@@ -131,15 +154,24 @@ class Follow:
         self.turn = None
         self.rebuilds = 0
         self.last = None         # the last goals that passed the checks
+        self.hold = self.p['attackers'] == 'hold'
+        self.held = None         # attacker -> its fixed slot (hold)
 
     def build(self, vip, pos):
         """Lay the formation out round ``vip`` from ``pos``. (ok, why)."""
         v = np.asarray(vip, float)
+        pos = dict(pos)
+        if self.held is not None:
+            pos.update(self.held)    # rebuilt round the same held attackers
         goals, turn, why = formation(self.cfg, self.rules, v, pos, self.defenders,
-                                     self.attackers, lambda g: self.check(g, v), self.p)
+                                     self.attackers,
+                                     lambda g, reach: self.check(g, v, reach), self.p)
         if goals is None:
             return False, why
-        self.offsets = {n: np.r_[g[:2] - v[:2], g[2]] for n, g in goals.items()}
+        if self.hold and self.held is None:
+            self.held = {a: goals[a].copy() for a in self.attackers}
+        self.offsets = {n: np.r_[g[:2] - v[:2], g[2]] for n, g in goals.items()
+                        if not (self.hold and n in self.held)}
         self.turn, self.last = turn, goals
         return True, ''
 
@@ -147,12 +179,25 @@ class Follow:
         """The slots round the VIP as it is now (name -> 3D point)."""
         v = np.asarray(vip, float)
         g = {n: np.r_[v[:2] + o[:2], o[2]] for n, o in self.offsets.items()}
-        if not self.check(g, v):
+        if self.hold:
+            g.update({a: q.copy() for a, q in self.held.items()})
+        if not self.check(g, v, not self.hold):
             self.last = g
             return g
         if self.build(v, pos)[0]:
             self.rebuilds += 1
         return self.last
+
+
+    def unfair(self, vip):
+        """What the start-reach rule says about the current goals round
+        ``vip`` (empty = a fair start). Only held attackers can fail it: the
+        arc is laid out to pass it."""
+        if self.last is None:
+            return []
+        v = np.asarray(vip, float)
+        without = set(self.check(self.last, v, False))
+        return [b for b in self.check(self.last, v, True) if b not in without]
 
 
 def arrived(goals, sp, reached):
@@ -162,4 +207,8 @@ def arrived(goals, sp, reached):
 
 
 def params_of(overrides=None):
-    return dict(DEFAULTS, **(overrides or {}))
+    p = dict(DEFAULTS, **(overrides or {}))
+    if p['attackers'] not in ATTACKER_MODES:
+        raise ValueError(f"form-up attackers must be one of {ATTACKER_MODES}, "
+                         f"not {p['attackers']!r}")
+    return p

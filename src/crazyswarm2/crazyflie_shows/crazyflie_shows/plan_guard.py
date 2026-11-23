@@ -252,7 +252,8 @@ def simulate(cfg, rules, dname, aname, starts, defenders, attackers, vip0, seed,
         fp = formation.params_of(form_up)
         follow = formation.Follow(
             cfg, rules, defenders, attackers,
-            lambda g, v: mark_problems(cfg, rules, v, g, defenders, attackers)[0], fp)
+            lambda g, v, reach=True: mark_problems(cfg, rules, v, g, defenders,
+                                                   attackers, reach=reach)[0], fp)
         if follow.build(vip, pos)[0]:
             from crazyflie_shows.guard.engine import Tick
             t_f = 0.0
@@ -485,20 +486,36 @@ def main(argv=None):
         bad_cfg += [f'rules {name}: {b}' for b in
                     rule_sets.make(name, _kv(a.rparam) if name == a.rules else None)
                     .problems(cfg)]
-    form_up = None if a.no_form_up else formation.params_of(_kv(a.uparam))
+    try:
+        form_up = None if a.no_form_up else formation.params_of(_kv(a.uparam))
+    except ValueError as e:
+        raise SystemExit(str(e))
     bad_marks, starts = mark_problems(cfg, rules, vip, marks, D, A,
                                       reach=form_up is None)
     form_note = 'off: the match starts over the floor marks'
+    warn = []
     if form_up is not None and not bad_marks:
         goals, turn, why = formation.formation(
             cfg, rules, vip, starts, D, A,
-            lambda g: mark_problems(cfg, rules, vip, g, D, A)[0], form_up)
+            lambda g, reach=True: mark_problems(cfg, rules, vip, g, D, A,
+                                                reach=reach)[0], form_up)
         if goals is None:
             bad_marks.append(f'no fair starting formation fits round this VIP: {why}')
         else:
-            form_note = (f'defenders {form_up["r_def"]:.1f} m round the VIP, attackers '
-                         f'up to {form_up["r_att"]:.1f} m out on their side'
-                         f'{f" (turned {turn:+d} deg to fit the room)" if turn else ""}, '
+            hold = form_up['attackers'] == 'hold'
+            if hold:
+                # held attackers start where they hover: with a fixed VIP the
+                # start-reach rule is a warning (on the day the pilot moves
+                # the DJI away until guard_show says the start is fair)
+                for b in mark_problems(cfg, rules, vip, goals, D, A)[0]:
+                    if b not in mark_problems(cfg, rules, vip, goals, D, A,
+                                              reach=False)[0]:
+                        warn.append(f'{b} (attackers hold: move the VIP away '
+                                    'from them, --vip X,Y,Z)')
+            form_note = (f'defenders {form_up["r_def"]:.1f} m round the VIP, '
+                         + ('attackers hold where they are' if hold else
+                            f'attackers up to {form_up["r_att"]:.1f} m out on their side')
+                         + f'{f" (turned {turn:+d} deg to fit the room)" if turn else ""}, '
                          f'at {form_up["speed"]:.1f} m/s')
     fparams = _kv(a.fparam)
     if not a.no_finale:
@@ -526,6 +543,8 @@ def main(argv=None):
     if len(rule_names) == 1:
         print(f'  rules         {rules.describe()}: '
               + ', '.join(f'{k} {v}' for k, v in sorted(rules.p.items())))
+    for b in warn:
+        print(f'  !!! {b}')
     for b in bad_cfg + bad_marks:
         print(f'  *** {b}')
     if bad_cfg or bad_marks:

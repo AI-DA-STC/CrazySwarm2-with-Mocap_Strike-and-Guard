@@ -36,6 +36,12 @@ Parameters, all ``-p name:=value``:
 * the end: ``finale`` (default true; guard/finale.py -- winners rally round
   the VIP and emote, losers go dark and home) and ``finale_params`` as
   ``key=value,key=value``.
+* ``strike_block`` (m, default 0 = off): a defender within this of an
+  attacker contests its strike -- the strike meter stops (guard/rules).
+* the form-up before START: ``form_up`` (default true; guard/formation.py),
+  ``form_up_attackers`` ``hold`` (default: attackers stay where they hover,
+  only the defenders follow the VIP) or ``follow`` (attackers on an arc that
+  moves with the VIP), ``form_up_params`` as ``key=value,...``.
 * ``role_lights`` (default true): mid-match LED cues -- white while a drone is
   scoring (a defender tagging, an attacker in the strike zone), magenta for a
   decoy, dark once out of play.
@@ -237,8 +243,12 @@ def main():
     aname = str(_param(node, 'attack', 'coordinated'))
     dparams = _params_kv(_param(node, 'defense_params', ''))
     aparams = _params_kv(_param(node, 'attack_params', ''))
+    # contested strikes (guard/rules, strike_block): a defender this close to
+    # an attacker stops its strike meter; 0 = off (the rule as it was)
+    strike_block = float(_param(node, 'strike_block', 0.0))
     rules = rule_sets.make(str(_param(node, 'rules', 'tag')),
-                           _params_kv(_param(node, 'rules_params', '')))
+                           {**({'strike_block': strike_block} if strike_block > 0 else {}),
+                            **_params_kv(_param(node, 'rules_params', ''))})
     finale_on = bool(_param(node, 'finale', True))
     fparams = _params_kv(_param(node, 'finale_params', ''))
     # Form up round the VIP before START (guard/formation.py): the match starts
@@ -247,7 +257,14 @@ def main():
     form_up_on = bool(_param(node, 'form_up', True))
     # mocap VIP: the form-up starts once the DJI is above this (m; 0 = at once)
     vip_airborne_z = float(_param(node, 'vip_airborne_z', 0.3))
-    uparams = formation_mod.params_of(_params_kv(_param(node, 'form_up_params', '')))
+    # form-up attackers: hold (stay where they hover; the default since
+    # 2026-11-23) | follow (an arc round the VIP that moves with it)
+    try:
+        uparams = formation_mod.params_of(
+            {'attackers': str(_param(node, 'form_up_attackers', 'hold')),
+             **_params_kv(_param(node, 'form_up_params', ''))})
+    except ValueError as e:
+        raise SystemExit(str(e))
     role_on = bool(_param(node, 'role_lights', True))
     trace_on = bool(_param(node, 'trace', True))
     controller = str(_param(node, 'controller', 'pid')).lower()
@@ -545,17 +562,21 @@ def main():
             here = {n: np.asarray(match.sp[n], float).copy() for n in flying}
             follow = formation_mod.Follow(
                 cfg, rules, D, A,
-                lambda g, v: mark_problems(cfg, rules, v, g, D, A)[0], uparams)
+                lambda g, v, reach=True: mark_problems(cfg, rules, v, g, D, A,
+                                                       reach=reach)[0], uparams)
             ok, why = follow.build(p_now, here)
             if not ok:
                 follow = None
                 print(f'  FORM-UP skipped -- no fair formation fits round the VIP '
                       f'here ({why}); the match starts where the drones are')
             else:
+                att_note = ('attackers hold where they are' if follow.hold else
+                            f'attackers up to {uparams["r_att"]:.1f} m out on their side')
                 print(f'  FORM-UP      defenders {uparams["r_def"]:.1f} m round the VIP, '
-                      f'attackers up to {uparams["r_att"]:.1f} m out on their side'
+                      f'{att_note}'
                       f'{f" (turned {follow.turn:+d} deg)" if follow.turn else ""}, '
                       f'{uparams["speed"]:.1f} m/s, following the VIP', flush=True)
+                fair = {'was': None}
 
                 def follow_tick():
                     """One form-up tick: the slots round the VIP as it is now."""
@@ -563,6 +584,19 @@ def main():
                     p, v, _ = vip_fresh(now, dt)
                     measured, _, _ = observe(now, dt)
                     goals = follow.goals(p, match.sp)
+                    if follow.hold:
+                        # held attackers: say when the start turns fair / unfair
+                        # (an attacker inside a defender's reach at START is
+                        # taken out, or takes one out, at once)
+                        why = follow.unfair(p)
+                        if bool(why) != fair['was']:
+                            fair['was'] = bool(why)
+                            print('  FORM-UP      ' + (
+                                f'NOT A FAIR START yet: {why[0]}'
+                                f'{f" (+{len(why) - 1} more)" if len(why) > 1 else ""}'
+                                ' -- fly the DJI further from the attackers'
+                                if why else 'fair start: every attacker is out of '
+                                'the defenders\' reach'), flush=True)
                     stream(match.steer(dt, p, v, goals, uparams['speed'],
                                        measured or None))
                     trace.write(now - clk['t0'], 'form-up', match, measured, {})

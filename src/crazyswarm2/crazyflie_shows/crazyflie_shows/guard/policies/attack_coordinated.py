@@ -264,6 +264,11 @@ class Coordinated(Policy):
 
         ``dwell`` (G,) holds the attacker at its goal after arriving -- a
         strike candidate must survive strike_time there.
+
+        * BLOCK (m), with contested strikes (``rules.strike_block`` > 0): over
+          the dwell, how far the nearest PREDICTED defender stays outside the
+          block distance. A strike spot a defender will shadow scores as
+          unsafe, so the attacker looks for an uncontested one.
         """
         p, cfg = self.p, view.cfg
         vip = view.vip_p
@@ -328,6 +333,12 @@ class Coordinated(Policy):
         rob_time = ((p['meter_share'] - peak) * t_unit * v_a
                     if rules.can_down(ATTACK) else np.full(G, p['safe_cap']))
         rob = np.minimum(rob_space, rob_time)
+        if rules.strike_block > 0.0 and opp and np.any(dwell > 0.0):
+            gap_d = np.min(np.linalg.norm(np.stack(opp, axis=2) - at[:, :, None, :],
+                                          axis=-1), axis=2)                # (G,S)
+            holding = (t > (T - dwell)[:, None]) & (dwell > 0.0)[:, None]
+            rob_block = np.where(holding, gap_d - rules.strike_block, np.inf).min(axis=1)
+            rob = np.minimum(rob, rob_block)
         progress = np.linalg.norm(a.p - vip) - np.linalg.norm(goals - vip, axis=1)
         b0, _ = self._lane[a.name]
         gb = np.arctan2(goals[:, 1] - vip[1], goals[:, 0] - vip[0])

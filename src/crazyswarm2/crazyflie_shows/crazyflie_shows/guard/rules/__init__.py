@@ -27,6 +27,14 @@ under any rule set without knowing which.
 rule set. ``problems(cfg)`` refuses a rule set that could only be satisfied
 by contact (a reach inside the keep-out, a strike radius inside the VIP's).
 
+**Contested strikes (``strike_block``, every rule set, 2026-11-23).** By
+default an attacker's strike meter fills whenever it is inside
+``strike_radius``, wherever the defence is. On hardware (23-11) cf10 struck
+with cf4 shadowing it 0.45 m away the whole second: the block counted for
+nothing. With ``strike_block`` > 0, a defender within that distance of an
+attacker CONTESTS its strike: the meter does not fill (and, with the usual
+infinite drain, resets). 0 = off, the rule as it always was.
+
 Writing one: subclass :class:`Rules`, set ``name``, ``DEFAULTS`` and
 ``DOWNABLE``, implement ``down_rates`` (and ``drain`` if it is not a plain
 reset), decorate with ``@register``. ``standard.py`` holds the built-in sets.
@@ -54,6 +62,7 @@ class Rules:
         'strike_time': 1.0,        # s inside it to strike
         'strikes_to_win': 1,
         'duration': 90.0,          # s on the clock
+        'strike_block': 0.0,       # m: a defender this close contests a strike (0 = off)
     }
     DEFAULTS = {}
     #: The teams whose drones can be downed under this rule set.
@@ -77,6 +86,11 @@ class Rules:
         return float(self.p['strike_time'])
 
     @property
+    def strike_block(self):
+        """A defender within this of an attacker contests its strike (0 = never)."""
+        return float(self.p['strike_block'])
+
+    @property
     def duration(self):
         return float(self.p['duration'])
 
@@ -93,10 +107,25 @@ class Rules:
     def can_down(self, team):
         return team in self.DOWNABLE
 
-    def strike_rates(self, att_p, vip_p):
-        """(K,) strike-meter rate for attackers at ``att_p`` (K, 3)."""
-        d = np.linalg.norm(np.asarray(att_p, float) - np.asarray(vip_p, float), axis=-1)
-        return np.where(d <= self.strike_radius, 1.0 / self.strike_time, 0.0)
+    def strike_rates(self, att_p, vip_p, def_p=None):
+        """(K,) strike-meter rate for attackers at ``att_p`` (K, 3).
+
+        ``def_p``: the active defenders, (M, 3) for all K alike or (K, M, 3)
+        per case (a planner's predictions). With ``strike_block`` > 0 an
+        attacker with a defender within it is contested: rate 0. Leaving
+        ``def_p`` out ignores the block (an uncontested estimate)."""
+        att = np.asarray(att_p, float).reshape(-1, 3)
+        d = np.linalg.norm(att - np.asarray(vip_p, float), axis=-1)
+        rate = np.where(d <= self.strike_radius, 1.0 / self.strike_time, 0.0)
+        b = self.strike_block
+        if b > 0.0 and def_p is not None:
+            dp = np.asarray(def_p, float)
+            if dp.size:
+                if dp.ndim == 2:
+                    dp = np.broadcast_to(dp, (len(att),) + dp.shape)
+                near = np.min(np.linalg.norm(dp - att[:, None, :], axis=-1), axis=1)
+                rate = np.where(near <= b, 0.0, rate)
+        return rate
 
     def down_rates(self, victim_team, victim_p, opp_p, ally_p, vip_p):
         """(K,) down-meter rate for drones of ``victim_team``.
@@ -118,6 +147,10 @@ class Rules:
             bad.append(f'strike_radius {self.strike_radius:.2f} m is inside the '
                        f'{cfg.d_vip:.2f} m keep-out round the VIP: nobody could '
                        'ever strike')
+        if 0.0 < self.strike_block <= cfg.d_cc:
+            bad.append(f'strike_block {self.strike_block:.2f} m is inside the '
+                       f'{cfg.d_cc:.2f} m the safety layer keeps between drones: '
+                       'no defender could ever get close enough to contest')
         if self.DOWNABLE and self.reach <= cfg.d_cc:
             bad.append(f'reach {self.reach:.2f} m is inside the {cfg.d_cc:.2f} m '
                        'the safety layer keeps between drones: nobody could '
@@ -186,8 +219,9 @@ class Referee:
             self.meters.setdefault(a.name, {'down': 0.0, 'strike': 0.0})
         # every rate from the SAME positions, before any event: simultaneous
         rate = {}
+        defs = np.asarray([b.p for b in act if b.team == DEFENSE], float).reshape(-1, 3)
         for a in act:
-            s = (float(rules.strike_rates(a.p[None], vip_p)[0])
+            s = (float(rules.strike_rates(a.p[None], vip_p, defs)[0])
                  if a.team == ATTACK else 0.0)
             d = 0.0
             if rules.can_down(a.team):

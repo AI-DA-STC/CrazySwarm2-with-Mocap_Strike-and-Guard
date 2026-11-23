@@ -59,6 +59,13 @@ options:
     type: text
     default: operator
     when: {vip_mode: mocap}
+  - name: form_up_attackers
+    label: Attackers during the form-up
+    choices:
+      hold: stay where they hover; only the defenders follow the VIP (open distance by moving the DJI away)
+      follow: fly to an arc out on their side that moves with the VIP
+    default: hold
+    omit_default: true
   - name: paced
     label: Operator-paced (Continue at every gate)
     type: bool
@@ -97,6 +104,11 @@ options:
     label: Safety keep-out across (m; at least the floor + 0.10)
     type: number
     default: 0.45
+    omit_default: true
+  - name: strike_block
+    label: Contested strikes (m; a defender this close stops the strike; 0 = off)
+    type: number
+    default: 0.0
     omit_default: true
   - name: controller
     label: Onboard controller
