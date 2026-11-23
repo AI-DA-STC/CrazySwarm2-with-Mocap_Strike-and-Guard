@@ -67,6 +67,19 @@ in it, and why, is in [server-changes.md](server-changes.md).
   drifts: .100 → .124 → .152). Override: `mocap_hostname:=<ip>` launch arg or
   `CRAZYSWARM_MOCAP_HOST`. Must be an IPv4 literal; the launch aborts loudly if
   nothing answers instead of the node hanging silently.
+- **`/poses` silent with Wi-Fi and the wire both up (FIXED 2026-11-23).** The
+  NatNet data arrives by multicast, and the driver joins the group on
+  `interface_ip`. Upstream's node never forwarded that parameter, so the join used
+  `0.0.0.0` = the default route's interface. NetworkManager had ranked Wi-Fi first
+  (metric 600 against the wire's 20100, its no-internet penalty), so the join
+  landed on Wi-Fi: Motive answered, ping and discovery worked, and no frame
+  arrived. Symptom: `ip maddr show dev <wifi>` lists `239.255.42.99` and the wired
+  device does not. Fix: vendored patch 0007 forwards `interface_ip`, and
+  `interface_ip: "auto"` makes `launch.py` use the address the route to Motive
+  leaves from. The launch prints `mocap: NatNet multicast joined on <ip>`; it
+  should be this machine's 192.168.9.x address. Override:
+  `mocap_interface_ip:=<ip>` or `CRAZYSWARM_MOCAP_IFACE`. Verified with Wi-Fi up:
+  55 Hz `/poses`, join on the wire.
 - **Motive transmission type is read once at connect** (the vendored
   `motion_capture_tracking` requires Multicast or Broadcast Frame Data; never
   install the apt package — 1.0.9 hard-codes a foreign interface IP) — after changing it, fully

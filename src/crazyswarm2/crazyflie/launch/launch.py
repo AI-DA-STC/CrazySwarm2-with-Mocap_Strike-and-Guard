@@ -119,6 +119,46 @@ def resolve_mocap_hostname(context, yaml_hostname):
     return host, source
 
 
+def resolve_mocap_interface(context, yaml_interface, host):
+    """Local IPv4 that joins Motive's NatNet multicast group, and where it came from.
+
+    Launch arg / CRAZYSWARM_MOCAP_IFACE > yaml interface_ip; 'auto' (or empty)
+    = the source address the kernel uses to reach `host`, i.e. this machine's
+    address on the Motive network. The driver's default, 0.0.0.0, joins on the
+    default route's interface instead: with Wi-Fi (internet) and the wire
+    (Motive) both up, that is Wi-Fi, and /poses starves silently while ping
+    and discovery still work.
+    Returns (ip, source, warning-or-None).
+    """
+    override = LaunchConfiguration('mocap_interface_ip').perform(context).strip()
+    value = override or str(yaml_interface or '').strip()
+    source = 'mocap_interface_ip launch arg / CRAZYSWARM_MOCAP_IFACE' if override else 'motion_capture.yaml'
+    if value.lower() not in ('', 'auto'):
+        try:
+            ipaddress.IPv4Address(value)
+        except ValueError:
+            raise RuntimeError(
+                f"mocap interface_ip must be an IPv4 literal or 'auto', got {value!r} from {source}.")
+        return value, source, None
+    if ipaddress.IPv4Address(host).is_loopback:
+        return '0.0.0.0', 'auto (Motive on this machine)', None
+    try:
+        route = json.loads(subprocess.check_output(['ip', '-j', '-4', 'route', 'get', host], timeout=2))[0]
+        ip, dev, gateway = route['prefsrc'], route.get('dev', '?'), route.get('gateway')
+    except Exception as exc:
+        raise RuntimeError(
+            f"mocap interface_ip is 'auto' but `ip route get {host}` failed ({exc}). "
+            "Set this machine's address on the Motive network explicitly: launch arg "
+            "mocap_interface_ip:=<ip>, env CRAZYSWARM_MOCAP_IFACE=<ip>, or interface_ip: "
+            "in motion_capture.yaml.")
+    warning = None
+    if gateway:
+        warning = (f"mocap: WARNING Motive {host} is reached through gateway {gateway} on {dev}, "
+                   "not on a local network. Multicast does not usually cross a router, so /poses "
+                   "will likely stay silent: put this machine on the Motive network (wired 192.168.9.x).")
+    return ip, f'auto (route to {host} leaves via {dev})', warning
+
+
 def parse_yaml(context):
     check_vendored_mocap_driver(context)
     # Load the crazyflies YAML file
@@ -170,6 +210,12 @@ def parse_yaml(context):
         host, host_source = resolve_mocap_hostname(context, motion_capture_params.get('hostname'))
         motion_capture_params['hostname'] = host
         mocap_log.append(LogInfo(msg=f"mocap: Motive at {host} (from {host_source}), parser type '{motion_capture_params.get('type')}'"))
+        iface, iface_source, iface_warning = resolve_mocap_interface(
+            context, motion_capture_params.get('interface_ip'), host)
+        motion_capture_params['interface_ip'] = iface
+        mocap_log.append(LogInfo(msg=f"mocap: NatNet multicast joined on {iface} (from {iface_source})"))
+        if iface_warning:
+            mocap_log.append(LogInfo(msg=iface_warning))
     for key, value in crazyflies['robots'].items():
         type = crazyflies['robot_types'][value['type']]
         if value['enabled'] and \
@@ -280,6 +326,8 @@ def generate_launch_description():
         DeclareLaunchArgument('trace_cf', default_value=''),
         DeclareLaunchArgument('mocap_hostname', default_value=EnvironmentVariable('CRAZYSWARM_MOCAP_HOST', default_value=''),
                               description='Motive PC IPv4; overrides motion_capture.yaml hostname. Empty = use yaml; yaml "auto" = NatNet discovery'),
+        DeclareLaunchArgument('mocap_interface_ip', default_value=EnvironmentVariable('CRAZYSWARM_MOCAP_IFACE', default_value=''),
+                              description='This machine\'s IPv4 on the Motive network (joins the NatNet multicast); overrides motion_capture.yaml interface_ip. Empty = use yaml; yaml "auto" = the address the route to Motive leaves from'),
         DeclareLaunchArgument('teleop_yaml_file', default_value=''),
         OpaqueFunction(function=parse_yaml),
         Node(

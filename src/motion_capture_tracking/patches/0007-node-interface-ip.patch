@@ -1,0 +1,38 @@
+diff --git a/motion_capture_tracking/src/motion_capture_tracking_node.cpp b/motion_capture_tracking/src/motion_capture_tracking_node.cpp
+index 62acb17..67a2bfa 100644
+--- a/motion_capture_tracking/src/motion_capture_tracking_node.cpp
++++ b/motion_capture_tracking/src/motion_capture_tracking_node.cpp
+@@ -77,6 +77,13 @@ int main(int argc, char **argv)
+   // read off the socket, so nothing queues and the frame that is published is
+   // always the newest one.
+   node->declare_parameter<double>("max_rate", 0.0);
++  // Local patch 0007: the local IPv4 that joins the NatNet multicast group.
++  // libmotioncapture's OptiTrack driver reads cfg["interface_ip"], but upstream
++  // never forwards it, so the join always used INADDR_ANY = the interface of the
++  // default route. With Wi-Fi (internet) and a wire (Motive) both up, that is
++  // Wi-Fi, and /poses starves although Motive answers on the wire.
++  // "0.0.0.0" = upstream behaviour.
++  node->declare_parameter<std::string>("interface_ip", "0.0.0.0");
+ 
+   std::string motionCaptureType = node->get_parameter("type").as_string();
+   std::string motionCaptureHostname = node->get_parameter("hostname").as_string();
+@@ -88,6 +95,7 @@ int main(int argc, char **argv)
+   std::string tf_child_frame_id = node->get_parameter("topics.tf.child_frame_id").as_string();
+   std::string logFilePath = node->get_parameter("logfilepath").as_string();
+   const double max_rate = node->get_parameter("max_rate").as_double();
++  const std::string interface_ip = node->get_parameter("interface_ip").as_string();
+ 
+   auto node_parameters_iface = node->get_node_parameters_interface();
+   const std::map<std::string, rclcpp::ParameterValue> &parameter_overrides =
+@@ -100,6 +108,11 @@ int main(int argc, char **argv)
+   // Make a new client
+   std::map<std::string, std::string> cfg;
+   cfg["hostname"] = motionCaptureHostname;
++  cfg["interface_ip"] = interface_ip;
++  if (motionCaptureType == "optitrack") {
++    std::cout << "NatNet: multicast join on interface " << interface_ip
++              << (interface_ip == "0.0.0.0" ? " (default route's interface)" : "") << std::endl;
++  }
+ 
+   // if the mock type is selected, add the defined rigid bodies
+   if (motionCaptureType == "mock") {

@@ -416,6 +416,21 @@ def validate_motion_capture(doc):
                                 'The lab Motive PC uses DHCP and its address has drifted '
                                 '(.100 -> .124 -> .152); each drift silently killed /poses.',
                                 'hostname: "auto" lets launch.py discover it each time.'))
+    iface = str(params.get('interface_ip', '0.0.0.0')).strip()
+    if iface.lower() != 'auto':
+        if not re.match(r'^\d+\.\d+\.\d+\.\d+$', iface):
+            out.append(_finding('fail', 'Mocap interface_ip is not an IPv4 literal',
+                                f'interface_ip: {iface!r}.',
+                                'Use "auto" (the address the route to Motive leaves from).'))
+        elif iface == '0.0.0.0':
+            out.append(_finding('warn', 'Mocap multicast joins on the default route',
+                                'interface_ip is 0.0.0.0 (or missing): with Wi-Fi and the wire both up, '
+                                'the NatNet join lands on Wi-Fi and /poses stays silent.',
+                                'interface_ip: "auto" in motion_capture.yaml.'))
+        else:
+            out.append(_finding('info', f'Mocap multicast interface pinned to {iface}',
+                                'Breaks if this machine\'s address on the Motive network changes.',
+                                'interface_ip: "auto" follows the route to Motive each launch.'))
     if params.get('type') == 'optitrack_closed_source':
         out.append(_finding('warn', 'Closed-source OptiTrack parser selected',
                             'It wedges permanently after a Wi-Fi multicast stall.',

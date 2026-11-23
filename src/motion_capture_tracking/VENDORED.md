@@ -24,6 +24,21 @@ shadow this build.
 
 ## Local patches applied on top of upstream
 
+`patches/0007-node-interface-ip.patch` (applies after 0006) — libmotioncapture's
+OptiTrack driver joins the NatNet multicast group on `cfg["interface_ip"]`, but
+the upstream node never puts that key in `cfg`, so the join always used
+`0.0.0.0`, i.e. the interface of the default route. With Wi-Fi (internet) and the
+wire (Motive) both up, NetworkManager can rank Wi-Fi as the default route, and
+then `/poses` stays silent while ping and NatNet discovery still work (seen on
+2026-11-23). The patch declares an `interface_ip` parameter (default `0.0.0.0` =
+upstream behaviour), forwards it, and prints the interface it joins on. The rig
+sets `interface_ip: "auto"` in `crazyflie/config/motion_capture.yaml`; the
+crazyflie `launch.py` turns that into the address the route to Motive leaves
+from. Applies with:
+
+    git apply --directory=src/motion_capture_tracking \
+        src/motion_capture_tracking/patches/0007-node-interface-ip.patch
+
 `patches/0006-node-max-rate.patch` — upstream publishes `/poses`, `/tf` and
 `pointCloud` (and runs the marker tracker) on every Motive frame. When Motive
 streams at 240 Hz for other aircraft sharing the volume (the Starlings, from
@@ -76,7 +91,7 @@ Applies with:
 
 ## Updating
 
-Re-clone upstream at a newer commit, re-apply all three patches, verify
+Re-clone upstream at a newer commit, re-apply every patch in `patches/` in number order, verify
 `grep -r 141.23.110.162 motion_capture_tracking/deps/libmotioncapture/src`
 prints nothing, strip `.git` entries, rebuild on BOTH a 22.04/Humble and a
 24.04/Jazzy machine (a stock `ros:humble` Docker image is enough for the build

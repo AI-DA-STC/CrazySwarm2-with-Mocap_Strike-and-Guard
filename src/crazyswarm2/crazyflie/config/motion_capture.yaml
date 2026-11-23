@@ -9,6 +9,13 @@
     #   ros2 launch crazyflie launch.py mocap_hostname:=192.168.9.152
     #   export CRAZYSWARM_MOCAP_HOST=192.168.9.152
     hostname: "auto"
+    # IPv4 of THIS machine that joins Motive's NatNet multicast group. "auto" =
+    # the address the route to Motive leaves from (launch.py, `ip route get`).
+    # Without it the driver joins on the default route's interface: with Wi-Fi
+    # (internet) and the wire (Motive) both up that is Wi-Fi, and /poses stays
+    # silent while ping still works (2026-11-23). Needs vendored-node patch 0007.
+    # Override: mocap_interface_ip:=<ip> or export CRAZYSWARM_MOCAP_IFACE=<ip>.
+    interface_ip: "auto"
     # Ceiling on /poses (0 = every Motive frame). Every /poses message becomes a
     # radio broadcast to the drones, and Motive may run at 240 Hz when the
     # Starlings share the volume. Steps down only: at Motive's 50 Hz every frame
