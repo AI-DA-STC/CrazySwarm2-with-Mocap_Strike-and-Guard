@@ -45,14 +45,15 @@ Parameters, all ``-p name:=value``:
 * ``role_lights`` (default true): mid-match LED cues -- white while a drone is
   scoring (a defender tagging, an attacker in the strike zone), magenta for a
   decoy, dark once out of play.
-* ``controller`` (default ``pid``: leave the server's setting): ``mellinger``
-  switches the flying drones' onboard controller (``stabilizer.controller``
-  2) before arming and back to PID (1) afterwards, landing or abort. Why:
-  the PID position controller OVERWRITES the streamed velocity in modeAbs,
-  so on hardware every drone trailed its setpoint by ~0.56 s (0.5-0.7 m at
-  1 m/s, 2026-11-06); Mellinger uses the full state. Hover-test it on the
-  drones before a match: the simulator always runs Mellinger, so it cannot
-  show the difference.
+* ``controller`` (default ``mellinger`` since 2026-11-24; ``pid`` = leave the
+  server's setting): ``mellinger`` switches the flying drones' onboard
+  controller (``stabilizer.controller`` 2) before arming and back to PID (1)
+  afterwards, landing or abort. Why: the PID position controller OVERWRITES
+  the streamed velocity in modeAbs, so on hardware every drone trailed its
+  setpoint by ~0.56 s (0.5-0.7 m at 1 m/s, 2026-11-06); Mellinger uses the
+  full state: 0.08-0.14 s in four 1 m/s matches on 2026-11-23. Hardware only:
+  the simulator already runs Mellinger (server.yaml), so in sim nothing is
+  switched (and nothing is "restored" to PID).
 * ``trace`` (default true): every tick's measured and commanded position,
   phase and intent per drone, as guard_trace.csv in the flight's folder
   ($FLIGHT_LOG_DIR, set by the console and scripts/record_flight.sh; else a
@@ -267,7 +268,7 @@ def main():
         raise SystemExit(str(e))
     role_on = bool(_param(node, 'role_lights', True))
     trace_on = bool(_param(node, 'trace', True))
-    controller = str(_param(node, 'controller', 'pid')).lower()
+    controller = str(_param(node, 'controller', 'mellinger')).lower()
     if controller not in CONTROLLERS:
         raise SystemExit(f'controller must be one of {sorted(CONTROLLERS)}, not {controller!r}')
     if vip_mode not in ('point', 'mocap', 'manual'):
@@ -302,8 +303,12 @@ def main():
           f'{np.round(vip_point, 2).tolist() if vip_mode != "mocap" else vip_name}')
     print(f'  rules         {rules.describe()}: '
           + ', '.join(f'{k} {v}' for k, v in sorted(rules.p.items())))
+    # the simulator runs Mellinger from server.yaml: switching (and restoring
+    # PID after) would leave the sim drones on PID for the next show
+    switch_controller = controller != 'pid' and not sim
     print(f'  controller    {controller}'
-          + ('' if controller == 'pid' else ' (switched for this show, PID restored after)'))
+          + (' (switched for this show, PID restored after)' if switch_controller else
+             ' (the simulator runs Mellinger; not switched)' if sim else ''))
     print(f'  speeds        defence {cfg.v_max_defense:.2f}, attack '
           f'{cfg.v_max_attack:.2f}, safety cap {cfg.v_max_safety:.2f} m/s; band '
           f'{cfg.floor:.2f}..{cfg.ceiling:.2f} m')
@@ -383,7 +388,7 @@ def main():
             operator_gate('ARM and take off? Everyone clear of the volume, '
                           'E-STOP in hand.',
                           spin=lambda: rclpy.spin_once(node, timeout_sec=0.02))
-        if controller != 'pid':
+        if switch_controller:
             set_controller(fcfs, flying, CONTROLLERS[controller])
             switched = True
         for n in flying:

@@ -113,9 +113,9 @@ options:
   - name: controller
     label: Onboard controller
     choices:
-      pid: the server's PID (default) -- trails streamed setpoints by ~0.56 s on hardware
-      mellinger: Mellinger for this show, PID restored after -- hover-test it first
-    default: pid
+      mellinger: Mellinger for this show, PID restored after (default) -- ~0.1 s lag, flown 2026-11-23
+      pid: the server's PID -- trails streamed setpoints by ~0.56 s on hardware; fly 0.6 m/s
+    default: mellinger
     omit_default: true
   - name: finale
     label: Finale (winners rally round the VIP and emote; losers go dark and home)
