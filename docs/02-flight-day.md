@@ -78,6 +78,11 @@ ros2 launch crazyflie launch.py
 
 This starts the camera receiver, the drone server, RViz and the preflight window.
 
+Near the top of its output, the launch prints `mocap: NatNet multicast joined on <ip>`.
+That must be this laptop's address on the Motive network. If the laptop is on Wi-Fi as
+well as the mocap cable, this line is how you catch the camera data going to the wrong
+network ([troubleshooting.md](troubleshooting.md)).
+
 ## 4. Preflight go / no-go
 
 In the preflight window, check every drone (← / → switches drone):

@@ -12,7 +12,7 @@ each drone goes, and the safety rules are enforced there, before any command is 
 |---|---|---|
 | **Escort** | Three defenders hold a ring around a VIP (a hand-flown DJI) and turn it so one is always between the VIP and an attacker. Reacts live. Flown for guests on 8 October 2026. | [run](docs/escort/run.md) · [how it works](docs/escort/how-it-works.md) · [presenting](docs/escort/presenting.md) |
 | **STL game** | Five defenders stop five intruders from reaching a goal line. The whole flight is planned and checked before take-off. Simulator-tested with this repo's show. | [run](docs/stl/run.md) · [how it works](docs/stl/how-it-works.md) |
-| **Guard** | N defenders protect a VIP (a hand-flown DJI or a fixed point in the air) against M attackers. Both teams' strategies and the rule set are chosen by name; nothing is scripted. First hardware matches 6 November 2026 — the attack and the defence won one each. | [run](docs/guard/run.md) · [how it works](docs/guard/how-it-works.md) · [presenting](docs/guard/presenting.md) |
+| **Guard** | N defenders protect a VIP (a hand-flown DJI or a fixed point in the air) against M attackers. Both teams' strategies and the rule set are chosen by name; nothing is scripted. First hardware matches 6 November 2026 — the attack and the defence won one each; on 23 November five more at full speed, four on the Mellinger controller — the attack won three, the defence two. | [run](docs/guard/run.md) · [how it works](docs/guard/how-it-works.md) · [presenting](docs/guard/presenting.md) |
 
 It runs on ROS 2 with [Crazyswarm2](https://github.com/IMRCLab/crazyswarm2) and OptiTrack
 motion capture.

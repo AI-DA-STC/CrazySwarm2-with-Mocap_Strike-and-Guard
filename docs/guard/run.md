@@ -65,13 +65,15 @@ For the first sessions on real drones, follow the ladder in
 [../details/guard-design-notes.md](../details/guard-design-notes.md) ("Before the
 first hardware flight"): start 1 v 1, slow and wide apart.
 
-**Speed.** Both teams fly at 1 m/s by default. On real drones, every drone runs about
-half a second behind its commands (measured 2026-11-06 and 2026-11-17), so at 1 m/s
-two drones can pass closer than the minimum distance in some pairings: check yours
-with `plan_guard` first. For more margin, set both teams to 0.6 m/s
-(`-p v_max_defense:=0.6 -p v_max_attack:=0.6`, or the two speed fields in the console).
-`-p controller:=mellinger` switches the drones to a controller that should not lag. Try
-it on a single hovering drone before using it in a match.
+**Speed and the onboard controller.** Both teams fly at 1 m/s by default, and the
+show switches the drones to the **Mellinger** controller for the match (and back
+afterwards). With Mellinger a drone runs about a tenth of a second behind its
+commands. Every match on 2026-11-23 flew it at 1 m/s, and none had a near miss. The
+drones' standard controller (`-p controller:=pid`, or **pid** in the console's
+controller field) runs about half a second behind, so at 1 m/s two drones can pass
+closer than the minimum distance. If you fly it, set both teams to 0.6 m/s
+(`-p v_max_defense:=0.6 -p v_max_attack:=0.6`, or the two speed fields in the console)
+and check it with `plan_guard` first.
 
 ## Choosing the strategies
 
@@ -99,16 +101,29 @@ Add `-p rules:=<name>` (`--rules <name>` for the planner):
 
 Check a rule set with `plan_guard --rules <name>` before flying it.
 
+**Contested strikes.** Normally an attacker strikes by staying near the VIP, even with
+a defender right beside it. Add `-p strike_block:=0.8` (the console's **Contested
+strikes** field) to change that: a defender within 0.8 m of an attacker stops its
+strike. It works with every rule set, and it is off (`0`) unless you set it. For the
+planner, add `--rparam strike_block=0.8`.
+
 ## What you will see
 
-**Form-up.** Just before START (after the DJI gate when there is one), every
-drone flies slowly to a starting formation round the VIP: defenders in a ring
-round it, attackers backed off on their own side. With the DJI as the VIP, the
-form-up waits until the DJI is in the air, and then the whole formation **follows
-the DJI** wherever the pilot takes it, until START. The match starts from where
-they are at START, not from the floor marks, so where the pilot parks the DJI no
-longer decides the game. Turn it off with `-p form_up:=false`
-(and `--no-form-up` for the planner).
+**Form-up.** Just before START (after the DJI gate when there is one), the
+defenders fly slowly to a ring round the VIP. The attackers **stay where they are
+hovering**. With the DJI as the VIP, the form-up waits until the DJI is in the air,
+and then the defenders' ring **follows the DJI** wherever the pilot takes it, until
+START. The match starts from where they are at START, not from the floor marks.
+
+If an attacker is still too close to a defender, the show prints `NOT A FAIR START
+yet`: an attacker that starts within a defender's reach is taken out at once, or
+takes the defender out. The pilot flies the DJI further from the attackers until the
+show prints `fair start`, and then presses START.
+
+To make the attackers follow the VIP as well, onto an arc on their own side, add
+`-p form_up_attackers:=follow` (the console's **Attackers during the form-up**
+field). Turn the whole form-up off with `-p form_up:=false` (and `--no-form-up` for
+the planner).
 
 **On the drones.** Defenders are blue and attackers red.
 - A drone turns **white** while it is scoring. For a defender, that means taking an

@@ -65,7 +65,8 @@ and the safety layer don't care where positions come from.
   if anything gets too close.
 - The strategies were checked over thousands of simulated matches. Only some pairings
   have flown on real drones.
-- Today, the drones run about half a second behind their commands (see
+- The drones always run a little behind their commands: about a tenth of a second
+  with the Mellinger controller, and half a second without it (see
   [how-it-works.md](how-it-works.md#why-the-drones-run-late-and-what-to-do-about-it)).
   Say "the safety margins are set for that", not "they move exactly where they're told".
 - "I don't know, I can find out" is a good answer. Never upgrade a claim under pressure.

@@ -20,6 +20,7 @@ The problems people actually hit, most common first. The full list, with causes,
 |---|---|
 | `mocap [Hz]` is 0, or `ros2 topic hz /poses` prints nothing | Check Motive is streaming **Multicast**. Check nothing else holds the camera port: `ss -uanp \| grep :1511` must show at most one socket; kill any leftover process, then relaunch. |
 | Launch stops with `no Motive answered a NatNet discovery ping` | Your laptop is not on the Motive network, or Motive is not streaming. Fix the network, or give the address: `mocap_hostname:=<ip>`. |
+| `/poses` silent with Wi-Fi and the mocap cable both connected, though Motive answers | The launch prints `mocap: NatNet multicast joined on <ip>`. That address must be this laptop's address on the Motive network. If it is not, the camera data is arriving on the cable while the laptop listens on Wi-Fi. Keep `interface_ip: "auto"` in `motion_capture.yaml`, or pass `mocap_interface_ip:=<the laptop's Motive-network address>` to the launch. |
 | A drone is missing from `/poses` | Its rigid body in Motive is switched off or named differently from `crazyflies.yaml`. |
 | Red "ORIENTATION MISALIGNED" banner, or a big `err.yaw` | The rigid body was created with the drone pointing the wrong way. Point the nose along +X and recreate it. Do not fly: this one causes fly-aways. |
 
@@ -48,7 +49,9 @@ The problems people actually hit, most common first. The full list, with causes,
 | What you see | What to do |
 |---|---|
 | Abort at the start gate: `CONTAINMENT cf1: no mocap for 1.1 s` | The cameras lost that drone for about a second. Check its markers and the camera view, then fly again. This ended the first hardware match on 2026-11-06. |
-| Abort in the match: `cf10: 0.64 m from where it was commanded for 0.9 s` | The drone flew its path, about half a second late: every drone trails its setpoint by ~0.56 s, so at 1 m/s it sits over half a metre behind. Fly 0.6 m/s (`-p v_max_defense:=0.6 -p v_max_attack:=0.6`), or try `-p controller:=mellinger` on one hovering drone first. Why: [guard/how-it-works.md](guard/how-it-works.md#why-the-drones-run-late-and-what-to-do-about-it). |
+| Abort in the match: `cf10: 0.64 m from where it was commanded for 0.9 s` | The drone flew its path, about half a second late. With the standard controller, every drone trails its setpoint by ~0.56 s, so at 1 m/s it sits over half a metre behind. Mellinger, the default since 2026-11-24, runs ~0.1 s behind. Check the show's header says `controller mellinger`, not `pid`. To fly PID, fly 0.6 m/s (`-p v_max_defense:=0.6 -p v_max_attack:=0.6`). Why: [guard/how-it-works.md](guard/how-it-works.md#why-the-drones-run-late-and-what-to-do-about-it). |
+| `no /poses entry for 'operator'` right after the header | The VIP's rigid-body name is wrong. Set it to the DJI's name in Motive (`-p vip_name:=<name>`, or the console's VIP field). |
+| `FORM-UP NOT A FAIR START yet: attacker ... inside reach` | An attacker is within a defender's reach. The pilot flies the DJI further from the attackers until the show prints `fair start`, and then you press START. |
 | The match pauses and every drone holds | A near miss: the safety layer is keeping the drones apart, and play resumes by itself. If the pause does not clear in a few seconds, everything lands. Expected, not a fault. The long story: [details/guard-design-notes.md](details/guard-design-notes.md). |
 
 ## The preflight window

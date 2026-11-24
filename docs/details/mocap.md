@@ -340,6 +340,20 @@ must be updated to match:
   `export CRAZYSWARM_MOCAP_HOST=<ip>`. Discovery needs you on the Motive PC's
   LAN segment (broadcast does not cross routers) — `ip route get <ip>` must
   not say `via`.
+- **`interface_ip:`** — leave it at `"auto"`. NatNet frames arrive by multicast,
+  and the driver joins the group on `interface_ip`. With `0.0.0.0` (upstream's
+  value) the join lands on the **default route's** interface. With Wi-Fi
+  (internet) and the wire (Motive) both up, NetworkManager ranks Wi-Fi first
+  (metric 600 against the wire's no-internet 20100), so the join lands on Wi-Fi.
+  Ping, discovery and the command socket still work, but no frame ever arrives.
+  `"auto"` makes `launch.py` use the source address of the route to Motive
+  (`ip route get <motive>`). It warns if that route goes through a gateway, and
+  logs `mocap: NatNet multicast joined on <ip> (from <source>)`. Override:
+  `mocap_interface_ip:=<ip>` or `export CRAZYSWARM_MOCAP_IFACE=<ip>`. Upstream's
+  node never forwarded this parameter to the driver. Setting it does nothing
+  without vendored patch 0007 (`src/motion_capture_tracking/VENDORED.md`). Check:
+  `ip maddr show dev <wired iface>` lists `239.255.42.99`. Fixed 2026-11-23; the
+  write-up is in [known-issues.md](known-issues.md).
 - **`type: "optitrack"`** (the open parser) is **REQUIRED on Wi-Fi** — the
   closed-source parser wedges **permanently** on a Wi-Fi multicast stall and
   never recovers.

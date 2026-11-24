@@ -87,7 +87,9 @@ This runs on its own after every recorded flight; run it again by hand any time.
 - **est yaw p95**: the onboard heading against mocap, the fly-away precursor
   ([../troubleshooting.md](../troubleshooting.md)).
 - **batt**: start > lowest > end; **lat ms**: the worst unicast latency;
-  **flags**: any tumbled, locked or crashed bit seen.
+  **flags**: any tumbled, locked or crashed bit seen. The supervisor has set
+  `crashed, tumbled` at ordinary touchdowns (2026-11-17, 2026-11-23), so check the
+  mocap trace before calling it a crash.
 - **motor%**: the highest motor PWM, from the downwash block when it is on; **SATURATED n s**:
   time with a motor above 95 %, when the drone can no longer hold its height.
   **tilt**: the largest roll/pitch.

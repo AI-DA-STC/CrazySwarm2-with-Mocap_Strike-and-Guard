@@ -16,7 +16,8 @@ attackers, plus choreographed shows:
   strategies and rule sets plug in by name, and every command passes a CBF safety
   layer. Reactive, closed loop on mocap. First hardware matches 2026-11-06
   (4 defenders cf1-cf4 v 3 attackers cf10-cf12, DJI as the VIP): the attack and the
-  defence won one each.
+  defence won one each. 2026-11-23: five matches at 1 m/s, four on Mellinger (lag
+  ~0.1 s vs PID's ~0.56 s, no near misses); attack 3, defence 2.
 - **Serpent**: a one-minute choreographed big-arena show, five drones
   (docs/details/serpent-show.md).
 
@@ -83,7 +84,7 @@ ros2 run crazyflie_shows escort_show --ros-args -p use_sim_time:=true -p vip_mod
 ros2 run crazyflie_shows plan_stl       # refuses v3 at the default 0.15 m floor; that is known
 ros2 run crazyflie_shows plan_guard --defenders 4 --attackers 3
 ros2 run crazyflie_shows guard_show --ros-args -p use_sim_time:=true \
-    -p defenders:=cf1,cf2,cf3,cf4 -p attackers:=cf5,cf6,cf7   # hardware 2026-11-06: cf10-cf12 attacked, add -p vip_mode:=mocap
+    -p defenders:=cf1,cf2,cf3,cf4 -p attackers:=cf5,cf6,cf7   # hardware: cf10-cf12 attack; add -p vip_mode:=mocap (Mellinger is the default)
 ros2 run crazyflie_shows plan_serpent   # then serpent_show: the one-minute big-arena show
 ```
 

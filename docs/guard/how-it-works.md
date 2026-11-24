@@ -70,6 +70,12 @@ Choose the rules before the match. Each one only changes who can be taken out, a
 **pressure** gives the most two-sided matches: defenders that leave the VIP to chase can
 be ganged up on.
 
+**Contested strikes** can be switched on with any of these rules. Normally an attacker
+near the VIP strikes even with a defender right beside it. With contested strikes, a
+defender close enough to the attacker stops the strike, so shadowing an attacker counts
+as a block. The idea came from a real match on 2026-11-23, where an attacker struck with
+a defender half a metre away the whole time.
+
 The clips on this page are matches flown in the simulator, seen in the console's 3D view
 from behind the attackers. The legend under each one explains the colours and symbols.
 **tag** and **pressure** appear in the strategy clips further down; here are the other two:
@@ -168,6 +174,15 @@ RViz and the console's 3D view draw what each drone *means* to do: a defender's 
 or pincer, an attacker's staging point, strike, feint or decoy, and the attack's lanes.
 The legend is in [run.md](run.md#what-you-will-see).
 
+## The start of a match
+
+The drones take off from their floor marks, but the match does not start there. First
+comes the **form-up**: the defenders fly to a ring round the VIP, and the attackers
+hover where they are. If the VIP is the DJI, the ring follows it while the pilot flies it
+into place. The pilot opens a gap between the DJI and the attackers until the show says
+the start is **fair**, meaning no attacker is within a defender's reach. Then the
+operator presses START.
+
 ## The end of a match
 
 The finale makes the result obvious from across the room.
@@ -223,10 +238,14 @@ own controller: it ignores the speed the laptop sends with each position.
 Two consequences:
 - The safety layer was designed assuming drones stay much closer to their commands than
   that. So at full speed, passes get closer than planned.
-- The cure is a different onboard controller, which the show can switch to for one match
-  (`controller`). It has to be tried on a hovering drone first.
+- The cure is a different onboard controller, **Mellinger**, which the show switches to
+  for each match (`controller`, the default since 2026-11-24). It uses the speed the
+  laptop sends.
 
-Until then, a slower match (`0.6 m/s` for both teams) keeps a comfortable margin.
+The cure worked. On 2026-11-23 every match flew Mellinger at full speed, and the
+drones ran about a tenth of a second behind instead of half a second. No match had a
+near miss. With the standard controller, a slower match (`0.6 m/s` for both teams) is
+still the way to keep a comfortable margin.
 
 ## Where to go next
 

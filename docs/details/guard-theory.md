@@ -45,11 +45,14 @@ their own "where" legend directly under them. Values are the shipped `GuardConfi
 | $\eta$ | hard separation floor across (`min_separation`) | 0.35 m |
 | $\eta_z$ | hard separation floor vertically (`min_separation_z`) | 0.62 m |
 | $\mathrm{TM}$ | tracking margin: how far an aircraft may trail its setpoint | 0.10 m |
-| $\tau$ | first-order tracking lag of an aircraft behind its setpoint | 0.54–0.60 s measured; `plan_guard` default 0.6 s since 2026-11-19 (0.25 s before) |
+| $\tau$ | first-order tracking lag of an aircraft behind its setpoint | total lag measured 0.54–0.60 s on PID, 0.08–0.14 s on Mellinger; `plan_guard` default 0.2 s after a 0.4 s delay since 2026-11-19 (0.25 s alone before) |
+| $t_d$ | pure delay before that lag in `plan_guard`'s stand-in aircraft (`--delay`) | 0.4 s (PID fit); 0.1 s for Mellinger |
 | $n$ | inward unit normal of a wall | geometric |
 | $T$ | down time: seconds of filling that downs a drone | 1.1 s |
 | $\rho$ | reach: distance within which an opponent counts against a drone | 1.15 m `tag`, 1.2 m `pressure` |
 | $\delta$ | drain rate of a meter nothing is filling | ∞ (`tag`), 0.5 /s (`pressure`) |
+| $r_s,\ T_s$ | strike radius round the VIP, and the time inside it that strikes | 2.4 m `tag`/`zone`, 1.6 m `timer`/`pressure`/`zone_pressure`; 1.0 s |
+| $b$ | contested-strike distance (`strike_block`): a defender this close stops a strike | 0 (off) |
 | $k$ | sharpness of the smooth minimum | 8.0 |
 | $\mathrm{clip}(x, lo, hi)$ | limit $x$ to the range $[lo, hi]$ | |
 | $\lVert\cdot\rVert$ | length of a vector | |
@@ -543,6 +546,19 @@ instead of resetting, so a drone that escapes is still weakened for a while (2 s
 Its strike radius is 1.6 m, not the common 2.4 m, measured in simulation: a lone defender
 cannot down a lone attacker here, so the strike zone has to be smaller.
 
+**Contested strikes** (`strike_block` $= b$, any rule set, off by default) multiply the
+strike rate by an indicator on the nearest active defender:
+
+$$\dot s_a = \frac{1}{T_s}\,\mathbf 1\!\left[\lVert p_a - p_{\text{VIP}}\rVert \le r_s\right]\,
+\mathbf 1\!\left[\min_d \lVert p_a - p_d\rVert > b\right].$$
+
+The second factor is what makes shadowing count as a block. A planner sees it the same
+way as any other rate (§7.2). `coordinated` adds a robustness term
+$\min_t(\min_d\lVert \hat p_a(t) - \hat p_d(t)\rVert - b)$ over the dwell, so a strike
+spot that a predicted defender will shadow scores as unsafe. $b \le d_{\text{cc}}$ is
+refused, because the safety layer would never let a defender get that close. Measured
+effects are in the design notes (2026-11-23).
+
 ### 7.4 Rules never touch safety
 
 The CBF and the watchdogs sit underneath every rule set. `problems()` refuses a rule set
@@ -556,11 +572,15 @@ is *safe*.
 
 ![Why the drones run late](../diagrams/30-guard-lag.png)
 
-Offline, `plan_guard` models each aircraft as a **first-order lag** $\tau$ behind its
-setpoint — the same stand-in the escort's verifier uses. The default was $\tau$ =
-0.25 s, labelled a stand-in, not a measurement, until 2026-11-19; it is now 0.6 s, the
-hardware figure below. At speed $v$ the aircraft
-then sits $\tau\, v$ behind its commanded point.
+Offline, `plan_guard` models each aircraft as a **pure delay** $t_d$ followed by a
+**first-order lag** $\tau$ behind its setpoint. At speed $v$ the aircraft then sits
+about $(t_d + \tau)\, v$ behind its commanded point. Until 2026-11-19 it was a lag
+alone, $\tau$ = 0.25 s, labelled a stand-in, not a measurement. It is now $t_d$ =
+0.4 s, $\tau$ = 0.2 s, the best fit to the PID traces below. The split matters: a
+delay that every commanded drone shares replays a safe pattern late, but the lag
+rounds corners, and a body that does not share the delay (the DJI, a landing drone)
+can be run into (design notes, 2026-11-19). The Mellinger plant is $t_d$ = $\tau$
+= 0.1 s.
 
 Hardware measured it on 2026-11-06: **every drone, every run, followed its commanded path to
 within 3–5 cm, but 0.54–0.60 s late** — at 1 m/s, 0.5–0.7 m behind. The cause is the
@@ -578,9 +598,12 @@ The honest check is a sweep, and the sweep is why the speed caps follow:
 
 ![Why the advice is 0.6 m/s](../diagrams/40-guard-speed-sweep.png)
 
-Hence the shipped advice: fly 0.6 m/s until a different onboard controller (Mellinger,
-full-state tracking) is tried on a hovering drone; the lag then needs re-measuring, not
-assuming. The first hardware matches agree from the other side: in both completed runs
+Hence the advice until 2026-11-23: fly 0.6 m/s until a different onboard controller
+(Mellinger, full-state tracking) is tried, and then re-measure the lag rather than
+assume it. It was re-measured on 2026-11-23. With Mellinger, every completed match at
+1 m/s lagged **0.08–0.14 s**, with the closest measured pair at 0.36–0.40 m and no near
+miss. The lag term is then about a fifth of what it was, and 1 m/s is the advice on
+Mellinger. The first hardware matches agree from the other side: in both completed runs
 (2026-11-06, 4 v 3, `pressure` rules) the closest measured pair was at the 0.35 m floor
 *with the setpoints further apart* — the signature of aircraft lagging a plan that was
 itself safe. The attack won one (a striker downed two defenders, then struck); the defence
@@ -622,10 +645,11 @@ Only what the design notes actually leave open.
 
 | Question | Why it is open | Where it points |
 |---|---|---|
-| Why did the hardware near-misses happen? | Not known: no output was kept from the flights that showed them, and the stand-in aircraft never comes inside the floor — so the cause is something it does not model (real tracking, mocap glitches, or both). Every near miss now prints the setpoint gap and each drone's tracking error, and each run writes a trace | the next hardware session, with `guard_trace.csv` |
-| Can the lag be removed? | The PID controller throws away the velocity feed-forward; the fix is a different onboard controller, untried | `-p controller:=mellinger`, on one hovering drone first; then re-measure $\tau$ |
+| Why did the early hardware near-misses happen? | Most likely the ~0.56 s PID lag (§8): the 2026-11-06 traces show closest pairs at the floor with the setpoints further apart. On Mellinger (2026-11-23) no match had a near miss. Not proved for the flights before 11-06, which kept no output | any new near miss prints its setpoint gap and tracking errors, and `guard_trace.csv` has the rest |
+| Does Mellinger stay this good? | Answered for one day: four completed matches at 1 m/s, lag 0.08–0.14 s. Not yet tried with more drones, a faster DJI, or low batteries | keep reading `lag s` in each flight report |
 | Can the dependence on lag be designed out? | The first-order CBF is exact in continuous time only (§5.3) | AirStack's own upgrade path: swap the builder for an acceleration-level HOCBF, same solver — the step before flying faster |
-| `pressure` with a drifting DJI | Downed defenders are landed straight down near the VIP while it drifts onto them; the fix (retire through the CBF before landing) changes the match balance and is not done | until then: fly the DJI under `tag`, and slow (≤ 0.3 m/s) |
+| `pressure` with a drifting DJI | Since 2026-11-19 a retired drone exits through the CBF before landing (`exit_min_s`), with the match balance unchanged. On the PID plant, 5 of 80 cells still fail with a DJI drifting at 0.2 m/s, mostly an active drone against one being landed | re-run the drifting-VIP matrix on the Mellinger plant (`--delay 0.1 --tau 0.1 --vip-move 0.2`) |
+| The defence loses under `pressure` against `coordinated` | Coordinated wins by downing every defender, not by striking, so contested strikes barely move it (1 → 2 of 12) | a teammate-support radius in the rules, or a defence that keeps its pairs together |
 | `zone_pressure` favours the attack | Neither default strategy has home-ground tactics yet | strategy work, not a rule fix |
 | The `/poses` stream freezes 0.2–0.55 s every 10–40 s | Seen on hardware and in the server; under the 1.0 s watchdog, but the cause is not known (network, or load on the machine) | the traces above |
 

@@ -374,7 +374,8 @@ Seven Crazyflies (cf1-cf4 defend, cf10-cf12 attack), the DJI as the VIP (rigid b
 
 Four causes were found and three fixed.
 
-**1. Every drone trails its setpoint by ~0.56 s (not fixed: needs a hover test).**
+**1. Every drone trails its setpoint by ~0.56 s (fixed 2026-11-23 by flying Mellinger;
+see the last section).**
 Every drone, every run, followed its commanded path to within 3-5 cm, but 0.54-0.60 s
 late. So at 1 m/s it sat 0.5-0.7 m behind its setpoint. The firmware's PID position
 controller (`stabilizer.controller` 1, which the server sets) overwrites the
@@ -397,8 +398,9 @@ Consequences:
 
 ![Why the advice is 0.6 m/s](../diagrams/40-guard-speed-sweep.png)
 
-The fix to try is `-p controller:=mellinger` (full-state tracking), on one hovering
-drone first. Until then fly 0.6 m/s.
+The fix to try was `-p controller:=mellinger` (full-state tracking); until then the
+advice was 0.6 m/s. It was flown on 2026-11-23, with a lag of 0.08-0.14 s: see the last
+section.
 
 **2. `/poses` went stale inside the show (fixed).**
 - `crazyflie_py` subscribes every drone's `/cfN/pose` (10 Hz) and `/cfN/status` on the
@@ -577,5 +579,90 @@ setpoint, not where its aircraft was).
 
 **Left open:** with a drifting DJI, 5/80 cells still fail, mostly an active drone
 running into one being landed, or the DJI coming to ~1 m of a landing drone. The
-real cure for both is less lag: Mellinger (hover-test first) or an acceleration-level
-CBF.
+real cure for both is less lag: Mellinger (flown 2026-11-23, next section) or an
+acceleration-level CBF.
+
+## The form-up (2026-11-17 to 11-23)
+
+Until 11-17 a match started over the floor marks, so where the pilot parked the DJI
+decided the geometry, and often the game. The form-up (`guard/formation.py`, guard-modules.md
+7b) moves the start into the air, round the VIP's live position. It went through three
+versions, each one driven by a flight:
+
+- **11-17: built once, at the gate.** The slots were laid out round where the DJI was
+  when the gate passed. The pilot then moved the DJI 1.4 m (17-11 18:00/18:02). The ring
+  stayed put, cf4's slot ended 1.2 m from the DJI, inside its keep-out, and the show
+  logged "not all in position after 25 s".
+- **11-19: `Follow`.** The slots became offsets from the VIP, translated with its live
+  position every tick and rebuilt only when the room no longer fits them. The form-up
+  waits for the DJI to be above `vip_airborne_z`, and follows it through the START gate.
+  The aborts 1.5-5 s after START in the same flights were the containment check, not a
+  collision risk: at 1 m/s and 0.6 s of lag a drone sits 0.6 m behind its *current*
+  setpoint. `track_lag_s` (1.0 s) measures against the nearest setpoint of the last
+  second instead. Replayed over all 14 hardware traces, that turned 11 false aborts into 0.
+- **11-23: attackers hold.** The pilot moves the DJI *away* from the attackers to open
+  distance before START. With the arc, the attackers came along. Over 12 rebuilds as the
+  DJI moved, cf10 swung 5.7 m right round to the far side. Now they hold where they hover
+  (`attackers` = `hold`, the default; `follow` keeps the arc), and only the defenders
+  follow the DJI, so the gap opens. The start-reach rule then says whether the start is
+  *fair*, not whether a formation exists. The pilot fixes an unfair start by moving the
+  DJI on, and the show says when it is fair. In every hold match on 11-23, the show
+  printed `NOT A FAIR START yet` and then `fair start` before START.
+
+In `plan_guard`, hold looked unsafe on the PID plant (delay 0.4 + tau 0.6). On a
+Mellinger plant (delay 0.1, tau 0.1), every case was 0/12 unsafe, with the closest pair
+at 0.42 m or more.
+
+## Mellinger, attackers that hold, contested strikes (2026-11-23)
+
+Four defenders (cf1-cf4) against three attackers (cf10-cf12), the DJI as the VIP,
+`pressure` rules, 1 m/s for both teams, paced from the console. Every run has a flight
+folder ([flight-logs.md](flight-logs.md)), and the numbers below come from their reports.
+
+| Run | Controller | Set-up | Ended |
+|---|---|---|---|
+| 13:38 | PID | | refused: `no /poses entry for 'operator'` (VIP name left at the console default) |
+| 13:39 | PID | shell v coordinated, form-up `follow` | **attack won** at 8.5 s: two defenders downed, then cf12 struck |
+| 13:57 | Mellinger | shell v coordinated, `hold` | **attack won** at 14.5 s: two attackers downed, then cf10 struck |
+| 14:08 | Mellinger | hunter v coordinated | operator stopped it at the DJI gate |
+| 14:13 | Mellinger | shell v wolfpack, `hold` | **attack won** at 8.8 s: one attacker downed, then cf10 struck |
+| 14:41 | Mellinger | | refused: the drones were too close to the VIP |
+| 14:41 | Mellinger | shell v coordinated, `hold` | **defence won** at 17.0 s: three downs |
+| 15:22 | Mellinger | `strike_block` 0.8 | stopped while `Crazyswarm()` waited for the server |
+| 16:38 | Mellinger | `strike_block` 0.8 | abort: `VIP pose lost for 2.0 s` |
+| 16:42, 16:45 | Mellinger | `strike_block` 0.8 | operator stopped both at the DJI gate |
+| 16:49 | Mellinger | shell v coordinated, `hold`, `strike_block` 0.8 | **defence won** at 15.3 s: three downs |
+
+**1. Mellinger removes most of the lag.** PID at 13:39: 0.54-0.58 s of lag, as on 11-06.
+Mellinger in every completed match: 0.08-0.14 s, a tracking error p95 of 0.13-0.21 m at
+1 m/s, and the closest pair 0.36-0.40 m against the 0.35 m floor. There were no near
+misses. The safety layer had one emergency, an unconverged solve at 14:41, and the
+backstop never fired. Since 2026-11-24 `controller` defaults to `mellinger` (on
+hardware; the simulator already runs it), and the advice is Mellinger at 1 m/s.
+`plan_guard`'s default plant stays the PID fit (delay 0.4 + tau 0.2), which is the more
+cautious verdict. Use `--delay 0.1 --tau 0.1` for the Mellinger plant.
+
+**2. The strike that prompted contested strikes.** At 13:57, cf10 struck 1.40 m from the
+DJI with cf4 shadowing it about 0.45 m away for the whole second. Under the rules as they
+were, the block counted for nothing. `strike_block` (every rule set, guard-modules.md
+section 4) makes a defender that close contest the strike. Measured in `plan_guard`
+(Mellinger plant, hold layout with the DJI moved 1 m, finale on, 12 seeds × 64 cells):
+
+- 0 unsafe cells, with the closest pair at 0.42 m.
+- `pressure` with 0.8 m: shell v flood went from 3 to 11 defence wins of 12, shell v
+  wolfpack from 5 to 8, and hunter v flood and v wolfpack to 12. But shell v coordinated
+  went only from 1 to 2. Coordinated wins by *downing* every defender (the
+  local-majority problem), so the strike rule hardly matters to it. The next lever is a
+  teammate-support radius, which is not built.
+- `tag` with 0.8 m is one-sided for the defence (shell 11-12 of 12 against most attacks).
+
+On hardware the match was more even than these numbers (two attackers downed before the
+13:57 strike). The one completed `strike_block` match, at 16:49, went to the defence.
+
+**3. Two report quirks, not faults.**
+- cf10's supervisor flagged `crashed, tumbled` at its 13:57 touchdown, an ordinary
+  landing in mocap. The same flags appeared on cf4 and cf2 on 11-17. Separately, its
+  `land()` line was missing from rosout, so the report's SERVER COMMANDS list can be
+  incomplete.
+- The VIP-lost abort at 16:38 was the DJI's rigid body dropping out of `/poses` for 2 s,
+  and the watchdog did what it is for.

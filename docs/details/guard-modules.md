@@ -110,7 +110,8 @@ only its own team commanded, deterministic per seed, a short safe match each).
   - **the room:** one constraint per nearby wall edge, plus the floor and the
     ceiling.
 - **The backstop:** a clamp after integration catches a solve that failed, and
-  counts every firing. It has never fired.
+  counts every firing. It has never fired, in simulation or in any hardware match
+  through 2026-11-23.
 
 It knows nothing about strategies or rules, and nothing above it can turn it off.
 
@@ -146,6 +147,18 @@ the VIP for `strike_time`.
 - 1 v 1 and 2 v 2 are standoffs, so there are no mutual kills;
 - a drone outnumbered two to one falls in `down_time`, and three to one twice as fast;
 - an escaped drone is still weakened while its meter drains.
+
+**Contested strikes (`strike_block`, every rule set, default 0 = off).** With
+`strike_block` > 0, a defender within that distance of an attacker contests its
+strike. The strike rate is 0, and with the usual instant drain the meter resets.
+`strike_rates(att_p, vip_p, def_p)` takes the active defenders, either (M, 3) for every
+case or (K, M, 3) per case for a planner's predictions. Leaving `def_p` out gives the
+uncontested rate. The referee passes the active defenders. `coordinated` scores a
+strike spot by how far the nearest *predicted* defender stays outside the block over
+the dwell, so it looks for an uncontested spot. `problems()` refuses a block inside
+`d_cc`, which no defender could ever get close enough to contest. Set it with
+`guard_show -p strike_block:=0.8`, `plan_guard --rparam strike_block=0.8`, or the
+console's number field.
 
 **One definition, two uses.** The **referee** integrates the meters from the
 aircraft positions to decide what happened. **Strategies** get the same rule
@@ -228,7 +241,55 @@ refuses a ring inside the VIP keep-out or a speed above either team cap.
 `plan_guard` flies the finale on its stand-in aircraft and checks it like the
 match (`--no-finale` to skip; `--matrix` never flies it).
 
-## 7b. `guard/watch.py`: the near-miss watch
+## 7b. `guard/formation.py`: the form-up before START
+
+Before START (after the DJI gate, once the DJI is above `vip_airborne_z`, 0.3 m), every
+drone flies through `Match.steer` to a formation round the VIP's *live* position. The
+match is then built from where the drones are at START, not from the floor marks.
+
+- **`formation(cfg, rules, vip, pos, D, A, check, params)`** returns `(goals, turn_deg,
+  why)`:
+  - defenders go to a ring at `r_def` (1.8 m), one of them facing the attack side,
+    which is the bearing from the VIP to the attackers' centroid;
+  - slots are assigned by least travel;
+  - if the layout straight on does not fit the room, it is turned by up to ±90°.
+
+  `check(goals, reach)` is `plan_guard.mark_problems`, so a formation is held to
+  the same rules as a start from the floor marks.
+- **Attackers, `attackers` = `hold` (the default since 2026-11-23) or `follow`.**
+  - `hold`: each attacker's slot is where it hovered when the form-up began, at
+    start height, and stays fixed through every rebuild.
+  - `follow`: the 11-17 layout. Attackers go to an arc at up to `r_att` (4.4 m) on
+    their side, `spacing` apart, and the arc moves with the VIP.
+
+  `params_of()` refuses any other value.
+- **`Follow`** keeps the formation as offsets from the VIP and translates it rigidly
+  every tick. With `hold`, only the defenders' slots move. It rebuilds round the live
+  VIP only when the translated slots fail the checks (for example, when they hit a
+  wall), and holds the last good goals if nothing fits. `rebuilds` counts the
+  rebuilds.
+- **A fair start.** The start-reach rule says no attacker may be within a defender's
+  reach at START. With `follow`, the arc is laid out to pass it. With `hold`, the
+  rule cannot decide whether a formation exists, because the attackers do not move.
+  It decides whether the start is *fair* instead.
+  - `Follow.unfair(vip)` lists the start-reach problems alone.
+  - `guard_show` prints `NOT A FAIR START yet: ...` and `fair start` as that changes.
+  - `plan_guard` prints the same problems as `!!!` warnings (move the VIP with
+    `--vip`), not as refusals.
+- **Parameters:**
+  - `r_def`, `r_att`, `spacing`, `room_margin`;
+  - `speed` (0.4 m/s, slow because the drones lag their setpoints);
+  - `reached` (0.15 m) and `timeout_s` (25 s, after which the drones hold where they
+    are).
+
+  Set them with `guard_show -p form_up_params:=key=value,...` or `plan_guard --uparam
+  key=value`, and the attackers' mode with `-p form_up_attackers:=hold|follow` or
+  `--uparam attackers=follow`. To switch the form-up off, use `form_up:=false` or
+  `--no-form-up`.
+
+Tests: `test/test_guard_formup.py`.
+
+## 7c. `guard/watch.py`: the near-miss watch
 
 It runs on the *measured* aircraft every tick in `guard_show`, gates included:
 - **Mocap glitch:** a pose that jumps more than `mocap_jump_m` in one tick, plus
@@ -258,7 +319,12 @@ them there" from "the aircraft lagged the plan".
     every pairing and rule set, and shows each drone's meters (`d40%` down,
     `s40%` strike);
   - `--marks`: where to stand the drones;
-  - `--list`: the strategies.
+  - `--list`: the strategies;
+  - the form-up (7b above) before every match, the same as the show. Use
+    `--no-form-up` to start from the floor marks, and `--uparam` to change it;
+  - its stand-in aircraft: a pure delay (`--delay`, 0.4 s) and then a first-order
+    lag (`--tau`, 0.2 s), fitted to the PID traces. For the Mellinger plant, use
+    `--delay 0.1 --tau 0.1`.
 - **`guard_show`** (the flight): preflight, arming, takeoff, the lift to start
   height, then the engine on live mocap at 20 Hz. It lands drones as they are tagged
   or strike, and an abort lands everything. Its watchdogs cover:
@@ -266,7 +332,11 @@ them there" from "the aircraft lagged the plan".
   - **each drone:** stale mocap, outside the room, or not following its setpoint
     (the escort's check, shared);
   - **near miss:** two *measured* aircraft too close: a pause, or a landing if
-    much closer (7b above).
+    much closer (7c above).
+
+  Before START it runs the form-up (7b above). The rules options are
+  `strike_block` (contested strikes, section 4) and `rules_params`. A
+  `rules_params` entry for `strike_block` wins over the separate parameter.
 
   It also drives the LEDs:
   - role lights mid-match: white while scoring, magenta for the decoy, dark when
@@ -275,9 +345,13 @@ them there" from "the aircraft lagged the plan".
 
   Each change is sent once, at most every 0.25 s per drone.
 
-  `controller:=mellinger` sets `stabilizer.controller` 2 on the flying drones
-  before arming and back to 1 (PID) after, landing or abort (`set_controller`,
-  in a `finally`). Every tick drains the node's ready callbacks (`drain`, shared
+  `controller` = `mellinger` (the default since 2026-11-24) sets
+  `stabilizer.controller` 2 on the flying drones before arming and back to 1 (PID)
+  after, landing or abort (`set_controller`, in a `finally`). Every match on
+  2026-11-23 flew it, with a lag of 0.08-0.14 s against PID's ~0.56 s
+  (guard-design-notes.md). With `use_sim_time` nothing is switched: the simulator
+  runs Mellinger from `server.yaml`, and restoring PID after would leave it on PID.
+  `controller:=pid` leaves the server's setting alone. Every tick drains the node's ready callbacks (`drain`, shared
   with the escort in `escort_show.py`), so `/poses` is never queued behind the
   drones' own pose and status topics. `trace:=true` (the
   default) writes every tick's measured and commanded position, phase and intent
