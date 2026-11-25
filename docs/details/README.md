@@ -20,6 +20,7 @@ before changing code.
 | [guard-modules.md](guard-modules.md) | Every module, what it may and may not do, and how one tick flows through them |
 | [guard-design-notes.md](guard-design-notes.md) | Why it is built this way: the CBF ported from AirStack, the separation floor, the rules and their measured balance, writing your own strategy |
 | [guard-footage.md](guard-footage.md) | How the simulator clips in the guide are made (`scripts/footage/`), and where the simulator disagrees with the offline checks |
+| [flight-replay-footage.md](flight-replay-footage.md) | Watching a hardware flight again: the console view rebuilt from its flight log, and the hall camera's footage with every drone circled |
 
 **STL game**
 

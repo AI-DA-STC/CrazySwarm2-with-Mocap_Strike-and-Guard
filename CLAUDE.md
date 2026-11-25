@@ -64,7 +64,10 @@ Motive ──NatNet multicast 50 Hz──► motion_capture_tracking ──/pose
 - Flight logs: every console flight (and any run through `scripts/record_flight.sh`) gets
   `~/.ros/flight_logs/<stamp>_<script>/` with output, meta, config, a bag and
   `report.txt` (`ros2 run crazyflie_shows flight_report <folder>`). Read it before
-  guessing what happened in a flight: docs/details/flight-logs.md.
+  guessing what happened in a flight: docs/details/flight-logs.md. To see a guard flight
+  again (console view rebuilt from the log, hall-camera footage with drones circled):
+  `scripts/footage/replay_flight.py` and `camera_overlay.py`,
+  docs/details/flight-replay-footage.md.
 - `console/`: optional web GUI, removable (`rm -rf console/` changes nothing else).
   Drives the `ros2` CLI as subprocesses, never in-process rclpy. Each demo's window is
   `src/crazyswarm2/crazyflie_shows/missions/<demo>.yaml`. Read `console/README.md` first.

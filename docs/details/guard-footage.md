@@ -5,6 +5,10 @@ plus two rule sets) are real simulator matches, seen in the mission console's 3D
 Everything that makes them is in `scripts/footage/`, so they can be made again when a
 strategy changes. This page is how, and why it is built the way it is.
 
+For a **hardware** flight, see [flight-replay-footage.md](flight-replay-footage.md). The
+same rig films its console view, rebuilt from the flight log, and the hall camera's
+footage gets every drone circled.
+
 ## Make them again
 
 ```bash

@@ -1,0 +1,31 @@
+{
+ "camera": "Camera 01: the hall camera (Hikvision, 3840x2160, 20 fps), looking from the -x corner across the flown polygon",
+ "model": "pixel = C0 + S0*q*(1 + k1 r^2 + k2 r^4), q = (P X / w - C0)/S0, P = params[0:12] as 3x4, k1, k2 = params[12:14]; X in the mocap frame (m)",
+ "fitted": "2026-11-25 from flight 20261124_144732_guard_show, D04_20261124144738.mp4: 16 hand-picked points (pads, 1 m hover, parked Starlings) then ~350 LED detections",
+ "residual_px": {
+  "median": 2.59,
+  "p90": 7.7
+ },
+ "valid": "while Camera 01 is not moved or re-zoomed; scripts/footage/camera_overlay.py calibrate refits it",
+ "params": [
+  0.055327386399638655,
+  -0.14303019903256126,
+  -0.030370457547442282,
+  0.8676975069558817,
+  0.004843047962076119,
+  -0.013305297135725338,
+  -0.130377621008403,
+  0.4532779544677234,
+  4.757305275625439e-05,
+  -1.6865707589235738e-05,
+  -2.1304754829402306e-05,
+  0.00044395559513888154,
+  -0.3452367648838294,
+  0.2821416737111877
+ ],
+ "C0": [
+  1920.0,
+  1080.0
+ ],
+ "S0": 1920.0
+}
