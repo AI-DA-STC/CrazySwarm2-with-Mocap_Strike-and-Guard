@@ -16,6 +16,26 @@ on ten Crazyflies. Added 2026-10-13. The plain-language version is
 Nothing in `crazyflie_shows` imports `crazyflie_examples`. The original is
 only ever read as a file, by `plan_stl --against`.
 
+## The algorithm
+
+![How the STL game decides](../diagrams/43-stl-decision-loop.png)
+
+Each step of the diagram, in `stl_game.py` (all in one plane, at `CRUISE_ALTITUDE`):
+
+| Step | What the code does |
+|---|---|
+| 1. Rank | `URGENCY_GOAL_W` 0.6 × the fraction of its path covered + `URGENCY_SPEED_W` 0.4 × its speed over the sprint speed. |
+| 2. Pair | For every defender and active intruder, both are predicted `STL_HORIZON` (20) ticks ahead; the score is `soft_max` (`SOFT_K` 125) of `BLOCK_RADIUS` minus the gap. Cost = -score × (1 + `URGENCY_GAIN` 1.6 × urgency), less `SWITCH_THRESH` for last tick's pair; `hungarian_assign` solves it. |
+| 3. Aim | Roles are fixed once, by rank in `DETECTION_ACCURACY` (`assign_defender_roles`). The aim point is the intruder's position `min(time to reach it, LOOKAHEAD)` ahead, put on its path, moved 45 % toward its goal (`INTERCEPT_BIAS`) and smoothed (`INTERCEPT_SMOOTH` 0.65). Goalkeeper: `GOALKEEPER_WALL_MARGIN` from the goal wall, level with the intruder. Interceptors: ±`PINCER_SPREAD` (0.12 m) sideways. Chaser: `CHASER_BEHIND_OFFSET` (0.08 m) behind. Inside `ARRIVAL_RADIUS`, or 1.1 × `BLOCK_RADIUS` of the intruder, the aim is the intruder itself. |
+| 4. Step | `_defender_stl_gradient`: the gradient of `soft_min` over reach, teammate separation, collision, arena and keep-off-finished-intruders, weighted by `ROLE_WEIGHTS`. Within 1.5 × `BLOCK_RADIUS` of the aim it slows, to no less than half speed; each step is blended with the last (`MOMENTUM_ALPHA` 0.1). |
+
+Intruders follow re-planned waypoints, crawl when a defender is near and sprint when
+the way is clear, and fake a move now and then (`DECEPTION_*`). A defender within
+`BLOCK_RADIUS` freezes an intruder; from tick 50, a frozen intruder is BLOCKED.
+
+The guard re-uses several of these ideas, not the code:
+[guard-theory.md §6](guard-theory.md#6-playing-well-the-stl-games-theory-turned-round).
+
 ## Why the flight can be checked before takeoff
 
 The game never reads mocap. Every setpoint comes from its own model, and its

@@ -12,16 +12,17 @@ maths and the history are in [details/stl-design-notes.md](../details/stl-design
 - **Intruders** start on one side of a 4 m × 4 m square. Each has its own goal on the far
   edge. They plan a path around the defenders, fake a move now and then, slow down when
   a defender is close and sprint when the way is clear.
-- **Defenders** start near the goal line. Each one is matched to an intruder, favouring
-  the intruder closest to scoring. They play different roles: a goalkeeper holds near the
-  line, an interceptor cuts the path, a chaser follows behind.
+- **Defenders** start near the goal line. Each is paired with an intruder, the most
+  urgent first, and plays a fixed role (below).
 - An intruder that reaches its goal is **REACHED** (green light). An intruder a defender
   pins in place is **BLOCKED** (red light) and lands straight away.
 - Everyone flies at 1.0 m height and 0.4 m/s. A game lasts about 10 seconds.
 
-"STL" is *signal temporal logic*: a precise way to write a goal such as "stay within
-20 cm of that intruder at some point in the next second". The defenders steer by
-whichever move improves that score fastest.
+![How the STL game decides](../diagrams/43-stl-decision-loop.png)
+
+"STL" is *signal temporal logic*: a precise way to write rules such as "get within
+20 cm of that intruder in the next second". Each rule gets a score for how well it is
+kept, and each defender steps the way that most improves the worst-kept one.
 
 ## The big difference from the escort: it is planned before take-off
 

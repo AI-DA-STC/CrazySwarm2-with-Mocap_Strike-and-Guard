@@ -25,6 +25,7 @@ NAMES=(
   30-guard-lag 31-guard-flight-day 32-guard-match-sequence 33-guard-safety-layers
   34-guard-rules 35-guard-borrowed 36-guard-one-solve 37-guard-how-close 38-guard-shell
   39-guard-attack-play 40-guard-speed-sweep 41-guard-modules 42-serpent
+  43-stl-decision-loop 44-stl-to-guard
 )
 
 TMP="$(mktemp -d)"

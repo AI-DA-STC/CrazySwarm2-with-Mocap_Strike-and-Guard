@@ -97,11 +97,10 @@ ask for (§3–§5).
 | Safety layer | dispose: one joint projection of all requests onto the safe set | `guard/safety_layer.py` + `cbf.py` |
 | Referee | score: fills and drains every drone's meters from the measured positions | `guard/rules/` |
 
-The engine (`guard/engine.py`) runs them in one fixed order each tick: observe, ask both
-strategies, cap each request at its team's speed and acceleration, **project every request
-at once onto the safe set**, integrate into setpoints, then let the referee judge the
-*aircraft* positions. Retiring drones (downed or struck) become obstacles for everyone else
-until they are down.
+The engine (`guard/engine.py`) runs them in one fixed order each tick (the steps are in
+[guard-modules.md](guard-modules.md#one-tick)). Two points of that order matter here:
+**every request is projected at once onto the safe set**, after the caps and before
+integration; and the referee judges the *aircraft* positions, not the setpoints.
 
 ### 2.2 The five clauses of the contract
 
@@ -273,9 +272,10 @@ the VIP uses the VIP's. The numbers and their evidence are §5.
 The VIP — a hand-flown DJI, or a person — cannot be commanded, so it is a **fixed row** at
 its measured velocity (§3.3): the solver never corrects it, and the Crazyflies absorb the
 whole evasion. AirStack's own treatment of an RC-flown intruder; the guard's contribution
-is routing its most important obstacle through it every tick. Retiring drones (tagged or
-struck, being landed) are fixed rows too, descending at `land_speed` 0.25 m/s — modelled as
-what the high-level commander is flying them down at.
+is routing its most important obstacle through it every tick. A retiring drone (downed or
+struck) first exits as an ordinary commanded row: it brakes, and clears the VIP if it is
+near it, so it still dodges. Once it is handed to the landing commander it becomes a fixed
+row, descending at `land_speed` 0.25 m/s, which is what the commander flies it down at.
 
 ### 4.3 Phantom walls: the room inside the same projection
 
@@ -354,7 +354,7 @@ $d$, so 1 means exactly on it.
 
 * **Mocap glitches are not near misses.** A measured jump further than 0.30 m in one tick
   (6 m/s at 20 Hz — faster than any Crazyflie) is a swapped or ghost rigid body; the drone
-  flies on its setpoint for that tick and the glitch is counted.
+  flies on its setpoint for that tick and the next, and the glitch is counted.
 * **Soft near miss → pause.** Two ticks in a row inside 0.7 of the floor (0.25 m across,
   0.43 m vertically) freezes the match, and every drone holds *through the safety layer*, so
   the aircraft settle back onto setpoints the CBF already keeps $d_{\text{cc}}$ apart. Play
@@ -389,10 +389,13 @@ earliest warning there is.
 
 ## 6. Playing well: the STL game's theory, turned round
 
-The strategy ideas are borrowed from the STL game — a colleague's algorithm; `stl_game.py`
-is a port and is not edited. What the guard adds is the third dimension, teams instead of
-one attacker, and the rules-aware scoring below. Nothing here affects safety: these are
-requests, and §2's contract holds regardless of how good or bad they are.
+![From the STL game to the guard](../diagrams/44-stl-to-guard.png)
+
+The default strategies re-use the STL game's ideas, not its code: `stl_game.py` is a port
+of a colleague's algorithm and is never edited, and how it decides is in
+[stl-design-notes.md](stl-design-notes.md#the-algorithm). The guard adds height, a team on
+each side, a moving VIP and scoring that reads the rules. Nothing here affects safety: these
+are requests, and §2's contract holds however good or bad they are.
 
 ### 6.1 Robustness: a smooth minimum over a rollout
 
@@ -463,10 +466,14 @@ The default defence is the same theory played the other way (`policies/defense_s
   the line from the VIP through that point, at a radius held between 1.7 m and 2.6 m.
   Meeting on the 3D line is what lets it meet an over-the-top or floor-level attack at its
   own altitude — the guard's addition to the borrowed idea.
-* **Pincers** when defenders outnumber threats: a second defender closes 60° round from the
-  blocker's side, so both are in reach — under a majority rule, one defender alone downs
-  nobody (§7).
-* **Idle posts** spread the rest round the VIP, alternating 0.6 m above and below it.
+* **Pincers:** every defender left over after one blocker per attacker closes on an
+  attacker, the most urgent first, 60° round from the blocker's side, so both are in
+  reach — under a majority rule, one defender alone downs nobody (§7).
+* **Rules-aware spots.** A block or pincer spot the rules would punish (outside home ground
+  under `zone`, next to two attackers under `pressure`) is pulled in toward the VIP. A
+  defender whose own down meter passes `bail` (0.35) falls back to the shell instead.
+* **Posts**, only while no attacker is in play: every defender to a ring round the VIP,
+  alternating 0.6 m above and below it.
 
 ### 6.6 The team play: lanes, commit, decoy, regroup
 
@@ -478,8 +485,10 @@ then **COMMIT** together, so the defence has to split; with probability 0.5 one 
 goes first as a **decoy**, 1.5 s ahead of the rest. An attacker that gets no closer for
 2.5 s backs off; when the whole team has, the lanes **ROTATE** by a random 30–75° and the
 play restarts from new sides. Under the plan sit the STL intruder's other two layers: a
-feint (show the other side first, with a cooldown), and an evade reflex judged by the rules
-— leave when the rule set would start filling the drone's meter here, or one step on.
+feint (show the other side first, with a cooldown), and an evade reflex judged by the
+rules. While staging, it leaves when the rule set would start filling its down meter here,
+or one step nearer the closest defender. While striking, it breaks off only once its down
+meter passes `evade_share` and it is outside the strike radius.
 
 The lanes exist because of a safety-layer fact: **a defender sitting on the line between the
 VIP and an attacker is a wall** — the CBF will not let anything through it (§3.1's
@@ -535,7 +544,7 @@ All of them share the strike rule: hold within `strike_radius` of the VIP for `s
 | `tag` | attackers | at $1/T$ while any defender is within $\rho$ = 1.15 m; resets on leaving — **the STL game's block**, and this show's first rule |
 | `timer` | nobody | never: the defence can only deny |
 | `pressure` | both teams | at $(\text{opponents in reach} - \text{teammates in reach} - 1)/T$, never below 0; drains at 0.5 /s |
-| `zone` | both teams | like `tag`, but only on the other team's ground |
+| `zone` | both teams | like `tag`, but only on the other team's ground: attackers within `home` of the VIP, defenders outside it |
 | `zone_pressure` | both teams | like `pressure`, on the other team's ground |
 
 `pressure` is the **graded local majority**, counted from the victim's point of view within
@@ -585,12 +594,12 @@ can be run into (design notes, 2026-11-19). The Mellinger plant is $t_d$ = $\tau
 Hardware measured it on 2026-11-06: **every drone, every run, followed its commanded path to
 within 3–5 cm, but 0.54–0.60 s late** — at 1 m/s, 0.5–0.7 m behind. The cause is the
 firmware's PID position controller, which overwrites the setpoint velocity, throwing away
-the feed-forward sent with it. Both $\mathrm{TM}$ = 0.10 m (§5.1) and $\tau$ = 0.25 s are
-optimistic against that number.
+the feed-forward sent with it. Both $\mathrm{TM}$ = 0.10 m (§5.1) and the lag-only stand-in
+of the time ($\tau$ = 0.25 s) were optimistic against that number.
 
 The honest check is a sweep, and the sweep is why the speed caps follow:
 
-* `plan_guard --tau 0.6`, all 128 pairing/rule/fleet cells: **89 of 128 safe at 1 m/s**;
+* `plan_guard --tau 0.6` (2026-11-06), all 128 pairing/rule/fleet cells: **89 of 128 safe at 1 m/s**;
 * at **0.6 m/s, 113 of 128**;
 * widening $d_{\text{cc}}$ to 0.60 m instead moved the failures into solver emergencies
   (111 of 128) — a wider keep-out makes the constraints themselves conflict, so the gap
@@ -600,7 +609,7 @@ The honest check is a sweep, and the sweep is why the speed caps follow:
 
 Hence the advice until 2026-11-23: fly 0.6 m/s until a different onboard controller
 (Mellinger, full-state tracking) is tried, and then re-measure the lag rather than
-assume it. It was re-measured on 2026-11-23. With Mellinger, every completed match at
+assume it. It was re-measured on 2026-11-23. With Mellinger, all four completed matches at
 1 m/s lagged **0.08–0.14 s**, with the closest measured pair at 0.36–0.40 m and no near
 miss. The lag term is then about a fifth of what it was, and 1 m/s is the advice on
 Mellinger. The first hardware matches agree from the other side: in both completed runs
@@ -618,20 +627,19 @@ won the other, with three downs in 12.4 s.
   edit to the solver is a failing test.
 * **The contract has its own tests.** `test/test_guard.py` checks the boundary with a spy
   (an opponent's command never appears in a view), a vandal (mutating a private view changes
-  nothing outside) and a dice test (separate random streams). 46 tests across `test_guard.py`
-  and `test_cbf.py`.
+  nothing outside) and a dice test (separate random streams).
 * **`plan_guard`'s safety verdict covers every seed.** It fails the run if two airborne
   aircraft get inside the hard floor ellipsoid, or one inside the VIP's keep-out; if a drone
   leaves the room or the band; on a solver emergency; or if the backstop fires.
-  `--matrix --rules all` runs every defence against every attack under every rule set —
-  128 cells across fleet sizes including the real 7-drone roster.
-* **Measured offline, at the shipped defaults:** closest aircraft pair 0.45 m, never closer
-  than 1.29× the floor ellipsoid; zero solver emergencies, zero backstop firings. In the
-  earlier all-rules matrix the closest pair was 0.40 m against the 0.35 m floor.
+  `--matrix --rules all` runs every defence against every attack under every rule set:
+  4 × 4 strategies × 5 rule sets = 80 cells for one fleet size.
+* **Measured offline** (2026-11-19, the PID plant, 1 m/s, 12 seeds): 1 of 80 cells unsafe,
+  closest aircraft pair 0.34 m; with a DJI drifting at 0.2 m/s, 5 of 80 (§10). Re-run it
+  for today's numbers.
 * **Fast enough:** an engine tick takes 3 ms mean and 17 ms worst for 4 v 3, 27 ms worst for
   6 v 6, against the 50 ms budget at 20 Hz. The spikes are the attackers' replans.
-* **Honest limits.** The stand-in aircraft is a first-order lag, assumed (§8 measures it:
-  the truth is worse). The simulator publishes no mocap, so every check that reads real
+* **Honest limits.** The stand-in aircraft is a delay plus a lag fitted to the PID traces
+  (§8), not a model of the airframe. The simulator publishes no mocap, so every check that reads real
   poses — containment, near-miss, placement — is first exercised on hardware. Upstream's
   MuJoCo validation covers the solver on its airframe, not these constraints: the
   ellipsoidal and wall builders of §4 are checked by this repo's tests, sweeps and hardware
@@ -653,9 +661,4 @@ Only what the design notes actually leave open.
 | `zone_pressure` favours the attack | Neither default strategy has home-ground tactics yet | strategy work, not a rule fix |
 | The `/poses` stream freezes 0.2–0.55 s every 10–40 s | Seen on hardware and in the server; under the 1.0 s watchdog, but the cause is not known (network, or load on the machine) | the traces above |
 
-**Borrowed, in one place:** AirStack's `svg_ground_control/cbf_filter.py`, ported verbatim
-and hash-checked (§3); the STL game's playing theory — the smooth minimum, the predictive
-intercept, the robustness scoring, the sticky assignment, the tag rule — ideas, not code
-(§6, §7); the escort's measured downwash threshold and its room and containment helpers
-(§5). The constraint set of §4 and the contract of §2 are this project's, and they are what
-make the borrowed pieces one system.
+What is borrowed and what is this project's is summarised at the top of this page.

@@ -6,8 +6,8 @@ sticky so nobody dithers between two; a PREDICTIVE intercept on the line from
 the VIP to where the attacker is going; and a pincer, a second defender
 closing from the side, whenever defenders outnumber threats. What it adds is
 height: the intercept is on the 3D line, so an attacker coming over the top
-or along the floor is met at its own altitude, and idle defenders hold posts
-above and below the VIP as well as around it.
+or along the floor is met at its own altitude. While no attacker is in play,
+the defenders hold posts above and below the VIP as well as around it.
 """
 
 import numpy as np

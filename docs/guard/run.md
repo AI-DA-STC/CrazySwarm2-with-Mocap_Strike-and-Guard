@@ -61,14 +61,13 @@ out of its way during every wait.
 Or use the web console (`./console/run.sh`), **Missions → Guard (N v M)**: every
 choice is a field, the waits are buttons, and the 3D view shows the match.
 
-For the first sessions on real drones, follow the ladder in
-[../details/guard-design-notes.md](../details/guard-design-notes.md) ("Before the
-first hardware flight"): start 1 v 1, slow and wide apart.
+For a new set-up on real drones, start small: 1 v 1, slow and wide apart, then add
+drones and speed one step at a time.
 
 **Speed and the onboard controller.** Both teams fly at 1 m/s by default, and the
 show switches the drones to the **Mellinger** controller for the match (and back
 afterwards). With Mellinger a drone runs about a tenth of a second behind its
-commands. Every match on 2026-11-23 flew it at 1 m/s, and none had a near miss. The
+commands; four matches flew it at 1 m/s on 2026-11-23, with no near miss. The
 drones' standard controller (`-p controller:=pid`, or **pid** in the console's
 controller field) runs about half a second behind, so at 1 m/s two drones can pass
 closer than the minimum distance. If you fly it, set both teams to 0.6 m/s
@@ -115,38 +114,19 @@ hovering**. With the DJI as the VIP, the form-up waits until the DJI is in the a
 and then the defenders' ring **follows the DJI** wherever the pilot takes it, until
 START. The match starts from where they are at START, not from the floor marks.
 
-If an attacker is still too close to a defender, the show prints `NOT A FAIR START
-yet`: an attacker that starts within a defender's reach is taken out at once, or
-takes the defender out. The pilot flies the DJI further from the attackers until the
-show prints `fair start`, and then presses START.
+While an attacker is within half a metre of a defender's reach, the show prints
+`NOT A FAIR START yet`, because the match would open with a take-out. The pilot flies
+the DJI further from the attackers until the show prints `fair start`, and then the
+operator presses START. (Under `timer` nobody can be taken out, so there is no check.)
 
 To make the attackers follow the VIP as well, onto an arc on their own side, add
 `-p form_up_attackers:=follow` (the console's **Attackers during the form-up**
 field). Turn the whole form-up off with `-p form_up:=false` (and `--no-form-up` for
 the planner).
 
-**On the drones.** Defenders are blue and attackers red.
-- A drone turns **white** while it is scoring. For a defender, that means taking an
-  attacker out; for an attacker, it means sitting inside the strike zone.
-- An attacker sent in first as a **decoy** turns magenta.
-- A drone that is **taken out** goes dark, stops, and lands about a second later. If it
-  was close to the DJI, it first moves out away from the DJI and lands there. Depending
-  on the rules, that can happen to either side.
-
-The attack wins on a strike. The defence wins by taking out every attacker, or by
-holding until the clock runs out.
-
-**At the end (the finale).** Every move in the finale still goes through the safety
-layer.
-- **The losers** go dark, sink low, fly home to their marks and land.
-- **The winners** flash green and gather round the VIP:
-  - *Defence wins*: a slow honour guard with a wave running round it.
-  - *Attack wins*: a tight ring that squeezes in and out round the VIP. The attacker
-    that struck stays up for this. If the DJI moves, the ring follows it: the VIP is
-    captured.
-- Then the winners fly home, hold over their marks, and land as usual.
-
-Turn the finale off with `-p finale:=false`.
+**The match, the lights and the finale** are explained in
+[how-it-works.md](how-it-works.md#what-the-lights-mean). Every move in the finale still
+goes through the safety layer; turn it off with `-p finale:=false`.
 
 **In RViz or the console's 3D view**, the map shows what each drone means to do:
 
@@ -165,14 +145,13 @@ Each label shows how close the drone is to being taken out (`d40%`), and an
 attacker's how close it is to striking (`s40%`). The VIP turns green (secure) or
 red (compromised) at the end.
 
-**Near misses.** If two drones come too close, the match **pauses**. Every drone
-holds until they are apart again, then play resumes. If they come much closer, or
-the pause does not clear in a few seconds, everything lands. After each flight the
-show prints any near misses and the closest pair, and says where the run's trace
-was saved.
+**Near misses** pause the match, or land everything
+([how-it-works.md](how-it-works.md#layers-of-safety)). After each flight the show
+prints any near misses and the closest pair, and says where the run's trace was saved.
 
 Ctrl-C (or the console's Abort) lands everything where it is.
 
-How it is put together: [../details/guard-modules.md](../details/guard-modules.md).
-Why, what was measured, and how to write your own strategy or rule set:
+How it is put together, and how to write your own strategy or rule set:
+[../details/guard-modules.md](../details/guard-modules.md). Why it is built this way:
+[../details/guard-theory.md](../details/guard-theory.md). What was measured:
 [../details/guard-design-notes.md](../details/guard-design-notes.md).

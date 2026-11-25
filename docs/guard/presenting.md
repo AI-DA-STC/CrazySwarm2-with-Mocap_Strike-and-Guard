@@ -35,6 +35,14 @@ crashing, whatever the plans ask for.**
 **"Is it pre-programmed?"** No. The strategies decide from where everyone is, 20 times a
 second, and the same start gives a different match each time.
 
+**"Is it AI?"** No machine learning. Each strategy is a hand-written algorithm that
+decides from where every drone is and how it is moving.
+
+**"Where do the strategies come from?"** The default defence borrows its ideas from a
+colleague's interception algorithm, the [STL game](../stl/how-it-works.md): rank the
+threats, pair each defender with one, and meet it ahead of where it is going. The guard
+adds height, a moving VIP and a safety layer underneath.
+
 **"Who wins?"** It depends on the pairing and the rules. Some strategies beat others
 nearly every time; the even pairings are the ones worth watching.
 

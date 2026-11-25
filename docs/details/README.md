@@ -18,7 +18,7 @@ before changing code.
 |---|---|
 | [guard-theory.md](guard-theory.md) | The maths and the reason behind the design: the safety contract, the CBF filter, the strategies, the rules |
 | [guard-modules.md](guard-modules.md) | Every module, what it may and may not do, and how one tick flows through them |
-| [guard-design-notes.md](guard-design-notes.md) | Why it is built this way: the CBF ported from AirStack, the separation floor, the rules and their measured balance, writing your own strategy |
+| [guard-design-notes.md](guard-design-notes.md) | The dated log: what was decided, measured and learned, match by match |
 | [guard-footage.md](guard-footage.md) | How the simulator clips in the guide are made (`scripts/footage/`), and where the simulator disagrees with the offline checks |
 | [flight-replay-footage.md](flight-replay-footage.md) | Watching a hardware flight again: the console view rebuilt from its flight log, and the hall camera's footage with every drone circled |
 
@@ -26,7 +26,7 @@ before changing code.
 
 | File | What it covers |
 |---|---|
-| [stl-design-notes.md](stl-design-notes.md) | How the colleague's game is ported and checked, what was measured, and how to bring in a new version |
+| [stl-design-notes.md](stl-design-notes.md) | How the colleague's algorithm decides, how it is ported and checked, what was measured, and how to bring in a new version |
 
 **The rig, shared by every demo and show**
 

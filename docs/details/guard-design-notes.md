@@ -1,129 +1,37 @@
 # Guard: design notes
 
-N defenders against M attackers around a VIP, with the strategies plugged in by
-name. It was built 2026-11-03 for the big arena as the successor *experiment* to the
-escort. The escort stays as it is: it is the demo flown for guests. The beginner
-guide is [../guard/run.md](../guard/run.md); every module is described in
-[guard-modules.md](guard-modules.md).
+The dated log: what was decided, measured and learned, oldest first. The current design
+is in [guard-theory.md](guard-theory.md) (why) and [guard-modules.md](guard-modules.md)
+(the code); the beginner guide is [../guard/run.md](../guard/run.md). Numbers are as
+measured on the day: run `plan_guard` for current ones.
 
-**Status: offline and simulator only. Not flown on hardware.**
+Built 2026-11-03 for the big arena, as the successor experiment to the escort (which
+stays the demo flown for guests). It has flown on hardware since early November 2026.
 
-## The four layers
+## First decisions (2026-11-03 to 11-17)
 
-| Layer | File | What it decides |
-|---|---|---|
-| Strategies | `crazyflie_shows/guard/policies/` | what each team *wants*: a velocity per drone |
-| Safety layer | `crazyflie_shows/guard/safety_layer.py` + `crazyflie_shows/cbf.py` | what the drones are *allowed* to do |
-| Referee | `crazyflie_shows/guard/rules.py` | strikes, tags, the clock, who won |
-| Engine | `crazyflie_shows/guard/engine.py` | one tick of all three, in a fixed order |
+- **The rules became meters (11-03), and changed nothing they were not meant to.**
+  Before the refactor, 32 matches with tagging and 16 without were recorded per seed;
+  afterwards `tag` and `timer` gave the same winner, match time, strikes, downs and
+  closest pair on all 48.
+- **The team boundary is enforced (11-03).** Before, an opponent's velocity was its
+  command, and both teams shared one random stream. The spy, vandal and dice tests in
+  `test_guard.py` pin the fix.
+- **A held drone still dodges.** The first gate only re-sent the last setpoint, so a DJI
+  climbing past the drones would have had nothing getting out of its way
+  (`test_a_held_drone_still_dodges_the_dji`).
+- **Two lessons from building `coordinated`.** Gating the attempt on a provably open
+  lane meant it never went at all, so robustness now chooses the line instead
+  ([theory §6.3](guard-theory.md#63-robustness-chooses-the-line-it-does-not-gate-the-attempt)).
+  Fleeing on the first approach of a defender made striking impossible.
+- **"Not following" is judged against the last 1.0 s of setpoints (11-17).** Against the
+  current setpoint, the ~0.6 s lag read as 0.6 m off at 1 m/s and aborted the 17-11
+  matches seconds after START: 11 false aborts in 7 of the 14 hardware traces, none with
+  the window, and a worst windowed error of 0.59 m for a single tick.
 
-`plan_guard` drives the engine against simulated aircraft; `guard_show` drives it on
-drones. They run the same code, so what passes offline is what flies.
+### The first rules matrix (2026-11-03)
 
-One tick: build the View (positions from mocap where fresh, else setpoints); ask both
-strategies; cap each request at its team speed and the acceleration limit; **project
-every request at once onto the safe set**; integrate into setpoints; the referee
-judges the aircraft positions; tagged and striking attackers start landing.
-
-## The safety layer (the CBF, from AirStack)
-
-`crazyflie_shows/cbf.py` is AirStack's `svg_ground_control/cbf_filter.py`, copied
-**byte for byte** between BEGIN/END markers. `test/test_cbf.py` holds AirStack's
-own tests plus one that re-hashes the block against the upstream sha256. It is the
-bridge to flying Crazyflies under AirStack later, so it is never edited here: change
-it upstream and re-copy.
-
-What is ours is the constraint set handed to its solver
-(`solve_safe_commands`), in its own `PairwiseConstraints` shape:
-
-- **Aircraft pairs: a velocity CBF on an ellipsoid.** It is taller than it is wide
-  (`cc_z_ratio` 1.5), because a Crazyflie in another's downwash loses thrust.
-  `h = (dx²+dy²)/a² + dz²/c² − 1`, and `ḣ + αh ≥ 0` stays linear in the velocities.
-  AirStack's sphere is the case `a = c`.
-- **The VIP is a fixed row at its measured velocity,** so only the Crazyflies dodge.
-  This is AirStack's treatment of an RC-flown intruder. Its ellipsoid is larger
-  (`d_vip`, `vip_z_ratio`).
-- **Landing drones are fixed rows too,** descending at `land_speed`.
-- **Walls, floor and ceiling are constraints against phantom fixed rows** at zero
-  velocity. The solver only knows pairs, and a pair with a motionless phantom is a
-  one-drone half-space. There is **one row per polygon edge within reach**, using the
-  distance to the edge *segment*. A single nearest-edge row let a drone sliding
-  along one wall pass straight through the next one at a convex corner (found by
-  `test_walls_hold_a_drone_inside_the_room`). Using segments keeps the step's inward
-  corner from trimming the room. The rows hold `wall_margin` (5 cm) inside, so
-  integrating at 20 Hz cannot creep past the edge.
-- **The backstop clamp after integration never fires** in any run so far. Every
-  firing is counted, and `plan_guard` treats one as a safety failure.
-
-**Separation is the guard's own, relaxed 2026-11-03.** It does not use
-`arena.yaml`'s 0.80 m floor, which every other show keeps. The STL game is designed
-to 0.20 m between drones at one cruise height (stl-design-notes.md: "closest
-approach 0.18-0.20 m"), and side by side at one height is the regime that is fine.
-One drone over another is a different hazard: downwash. So the floor is an
-ellipsoid:
-- `min_separation` 0.35 m across;
-- `min_separation_z` 0.62 m vertically (`escort.DOWNWASH_DZ`, the measured downwash
-  threshold).
-
-`config.problems` refuses anything under 0.20 m across: nothing here has evidence
-for closer.
-
-**The CBF holds the setpoints apart, not the aircraft.** It runs on the commanded
-reference, which exists in the simulator as well as on hardware. The aircraft trail
-it, so the CBF's keep-out is the floor plus `TRACKING_MARGIN`: `d_cc` 0.45 m across,
-and `cc_z_ratio` 2.2 makes it about 1 m tall. Two checks watch the aircraft
-themselves:
-- `guard_show`'s near-miss watchdog lands everything if two measured drones come
-  inside `near_miss_ratio` (0.7) of the floor ellipsoid: 0.25 m across, 0.43 m
-  vertically.
-- The escort's per-drone `contain_check` handles staleness, leaving the room, and
-  not following. For the guard, "not following" is measured against the nearest
-  setpoint of the last `track_lag_s` (1.0 s), not the current one: the aircraft
-  trail their setpoints by ~0.6 s, and against the current setpoint every 1 m/s
-  stretch read as 0.6 m off and aborted the 17-11 matches seconds after START
-  (11 false aborts in 7 of the 14 hardware traces, 0 with the window; worst windowed
-  error in any trace 0.59 m for a single tick). The collision checks are untouched.
-
-This is a first-order (velocity) CBF. AirStack's docstring describes the
-acceleration-level upgrade (an HOCBF) as a builder swap with the same solver. It
-would remove the dependence on tracking lag, and is the obvious next step before
-flying faster.
-
-## Rules
-
-The rules are a module of their own (`guard/rules/`), with every rule set written as
-meters. [guard-modules.md](guard-modules.md) describes the five built-in sets and how
-to write one. They were refactored from the first fixed referee on 2026-11-03.
-
-**The refactor changed nothing it was not meant to.** Before touching the rules I
-recorded per-seed results under both old modes: 32 matches with tagging and 16
-without. Afterwards, `tag` and `timer` gave the same results on all 48: winner,
-match time, strikes, downs and closest pair. The strategy upgrades below came after
-that check.
-
-**One subtlety a test now pins:** a meter is a sum of 20 Hz ticks.
-`22 × 0.05/1.1` comes out a hair under 1.0, so "full" is `≥ 1 − 1e-9`. Without that,
-a down lands one tick late against the old seconds-based clock.
-
-**What the strategies do with the rules** (all through the rule set's own rate
-functions, so it works under any rule set):
-
-- **`coordinated` (attack):**
-  - it predicts its *own* down meter along each candidate path, from its current
-    meter;
-  - it evades when the rules would start filling its meter here or one step on;
-  - while striking, it breaks off on its public meter;
-  - where defenders can be downed, it **gangs up**: when the pack could down a
-    defender without filling its own meters, the attackers converge on that defender.
-- **`shell` (defence):**
-  - pincers now close round the attacker itself, so two defenders count under a
-    majority rule;
-  - a post the rules would punish (outside home ground, or next to two attackers) is
-    pulled in toward the VIP;
-  - a defender whose own meter passes `bail` falls back to the shell.
-
-**Measured 2026-11-03.** `plan_guard --matrix --rules all`, 4 v 3, 12 seeds,
-relaxed 0.45 m keep-out. Each entry is defence wins out of 12, with the number of
+`plan_guard --matrix --rules all`, 4 v 3, 12 seeds, relaxed 0.45 m keep-out. Each entry is defence wins out of 12, with the number of
 defenders downed across all 12 matches in brackets:
 
 | Rule set | `shell` v `coordinated` | `shell` v `direct` | `ring` v `coordinated` | `ring` v `direct` |
@@ -160,113 +68,6 @@ defenders downed across all 12 matches in brackets:
 
 Run `plan_guard --matrix --rules all` for the current numbers. Do not copy them
 from here.
-
-## What a strategy may know
-
-The platform is pointless if one team can read the other's intent, so the engine
-enforces the boundary (engine.py, "What a strategy may know"):
-
-- **Opponents are observed, never asked.** You get their mocap position (the
-  setpoint in the simulator) and a velocity *estimated* from it. Their commanded
-  velocity, their strategy's decision, never appears. You see your own team's
-  commands.
-- **Each team gets a private copy of everything, every tick:** the View, the
-  agents, the config and the arena. Changing them changes nothing outside.
-- **Each team has its own random stream.**
-- **Both decide on the same tick's observations.**
-
-`test_guard.py` checks this with a spy, a vandal and a dice test. Before this was
-enforced, opponents' velocities were their commands and both teams shared one
-random stream.
-
-## Strategies
-
-A strategy is a class with `team`, `name`, `DEFAULTS` and `act(view)`.
-`act(view)` returns a velocity request per active drone of its own team. The engine
-ignores requests for the other team's drones (`test_a_strategy_cannot_steer_the_other_team`).
-A strategy can be naive or buggy and still not crash anything, because the safety
-layer gets the last word. That is the point of the split.
-
-To plug one in without editing the package, put it in any importable module and
-pass `-p policy_module:=my_lab.strategies` (show) or `--policy-module` (planner).
-The template is in the docstring of `guard/policies/__init__.py`.
-
-Built in:
-
-- **`shell` (defence, default).** Ideas from the STL game; its code is untouched.
-  - An urgency-weighted assignment of defenders to threats, kept sticky.
-  - A *predictive* intercept on the 3D line from the VIP to where the attacker is
-    going. It meets an over-the-top or floor-level attack at its own height.
-  - Pincers when defenders outnumber threats.
-  - Idle posts above, below and around the VIP.
-- **`ring` (defence, baseline).** The escort's idea: a flat ring that turns to face
-  the nearest threat.
-- **`coordinated` (attack, default).** A team play: stage on lanes, commit together
-  or behind a decoy, regroup onto rotated lanes.
-  - Lanes are spread over 240°, at different heights. In the default *overload*
-    formation, two attackers converge 60° apart on one side, because a lone
-    defender beats a lone attacker.
-  - Each attacker replans every 0.4 s over 3D candidate goals, rolled out against a
-    prediction of the defenders marking it.
-  - Candidates are scored by STL-style robustness: a smooth minimum (the STL game's
-    `soft_min`) of the room and band margins, and a *temporal* tag margin. That is
-    how long it would spend in tag range, against the rule's `tag_time`.
-  - The score adds progress toward the VIP, the angle to the nearest defender, and
-    the pull of its own lane.
-  - It feints, and evades according to its own tag clock, kept the way the referee
-    keeps it.
-- **`direct` (attack, baseline).** Straight at the VIP, all at once.
-
-Two lessons from building `coordinated`:
-- **Gating the attempt on a provably open lane meant it never went at all.**
-  Robustness now *chooses* the line; it does not *gate* the attempt.
-- **Fleeing on the first approach of a defender made striking impossible.**
-
-## Verification
-
-- `test/test_guard.py` and `test/test_cbf.py`: 46 tests. Run them with
-  `PYTHONPATH=src/crazyswarm2/crazyflie_shows python3 -m pytest -q src/crazyswarm2/crazyflie_shows/test`.
-- **`plan_guard`'s safety verdict covers every seed.** It fails if any of these
-  happen:
-  - two airborne aircraft get inside the hard floor ellipsoid, or one gets inside
-    the VIP's keep-out;
-  - a drone goes outside the room or the band;
-  - a solver emergency, or the backstop fires.
-- **Simulated aircraft:** a first-order lag (τ = 0.25 s) behind the setpoint. It is
-  a stand-in, not a measured model.
-- **Measured:** closest aircraft pair 0.45 m at the defaults, and never closer than
-  1.29× the floor ellipsoid. Zero emergencies, zero backstop firings.
-- **Speed:** an engine tick takes 3 ms mean and 17 ms at worst for 4 v 3, and 27 ms
-  at worst for 6 v 6, against the 50 ms budget at 20 Hz. The spikes are the
-  attackers' replans.
-
-## Gates and pauses
-
-With `paced:=true` the show waits for Enter (or the console's Continue) at:
-1. **ARM and take off.**
-2. **PILOT: take off the DJI** (`vip_mode:=mocap` only). The DJI goes up *into* a
-   volume whose drones are already dodging it: first in.
-3. **START the match.**
-4. **At the end:** with a DJI, **PILOT: land the DJI**, before the drones come down
-   (last out); otherwise **LAND the drones?**
-
-A match has no legs, so there are no gates inside it, unlike the escort's per-leg
-Continue.
-
-**While a gate waits, or the match pauses** (a lost VIP pose, a drone on hold), the
-engine's `hold()` runs:
-- every drone holds where it is **through the safety layer**, so it still dodges
-  the DJI and keeps its spacing;
-- every watchdog keeps running;
-- the strategies are not asked and the match clock stops.
-
-The first version only re-sent the last setpoint during a gate. A DJI climbing past
-the drones would then have had nothing getting out of its way
-(`test_a_held_drone_still_dodges_the_dji`).
-
-The mission console's window is `missions/guard.yaml`: every choice above, the gates
-as buttons, indicators for phase, rules, result, last down or strike and safety, a
-VIP keyboard for `vip_mode:=manual`, and the 3D view with the show's markers.
 
 ## Making the match readable (2026-11-05)
 

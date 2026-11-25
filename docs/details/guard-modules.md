@@ -1,10 +1,9 @@
 # Guard: the modules
 
 How the guard show is put together: what each module does, what it may and may not
-do, and how one tick flows through them. For why things are the way they are (the
-measurements, the balance, the lessons), read
-[guard-design-notes.md](guard-design-notes.md). To run it, read
-[../guard/run.md](../guard/run.md).
+do, and how one tick flows through them. Why it is built this way:
+[guard-theory.md](guard-theory.md). What was measured: [guard-design-notes.md](guard-design-notes.md).
+To run it: [../guard/run.md](../guard/run.md).
 
 All the code is under `src/crazyswarm2/crazyflie_shows/crazyflie_shows/`.
 
@@ -29,11 +28,9 @@ Every 50 ms (20 Hz), in this order:
    drones in `plan_guard`.
 7. **Referee.** It fills and drains every drone's meters from the *aircraft*
    positions, using the rule set in play, and declares downs, strikes and the result.
-8. **Retire.** Tagged and striking drones are handed to the landing commander and
-   become obstacles for everyone else until they are down.
-
-   Under rule sets that can down defenders, downed defenders are landed the same
-   way.
+8. **Retire.** A downed or striking drone, of either team, first *exits*: it brakes
+   and, if it is near the VIP, moves clear of it, still through the safety layer. Then
+   it is handed to the landing commander and is a descending obstacle until it is down.
 
 ## 1. `guard/world.py`: what a strategy may know
 
@@ -84,13 +81,13 @@ Built in:
 
 | Name | Team | What it does |
 |---|---|---|
-| `shell` | defence (default) | Urgency-weighted 3D intercepts, pincers when outnumbering, idle posts above, below and around the VIP |
-| `zone` | defence | Each defender owns a sector (and height layer) of the VIP's sky that turns toward the attack; engages only inside it, helps a neighbour only where the rules say a 2 v 1 downs the attacker |
+| `shell` | defence (default) | Urgency-weighted 3D intercepts; every spare defender a pincer. Posts round the VIP, alternating above and below, only while no attacker is in play |
+| `zone` | defence | Each defender owns a sector of the VIP's sky that turns toward the attack (idle posts alternate above and below); engages only inside it, at the attacker's height, and helps a neighbour only where the rules say a 2 v 1 downs the attacker |
 | `hunter` | defence | A pair flanks one attacker out at range (only a target the rules say two hunters down, from spots where neither is outnumbered); the rest guard close. Everyone guards under `timer` |
 | `ring` | defence (baseline) | The escort's idea: a flat ring that turns to face the nearest threat |
 | `coordinated` | attack (default) | A team play (stage, commit together or behind a decoy, regroup), with each attacker planning 3D options scored by STL-style robustness, plus feints and evasion |
 | `flood` | attack | Spread to evenly spaced bearings, then all charge at once with a sideways weave; regroup from the gaps when all stall |
-| `wolfpack` | attack | Gang 2 v 1 on the loneliest defender first (never where a wolf is outnumbered), strike from spread lanes once the defence is halved; straight to the strike where defenders cannot be downed |
+| `wolfpack` | attack | The whole pack closes on the loneliest defender (never where a wolf is outnumbered); strikes from spread lanes once the defence is halved, after `hunt_timeout_s` (12 s), or when nobody is worth hunting; straight to the strike where defenders cannot be downed |
 | `direct` | attack (baseline) | Straight at the VIP, all at once |
 
 Every built-in sets `labels`, `intents` and (where it has a team phase) `plan`.
@@ -120,37 +117,21 @@ It knows nothing about strategies or rules, and nothing above it can turn it off
 Rule sets plug in by name like strategies (`-p rules:=...`, `--rules`), and
 `plan_guard --list` names them.
 
-**Everything is a meter.** Each drone has a *down* meter, and each attacker a
-*strike* meter, running from 0 to 1. A full meter is an event: the drone is downed
-and lands, or the attacker strikes, scores and lands. A rule set says only three
-things:
-- **how fast** each meter fills given where everybody is (`down_rates`,
-  `strike_rates`);
-- **how fast it drains** when nothing fills it (`drain`): instantly for a plain
-  clock, slowly for a counter;
-- **who has won** (`result`): the attack on `strikes_to_win` strikes or when no
-  defender is left; the defence when no attacker is left or the clock
-  (`duration`) runs out.
-
-Built in. An attacker strikes in all of them by holding inside `strike_radius` of
-the VIP for `strike_time`.
-
-| Name | Who can be downed | How the down meter fills |
-|---|---|---|
-| `tag` (default) | attackers | while any defender is in reach; resets the moment none is |
-| `timer` | nobody | never: the defence can only deny |
-| `pressure` | both teams | at (opponents in reach − teammates in reach − 1) per `down_time`, never below 0; drains slowly otherwise |
-| `zone` | both teams | like `tag`, but only on the other team's ground: attackers inside `home` of the VIP, defenders outside it |
-| `zone_pressure` | both teams | like `pressure`, on the other team's ground |
-
-`pressure` is the graded local majority:
-- 1 v 1 and 2 v 2 are standoffs, so there are no mutual kills;
-- a drone outnumbered two to one falls in `down_time`, and three to one twice as fast;
-- an escaped drone is still weakened while its meter drains.
+The model (meters, the five built-in sets, `pressure`'s counting) is
+[guard-theory.md §7](guard-theory.md#7-rules-as-rates). In code, a rule set is a `Rules`
+subclass with:
+- `down_rates`, `strike_rates`: how fast each meter fills, per second, vectorised so a
+  planner can call them on whole rollouts;
+- `drain`: how fast a meter empties when nothing fills it (`inf` = reset);
+- `result`: the attack wins on `strikes_to_win` strikes or with no defender left; the
+  defence with no attacker left or when `duration` runs out;
+- `problems()`: refuses numbers only contact could meet (a reach inside the keep-out, a
+  strike radius inside the VIP's);
+- `DOWNABLE` (which teams can be downed) and `DEFAULTS` (its tunables).
 
 **Contested strikes (`strike_block`, every rule set, default 0 = off).** With
 `strike_block` > 0, a defender within that distance of an attacker contests its
-strike. The strike rate is 0, and with the usual instant drain the meter resets.
+strike (the rate is 0; with the usual instant drain the meter resets).
 `strike_rates(att_p, vip_p, def_p)` takes the active defenders, either (M, 3) for every
 case or (K, M, 3) per case for a planner's predictions. Leaving `def_p` out gives the
 uncontested rate. The referee passes the active defenders. `coordinated` scores a
@@ -160,19 +141,12 @@ the dwell, so it looks for an uncontested spot. `problems()` refuses a block ins
 `guard_show -p strike_block:=0.8`, `plan_guard --rparam strike_block=0.8`, or the
 console's number field.
 
-**One definition, two uses.** The **referee** integrates the meters from the
-aircraft positions to decide what happened. **Strategies** get the same rule
-object in their View, plus everybody's current meters (public, like a scoreboard).
-They call the same rate functions on *predicted* positions while planning, so one
-strategy plays under any rule set without knowing which.
+The referee and the strategies share one rule object: the referee integrates it on
+the aircraft, the strategies call it on predictions.
 
-**Rules never touch safety.** The safety layer sits underneath every rule set, and
-each rule set's `problems()` refuses numbers that could only be met by contact: a
-reach inside the keep-out, or a strike radius inside the VIP's.
-
-To write one: subclass `Rules`, then set `name`, `DEFAULTS` and `DOWNABLE`,
-implement `down_rates` (and `drain` if it is not a plain reset), and decorate it
-with `@register`. The built-in sets are in `rules/standard.py`.
+To write one: subclass `Rules`, set `name`, `DEFAULTS` and `DOWNABLE`, implement
+`down_rates` (and `drain` if it is not a plain reset), and decorate it with `@register`.
+The built-in sets are in `rules/standard.py`.
 
 ## 5. `guard/engine.py`: one tick
 
@@ -191,9 +165,10 @@ Everything both strategies are held to, under every rule set:
 
 The rule numbers live with each rule set, not here.
 
-`problems()` refuses an inconsistent set, for example a tag range inside the
-keep-out, or a separation floor below anything with flight evidence. Field names match the escort's config, so the containment check
-and the room helpers are shared, not copied.
+`problems()` refuses an inconsistent set: for example a keep-out under the hard
+floor, a separation floor under 0.20 m (nothing here has flight evidence for closer),
+or near-miss ratios out of order. Field names match the escort's config, so the
+containment check and the room helpers are shared, not copied.
 
 ## 7. `guard/viz.py`: the picture, as an operations map
 
@@ -216,8 +191,8 @@ Markers that were drawn last tick and not this one are deleted at once, so a
 changed intent never lingers. `guard_show` publishes at about 10 Hz (events between
 two publishes are carried to the next), and the console's 3D view draws only the
 newest snapshot per browser frame (`latestOnly` in the mission window): at 20 Hz with
-every message drawn, it fell 3.3 s behind a match (2026-11-06). Publishing is best effort: a failed marker costs
-a picture, never a flight.
+every message drawn, it fell 3.3 s behind a match (2026-11-06). Publishing is best
+effort: a failed marker costs a picture, never a flight.
 
 ## 7a. `guard/finale.py`: the end, made obvious
 
@@ -237,7 +212,8 @@ landing commander with `Match.retire`. The formation is VIP-relative, so a
 moving DJI drags it along.
 
 Lights, per drone: `win` (green), `team` (its colour), `off`. `check()`
-refuses a ring inside the VIP keep-out or a speed above either team cap.
+refuses a ring inside the VIP keep-out + 0.2 m, or a speed that is not positive; the
+speed is also capped at the slower team's.
 `plan_guard` flies the finale on its stand-in aircraft and checks it like the
 match (`--no-finale` to skip; `--matrix` never flies it).
 
@@ -268,8 +244,8 @@ match is then built from where the drones are at START, not from the floor marks
   VIP only when the translated slots fail the checks (for example, when they hit a
   wall), and holds the last good goals if nothing fits. `rebuilds` counts the
   rebuilds.
-- **A fair start.** The start-reach rule says no attacker may be within a defender's
-  reach at START. With `follow`, the arc is laid out to pass it. With `hold`, the
+- **A fair start.** The start-reach rule (`plan_guard.mark_problems`): under rules
+  that can down someone, no attacker may start within `reach` + 0.5 m of a defender. With `follow`, the arc is laid out to pass it. With `hold`, the
   rule cannot decide whether a formation exists, because the attackers do not move.
   It decides whether the start is *fair* instead.
   - `Follow.unfair(vip)` lists the start-reach problems alone.
@@ -291,18 +267,14 @@ Tests: `test/test_guard_formup.py`.
 
 ## 7c. `guard/watch.py`: the near-miss watch
 
-It runs on the *measured* aircraft every tick in `guard_show`, gates included:
-- **Mocap glitch:** a pose that jumps more than `mocap_jump_m` in one tick, plus
-  what the drone could have flown through any missing frames. The drone is
-  flown on its setpoint for two ticks, and the glitch is counted. It is not a
-  near miss.
-- **Soft near miss** (`near_miss_ratio` of the floor ellipsoid, for
-  `near_miss_ticks` ticks in a row): the match pauses and every drone holds
-  through the safety layer. Play resumes once every pair is back outside
-  `near_miss_clear_ratio`.
-- **Hard near miss** (`near_miss_land_ratio`), or a pause longer than
-  `near_miss_pause_s`: everything lands. `near_miss_pause:=false` restores the
-  old rule, where a soft near miss lands everything.
+It runs on the *measured* aircraft every tick in `guard_show`, gates included. The
+thresholds and why they are where they are: [guard-theory.md §5.2](guard-theory.md#52-defence-in-depth-on-the-aircraft-themselves).
+The parameters:
+- `mocap_jump_m`: a glitch, not a near miss; the drone flies on its setpoint for two
+  ticks;
+- `near_miss_ratio` for `near_miss_ticks` ticks: pause; `near_miss_clear_ratio`: resume;
+- `near_miss_land_ratio`, or a pause longer than `near_miss_pause_s`: land everything;
+- `near_miss_pause:=false`: the old rule, where a soft near miss lands everything.
 
 Each near miss is printed with its evidence: the measured gap, the setpoint gap
 at the same tick, and each drone's tracking error. These separate "the plan put
@@ -347,13 +319,22 @@ them there" from "the aircraft lagged the plan".
 
   `controller` = `mellinger` (the default since 2026-11-24) sets
   `stabilizer.controller` 2 on the flying drones before arming and back to 1 (PID)
-  after, landing or abort (`set_controller`, in a `finally`). Every match on
-  2026-11-23 flew it, with a lag of 0.08-0.14 s against PID's ~0.56 s
-  (guard-design-notes.md). With `use_sim_time` nothing is switched: the simulator
-  runs Mellinger from `server.yaml`, and restoring PID after would leave it on PID.
-  `controller:=pid` leaves the server's setting alone. Every tick drains the node's ready callbacks (`drain`, shared
-  with the escort in `escort_show.py`), so `/poses` is never queued behind the
-  drones' own pose and status topics. `trace:=true` (the
-  default) writes every tick's measured and commanded position, phase and intent
+  after, landing or abort (`set_controller`, in a `finally`). On 2026-11-23 it cut
+  the lag to 0.08-0.14 s from PID's ~0.56 s (guard-design-notes.md). With
+  `use_sim_time` nothing is switched: the simulator runs Mellinger from `server.yaml`,
+  and restoring PID after would leave it on PID. `controller:=pid` leaves the server's
+  setting alone.
+
+  **Gates** (`paced:=true`): it waits for Enter, or the console's Continue, to arm and
+  take off; for the pilot to take the DJI off (`vip_mode:=mocap`); to START; and at the
+  end for the pilot to land the DJI (otherwise to land the drones). The DJI goes up
+  into drones that already dodge it, and comes down before them. While a gate waits, or
+  the match pauses (a lost VIP pose, a drone on hold), `Match.hold()` keeps every drone
+  in place *through the safety layer*, with every watchdog running and the match clock
+  stopped. The console's window is `missions/guard.yaml`.
+
+  Every tick drains the node's ready callbacks (`drain`, shared with the escort in
+  `escort_show.py`), so `/poses` is never queued behind the drones' own pose and status
+  topics. `trace:=true` (the default) writes every tick's measured and commanded position, phase and intent
   per drone to `guard_trace.csv` in the flight's folder
   ([flight-logs.md](flight-logs.md)).

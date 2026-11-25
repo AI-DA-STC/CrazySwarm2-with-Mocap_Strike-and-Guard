@@ -131,9 +131,9 @@ attack comes in from several sides and strikes after 13 s.
 
 | Strategy | The idea |
 |---|---|
-| **coordinated** (default) | Take up positions all round, then go in together, sometimes behind a decoy sent in first, sometimes after a feint to the other side. Back off and come again from new sides when blocked. |
+| **coordinated** (default) | Take up positions round the VIP, two of them close together on one side, then go in together: sometimes behind a decoy sent in first, sometimes after a feint to the other side. Back off and come again from new sides when blocked. |
 | **flood** | Spread out evenly round the VIP, then everyone charges at once, weaving. |
-| **wolfpack** | Gang up on the loneliest defender first, and only go for the VIP once the defence is thinned out. It needs rules where defenders can be taken out. |
+| **wolfpack** | The whole pack hunts the loneliest defender, and goes for the VIP once the defence is thinned out or the hunt has taken too long. It needs rules where defenders can be taken out. |
 | **direct** | Straight at the VIP, all at once. A baseline. |
 
 Each attack against the default defence (shell), except wolfpack:
@@ -180,8 +180,8 @@ The drones take off from their floor marks, but the match does not start there. 
 comes the **form-up**: the defenders fly to a ring round the VIP, and the attackers
 hover where they are. If the VIP is the DJI, the ring follows it while the pilot flies it
 into place. The pilot opens a gap between the DJI and the attackers until the show says
-the start is **fair**, meaning no attacker is within a defender's reach. Then the
-operator presses START.
+the start is **fair**: every attacker is at least half a metre outside a defender's
+reach, so nobody can be taken out in the first second. Then the operator presses START.
 
 ## The end of a match
 
@@ -222,7 +222,8 @@ No single check is trusted.
 - **In flight,** the show watches where each drone *really* is.
   - If two drones come too close, the match **pauses** and everyone holds still until
     they are apart again.
-  - If they come much closer, everything lands.
+  - If they come much closer, or the pause does not clear within a few seconds,
+    everything lands.
   - A drone that stops following its command, or that the cameras lose, lands the show.
 - **Every flight is recorded**, so any of the above can be explained afterwards
   ([details/flight-logs.md](../details/flight-logs.md)).
@@ -242,10 +243,10 @@ Two consequences:
   for each match (`controller`, the default since 2026-11-24). It uses the speed the
   laptop sends.
 
-The cure worked. On 2026-11-23 every match flew Mellinger at full speed, and the
-drones ran about a tenth of a second behind instead of half a second. No match had a
-near miss. With the standard controller, a slower match (`0.6 m/s` for both teams) is
-still the way to keep a comfortable margin.
+The cure worked. On 2026-11-23 four matches flew Mellinger at full speed: the drones
+ran about a tenth of a second behind instead of half a second, and none had a near
+miss. With the standard controller, fly slower (`0.6 m/s` for both teams) to keep a
+comfortable margin.
 
 ## Where to go next
 
@@ -254,4 +255,5 @@ still the way to keep a comfortable margin.
 | To run it | [run.md](run.md) |
 | To present it to guests | [presenting.md](presenting.md) |
 | How the code is put together | [details/guard-modules.md](../details/guard-modules.md) |
-| What was measured, and why things are the way they are | [details/guard-design-notes.md](../details/guard-design-notes.md) |
+| Why it is built this way, with the maths | [details/guard-theory.md](../details/guard-theory.md) |
+| What was measured, match by match | [details/guard-design-notes.md](../details/guard-design-notes.md) |
