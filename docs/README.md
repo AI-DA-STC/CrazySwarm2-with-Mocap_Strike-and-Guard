@@ -1,52 +1,35 @@
-# Details
+# The docs
 
-The deep dives behind the beginner guides. Read these when a guide is not enough, or
-before changing code.
+One folder per demo: its beginner guides at the top, its deep dives in `details/`.
+`rig/` is what every demo shares. Start with the [README](../README.md) if you are new.
 
-**Escort**
-
-| File | What it covers |
+| Start here | |
 |---|---|
-| [escort/details/theory.md](escort/details/theory.md) | The maths and the reason behind every algorithm: the ring, blocking, the safety filter, the attacker |
-| [escort/details/design-notes.md](escort/details/design-notes.md) | What was decided, what flew, what broke, and the decisions still open |
-| [escort/details/reference.md](escort/details/reference.md) | Every command, show setting and number on one page; keyboard teleop; reviewing a run |
-| [escort/details/qna.md](escort/details/qna.md) | Answers to visitors' questions, sorted by audience, plus the honest list of limits |
+| [01-setup.md](01-setup.md) | Install everything once |
+| [02-flight-day.md](02-flight-day.md) | The routine every flight day shares |
+| [troubleshooting.md](troubleshooting.md) | The commonest problems, and what to do |
 
-**Guard (N defenders v M attackers, pluggable strategies)**
+| Demo | Guides | Details |
+|---|---|---|
+| **Escort**: guard a moving VIP | [run](escort/run.md) · [how it works](escort/how-it-works.md) · [presenting](escort/presenting.md) | [theory](escort/details/theory.md) (why, with the maths) · [reference](escort/details/reference.md) (every setting and number) · [design notes](escort/details/design-notes.md) (the dated log, open decisions) · [Q&A](escort/details/qna.md) (visitors' questions) |
+| **STL game**: guard a goal line | [run](stl/run.md) · [how it works](stl/how-it-works.md) | [design notes](stl/details/design-notes.md) (the algorithm, the port and its checks) |
+| **Guard**: N defenders v M attackers | [run](guard/run.md) · [how it works](guard/how-it-works.md) · [presenting](guard/presenting.md) | [theory](guard/details/theory.md) (why, with the maths) · [modules](guard/details/modules.md) (the code) · [design notes](guard/details/design-notes.md) (the dated log) · [footage](guard/details/footage.md) (simulator clips) · [flight replay](guard/details/flight-replay.md) (a hardware flight, seen again) |
+| **Serpent**: a one-minute show | [run](serpent/run.md) | |
 
-| File | What it covers |
+| The rig (shared) | |
 |---|---|
-| [guard/details/theory.md](guard/details/theory.md) | The maths and the reason behind the design: the safety contract, the CBF filter, the strategies, the rules |
-| [guard/details/modules.md](guard/details/modules.md) | Every module, what it may and may not do, and how one tick flows through them |
-| [guard/details/design-notes.md](guard/details/design-notes.md) | The dated log: what was decided, measured and learned, match by match |
-| [guard/details/footage.md](guard/details/footage.md) | How the simulator clips in the guide are made (`scripts/footage/`), and where the simulator disagrees with the offline checks |
-| [guard/details/flight-replay.md](guard/details/flight-replay.md) | Watching a hardware flight again: the console view rebuilt from its flight log, and the hall camera's footage with every drone circled |
-
-**STL game**
-
-| File | What it covers |
-|---|---|
-| [stl/details/design-notes.md](stl/details/design-notes.md) | How the colleague's algorithm decides, how it is ported and checked, what was measured, and how to bring in a new version |
-
-**The rig, shared by every demo and show**
-
-| File | What it covers |
-|---|---|
-| [preflight-gui.md](rig/preflight-gui.md) | The preflight window: checklist, screenshots of good and bad, drone and room axes |
-| [mocap.md](rig/mocap.md) | OptiTrack: calibration, rigid bodies, the measured arena, the lab network |
-| [serpent/run.md](serpent/run.md) | The one-minute serpent show for the big arena: what it does, how it stays safe at speed, how to fly it |
-| [running.md](rig/running.md) | General rig commands: one-drone test flight, health checks, LEDs, launch arguments |
-| [console.md](rig/console.md) | The web console: every button and the command it runs |
-| [mission-window.md](rig/mission-window.md) | Each demo's own screen in the web console, and the spec file behind it |
-| [troubleshooting.md](rig/troubleshooting.md) | Every known symptom, cause and fix |
-| [radio-link-2026-11-17.md](rig/radio-link-2026-11-17.md) | The 17 November session: radio replies lost and poses arriving late, what was measured and ruled out, what to try next |
-| [known-issues.md](rig/known-issues.md) | The long story behind each silent failure, with evidence |
+| [running.md](rig/running.md) | General commands: one-drone test, health checks, LEDs, launch arguments |
+| [preflight-gui.md](rig/preflight-gui.md) | The preflight window, and what good and bad look like |
+| [console.md](rig/console.md) · [mission-window.md](rig/mission-window.md) | The web console's buttons, and each demo's own window (developers: [console/README.md](../console/README.md)) |
+| [mocap.md](rig/mocap.md) | OptiTrack: calibration, rigid bodies, the network |
+| [flight-logs.md](rig/flight-logs.md) | What every flight records, and how to read it |
+| [troubleshooting.md](rig/troubleshooting.md) | Every known symptom and its fix |
+| [known-issues.md](rig/known-issues.md) | The evidence behind each silent failure and each CLAUDE.md rule |
 | [server-changes.md](rig/server-changes.md) | What this repo changed in the Crazyswarm2 server, and why |
-| [provenance.md](rig/provenance.md) | Who owns each layer (Bitcraze, OptiTrack, IMRCLab, AI-DA-STC, this project), measured against upstream |
+| [provenance.md](rig/provenance.md) | Who owns each layer, measured against upstream |
 
-**Diagrams:** every diagram in these docs is a slide in
-[`../diagrams/strike-and-guard-diagrams.pptx`](diagrams/strike-and-guard-diagrams.pptx).
-Edit it in PowerPoint, then run `./docs/diagrams/export_png.sh` to update the PNGs. The
-four plots in `escort/details/theory.md` (`../img/escort/*.svg`) are computed from the real
-controller by [`escort_figures.py`](escort/details/escort_figures.py) instead:
+**Diagrams** are slides in [diagrams/strike-and-guard-diagrams.pptx](diagrams/strike-and-guard-diagrams.pptx):
+edit there, then `./docs/diagrams/export_png.sh`. A full re-export redraws every PNG
+slightly differently, so commit only the PNGs of slides you changed. The escort's four
+plots (`img/escort/*.svg`) come from the real controller:
 `python3 docs/escort/details/escort_figures.py`.

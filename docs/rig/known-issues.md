@@ -1,559 +1,398 @@
-# Known issues: the hard-won record
+# Known issues: the evidence
 
-Every silent failure this rig has hit, with the evidence and the fix. Read the
-entry before re-investigating anything here: most of these took days to find.
-The short symptom → fix tables are in [troubleshooting.md](troubleshooting.md).
-"server" below is `src/crazyswarm2/crazyflie/src/crazyflie_server.cpp`; what was changed
-in it, and why, is in [server-changes.md](server-changes.md).
+One entry per silent failure this rig has hit, and one per rule in `CLAUDE.md`: what
+happens, the evidence, and where the fix is. Read the entry before re-investigating
+anything here; most took days to find. The symptom → fix tables are in
+[troubleshooting.md](troubleshooting.md). "The server" is
+`src/crazyswarm2/crazyflie/src/crazyflie_server.cpp`; what was changed in it, and how, is
+in [server-changes.md](server-changes.md).
 
-- **`set -u` vs ROS `setup.bash`.** Sourcing `/opt/ros/<distro>/setup.bash` under
-  `set -u` aborts on the unbound `AMENT_TRACE_SETUP_FILES`. `build.sh` wraps the
-  source in `set +u`/`set -u`. Without it the build silently never runs → empty
-  `install/`.
-- **cffirmware (simulator only).** `crazyflie_sim` imports `cffirmware` (Crazyflie
-  firmware Python bindings) — not a pip package. `setup_sim_firmware.sh` builds it
-  from `crazyflie-firmware` (tag 2025.02). NOT needed for hardware backends.
-  - Its **CMSIS submodule needs `git-lfs`** or the checkout aborts (`arm_add_f32.c`
-    missing). The script installs git-lfs.
-  - The `setup.py` egg does **not** bundle the compiled `_cffirmware*.so`; expose
-    `crazyflie-firmware/build` on `PYTHONPATH` instead (script appends to `~/.bashrc`).
-- **conda shadows system Python.** ROS 2 runs nodes with `/usr/bin/python3`. A conda
-  base env (different Python) causes `No module named '_cffirmware'` and rclpy errors.
-  Deactivate conda for ROS work. `build.sh` now defends the BUILD only: if
-  `CONDA_PREFIX`/`VIRTUAL_ENV` is set or `python3` isn't `/usr/bin/python3` it strips
-  conda/venv from `PATH`+`PYTHONPATH` and passes `-DPython3_EXECUTABLE=/usr/bin/python3`.
-  Without that, rosidl generated the Python message bindings for the wrong interpreter
-  (`cpython-312` .so on a 22.04 box whose `ros2` runs 3.10) — C++ nodes fine, but every
+## The rules in CLAUDE.md
+
+### The server hangs forever on the first unreachable drone
+
+The server connects the enabled drones in lexicographic (`std::map`) order and blocks,
+silently and for good, on the first one that does not answer the radio: no error, no
+`/all/*` services, and the hung server needs SIGKILL. Seen causes: a dead drone (cf6,
+2026-08-04: silent on full channel and datarate sweeps at its own and at the factory
+address, so a physical check was needed), a wrong address, and a URI datarate that does
+not match the drone (a `2M` URI for a radio running `1M`; a scan of the drone's address
+shows its real rate, e.g. `radio://*/90/1M/...`).
+
+**Rule:** `./scripts/scan_fleet.sh` before every launch. It reads the list from
+`crazyflies.yaml`; the five lists once written into the docs had all drifted, and none
+named the drone the yaml marks intermittent.
+
+### Never install the apt motion-capture-tracking
+
+`ros-<distro>-motion-capture-tracking` 1.0.9 hard-codes a foreign interface address,
+`141.23.110.162`, into the NatNet socket. The node then aborts (exit -6,
+`set_option: No such device`) or never binds and publishes nothing, forever. Every apt
+version also mis-parses Motive's NatNet 4.2 model definition and can segfault. The
+vendored copy in `src/motion_capture_tracking` is the fixed one
+([VENDORED.md](../../src/motion_capture_tracking/VENDORED.md)); `install_deps.sh`
+removes the apt package so it cannot shadow the build. Check:
+`ros2 pkg prefix motion_capture_tracking` must print `.../install/motion_capture_tracking`.
+
+### `initial_position` comes from `/poses`, never `/cfX/pose`
+
+The onboard estimate `/cfX/pose` is seeded from the yaml, so copying it back is circular.
+`scripts/sync_initial_positions.py` copies from `/poses` and carries the refusals a hand
+edit lacks (procedure: [mocap.md 2b](mocap.md#2b-setting-initial_position-from-poses)).
+The flight scripts compute absolute `goTo` targets from each drone's yaml position, so two
+drones swapped between marks fly crossing paths: that was the real mid-air collision of
+2026-08-04. The trajectory shows also keep enabled drones ≥ 1 m apart (the rig rule; the
+sync script warns under 1 m and refuses under 0.30 m, where marker sets merge). Planners derive their plan from the marks, so re-run the planner after every
+sync.
+
+There is one `crazyflies.yaml`, in `crazyflie/config/`: the server, every planner and the
+sync script read it. A second copy in `crazyflie_shows` was removed on 2026-10-02 after
+the two drifted (one had cf8, the other did not, so the planner checked one fleet and the
+server flew another). `crazyflies_yaml_file:=<path>` still works for a one-off fleet, and
+`show_launch.py` prints a **FLEET YAML OVERRIDE** banner when it is used. Change a show's
+fleet with `enabled:` in the one file.
+
+### `use_sim_time:=true` in the simulator, never on hardware
+
+The sim clock (`/clock`) is only paced to wall time (`sim.realtime`, default true) and
+runs flat out with `sim.realtime:=false`. A script that streams setpoints or sleeps on a
+schedule without the flag drifts away from the physics, or finishes in seconds. Run
+hardware without the flag. Restart the sim launch between runs.
+
+### Set `ROS_DOMAIN_ID`: domain 0 is shared with the lab
+
+Domain 0 is the default, and the lab network carries other people's ROS traffic: a
+colleague's `/all/takeoff` has been seen here. Every terminal and the console need the
+same private `ROS_DOMAIN_ID`.
+
+### Supervisor LOCKED after an E-STOP
+
+After an emergency stop, `/cfX/status` `supervisor_info` has bit `0x40` set and
+`CAN_BE_ARMED` (`0x01`) clear, and the firmware refuses to arm. The state machine's only
+transition out of locked leads back to locked (blocker `supervisorAlways`,
+`supervisor_state_machine.c`), so only a battery out and in, per drone, clears it.
+Verified 2026-10-02: five drones sat locked with healthy batteries (4.10-4.22 V) and the
+only symptom was that nothing flew. `arm()` is fire-and-forget (`crazyflie_py` never reads
+the answer), so the only proof a drone flew is its mocap altitude. Every show checks this
+before its ~55 s upload (`check_supervisor` / `report_supervisor` in
+`crazyflie_shows/preflight.py`). A silent `/cfX/status` counts as a note, not a refusal,
+because the [telemetry stall](#link-alive-log-data-dead) looks the same.
+
+### Ctrl-C kills the ROS context before your handler runs
+
+`rclpy.init` (inside `Crazyswarm()`) installs a SIGINT handler that shuts the context
+down. By the time `KeyboardInterrupt` reaches the script, `allcfs.land()` fails with
+`failed to initialize wait set: the given context is not valid` and the drones keep
+flying their last command (verified in sim 2026-09-20). Rules:
+
+- Take SIGINT and SIGTERM (the console's Stop) back after `Crazyswarm()` returns and raise
+  your own exception: `take_signals()` in `crazyflie_shows/abort.py`, which every show
+  that can arm must use. It restores `SIG_DFL` for both once the abort starts, so a second
+  signal of either kind kills the process, mid-landing too. The console therefore waits
+  15 s after SIGINT before SIGTERM for a flight script (`procs.FLIGHT_STOP_ESCALATION`),
+  and the mission window's Abort sends one SIGINT and never escalates (`procs.interrupt`).
+- `ShowAborted` is a `BaseException` (since 2026-10-09). As an `Exception` it was
+  swallowed by an `except Exception` around `select()` in `escort_show.operator_said()`,
+  and in sim the show sat at its ARM gate after SIGINT. Never wrap a gate, select or
+  publish in a bare `except Exception`.
+- Set `armed = True` before the arm loop, or a signal mid-loop skips the abort and leaves
+  part of the fleet armed.
+- `ros2 run` does not forward a signal sent to it alone (a terminal Ctrl-C works because
+  it reaches the whole process group). Test an abort with `kill -INT <the script's PID>`.
+
+### The STL algorithm is a port
+
+`stl_game.py` is a line-for-line port of a colleague's algorithm; do not patch its
+behaviour. A new version arrives as a new file and is re-ported:
+[stl/details/design-notes.md](../stl/details/design-notes.md#when-v4-arrives).
+
+### Compiler warnings: any new one is a regression
+
+About 25 warnings remain, all in third-party code and each reviewed: `-Wsign-compare` on
+loops bounded by drone counts, `-Wreorder` with all-constant initializers, unused locals,
+all in `deps/librigidbodytracker` plus one in `deps/libmotioncapture/src/optitrack.cpp`.
+The ~77 a clean build once gave fell because the mocap backends this rig never uses are no
+longer compiled (`motion_capture_tracking/CMakeLists.txt`). Do not add `-w` / `-Wno-*`:
+this workspace patches those vendored files, and blanket suppression would hide our own
+mistakes there. A new warning in `src/crazyswarm2` or `src/natnet_ros2` is a bug.
+
+### `stop_stack.sh` stops every stack on the machine
+
+`console/stop_stack.sh` finds processes by command line (`ros2 launch crazyflie`,
+`crazyflie_server`, `motion_capture_tracking_node`, ...), not by `ROS_DOMAIN_ID`, so it
+also stops a stack someone else, or another test, has up. Stop a private test stack by
+its PIDs.
+
+## Mocap
+
+### Rigid-body orientation
+
+A rigid body's zero orientation is captured when it is created, so the drone's nose must
+lie along global +X at that moment. `locSrv.extPosStdDev = 1e-3` force-fuses the mocap
+position, so a rotated body still shows ~1 mm position error: the yaw offset is invisible
+at rest and a fly-away in flight. The preflight GUI's red banner and `err.yaw` catch it.
+Go/no-go: within ±5° fly; 5-15° fix first; over 20° do not fly.
+
+### Mocap "died": an orphan on UDP 1511
+
+Confirmed cause on this rig: a leftover process bound to UDP 1511 (a stray listener, or
+the last launch's mocap node, which ignores SIGINT while blocked in `recv`). With two
+`SO_REUSEPORT` sockets on 1511 the kernel hands each NatNet datagram to only one, and the
+mocap node starves silently inside libmotioncapture `connect()`: no crash, no publisher.
+Ping to Motive proves nothing (unicast works while multicast starves). A frozen node left
+behind can also make the next connect abort with SIGABRT.
+
+### Motive's address and Local Interface
+
+The lab Motive PC's DHCP address has moved (.100 → .124 → .152), and every move left
+`/poses` silent with the node blocked in `connect()`. `hostname: "auto"` makes `launch.py`
+find Motive with a NatNet discovery ping on UDP 1510 and abort with a message if nothing
+answers. After the 2026-11-02 move to the big arena, Motive's Data Streaming **Local
+Interface** was unset: the PC answered ping but not NatNet. It must name the wired
+adapter.
+
+### `/poses` silent with Wi-Fi and the wire both up (fixed 2026-11-23)
+
+The driver joins the NatNet multicast group on `interface_ip`, but upstream's node never
+forwarded that parameter, so the join used `0.0.0.0`, the default route's interface.
+NetworkManager ranked Wi-Fi first (metric 600 against the wire's no-internet 20100), so
+the join landed on Wi-Fi: Motive answered ping and discovery, and no frame arrived.
+Signature: `ip maddr show dev <wifi>` lists `239.255.42.99` and the wired device does not.
+Fix: vendored patch 0007 plus `interface_ip: "auto"`. Verified with Wi-Fi up: 55 Hz
+`/poses`, joined on the wire.
+
+## Radio and server
+
+### Link alive, log data dead
+
+**What:** one drone's `/cfX/pose`, `/cfX/status` and `/cfX/kalman_preflight` all fall to
+exactly 0.00 Hz while its link is up: latency pings still complete (10-35 ms) and
+`ros2 param set` still reaches it. First seen 2026-10-02, five drones on one Crazyradio
+2.0; the victim changes every launch, and it recurs on the same drone.
+
+**Cause, read in the firmware 2026-10-05** (`~/crazyflie-firmware`, tag 2025.02, what the
+fleet runs): `logRunBlock()` in `src/modules/src/log.c` runs `logReset(); crtpReset();`
+when `crtpIsConnected()` is false, and `radiolink.c` defines that as "received a CRTP
+packet in the last 1000 ms". One second in which the drone receives nothing makes it
+delete every log block and flush its CRTP queues, without telling the host. Its radio goes
+on acking every poll with a 1-byte null, so every host-side counter looks healthy.
+
+**Evidence:** at the freeze, packet tracing (`trace_cf:=all`) reads `log=0 null=~200
+other=1` a second and the host agrees (`log=0 dispatched=0`): nothing leaves the drone.
+The watchdog's stop/start came back `Could not start log block!`, an answer, not a
+timeout: the blocks no longer existed. A second Crazyradio in another process streamed
+the same drone's log at 10 Hz (hours of uptime, no reboot). A server restart always
+recovered it, because connect recreates the blocks.
+
+**Fix:** the server's telemetry watchdog (`telemetry_watchdog_s: 5.0`; design in
+[server-changes.md §1](server-changes.md#1-telemetry-watchdog-detect-and-recover-from-link-alive-log-data-dead))
+recreates that drone's blocks in place, only while mocap shows it on the floor
+(z ≤ 0.10 m). Verified 2026-10-05: cf5 stalled twice in 20 minutes, and each time all
+three topics were back ~1.0 s after the stall was declared. Manual fallback: restart the
+server. A power cycle is not needed.
+
+**Still open: what causes the ≥ 1 s receive gap.** A healthy drone here reports
+`num_rx_unicast` ~168/s and `num_rx_broadcast` ~145/s, and the same firmware branch that
+counts them refreshes the 1 s timer, so tripping it takes a genuine outage. One was seen
+before every freeze: a ~3 s link disturbance, then a backlog flush (`log=50 null=1` in one
+second); other drones survived identical bursts. The live, unmeasured candidate is the
+broadcast-priority skip in `crazyflie-link-cpp/src/CrazyradioThread.cpp`: while any
+broadcast connection has a queued packet or a pending retry, every unicast connection is
+skipped for that pass, and `posesChanged` feeds the broadcast connection at the mocap
+rate. That is upstream code: measure it before editing it. `keepalive_frequency: 4.0`
+adds a 4/s unicast floor per drone; it is insurance, not a fix (a starved connection
+starves the keep-alive too).
+
+**Ruled out by measurement, do not re-chase:** telemetry rates (byte-identical to
+upstream, flew for weeks); the console (open or closed made no difference); CPU and
+graphics load (24 cores, load 3.6, server 2.5 %); pty back-pressure; apt overlay
+shadowing; DDS config; the dongle (reproduced on the same stick); drone firmware (all
+identical, rev0 2570053570); leftover log blocks (`logReset`, create and start are all
+acked); the radio loop skipping connections (it services every connection each
+iteration, `CrazyradioThread.cpp:195`); loss or misdelivery on the host (nothing arrives);
+an inline-mode desync (it would hit every connection and raise unrequested-block
+warnings). At a real stall the server still sent ~175/s and got ~167 valid acks/s, which
+rules out airtime starvation and the safelink discard.
+
+**Reading `/cfX/connection_statistics`** (`publish_stats: true`, semantics verified
+2026-10-05): `sent_count` is ~175/s on a live drone; `ack_count` counts valid acks (high
+means not safelink); `receive_count` also counts the drone's 1-byte nulls, so
+`receive == ack` is normal and does not prove payloads; `enqueued_count` is the outgoing
+queue depth, 0 when healthy, and underflows to 2^64-1 during a stall (a library bug).
+`scripts/link_stall_recorder.py` dumps the 60 s before a stall for every drone.
+
+### An upload can wedge the server (fixed 2026-10-05)
+
+Mid-show on 2026-10-05 all five drones stopped publishing during a trajectory upload and
+did not recover when the show stopped: the server was stuck. The chain, each link seen in
+the log or the source:
+
+1. The upload saturates the radio and starves the other connections:
+   `[cf5] Low unicast receive rate (0.10 < 0.90). Sent: 2807. Received: 289`.
+2. A starved drone crosses the firmware's 1 s timeout (above) and its `crtpReset()`
+   flushes the memory-write reply the server is waiting for.
+3. `Crazyflie::uploadTrajectory` waited for that reply without a bound.
+4. The waiting callback sits in the fleet-wide, mutually exclusive
+   [`callback_group_cf_srv`](#open-one-fleet-wide-callback-group), so every drone's
+   `land`, `takeoff`, `arm`, `emergency` and the `spin_once` that dispatches all log data
+   stop with it. `/all/*` still works.
+
+Signature: `[cfX] upload_trajectory(...)` (logged on entry) with nothing after it, or the
+preflight GUI's `takeoff (cfX): timed out waiting for response`. SIGINT cannot stop the
+server in this state; it needs SIGKILL. The same day a show flew cf5 through four
+trajectories it never received (`Sent: 1487. Received: 0`) until it was e-stopped. Fix:
+bounded, identity-matched uploads, and `start_trajectory` refuses an id whose upload
+failed ([server-changes.md §2](server-changes.md#2-bounded-trajectory-upload-bad_trajectories_-and-refusing-to-fly-a-failed-upload)).
+Most other `waitForResponse()` calls (params, log TOC) are still unbounded: they run at
+connect, but bound any of them before calling it from a service handler.
+
+### OPEN: one fleet-wide callback group
+
+`callback_group_cf_srv` is created once in the `CrazyflieServer` constructor and handed to
+every `CrazyflieROS`. It carries every drone's `land`, `takeoff`, `arm`, `emergency`,
+`go_to`, `start_trajectory` and `upload_trajectory`, the telemetry watchdog's timer, and
+the 1 ms `spin_once` that is the only place log data is dispatched. rclcpp runs one
+callback at a time from a mutually exclusive group, whatever the executor, so a stuck wait
+on one drone stops every drone's services and all telemetry; a worst-case watchdog rebuild
+is a ~14 s fleet-wide freeze. `/all/emergency`, `/all/land` and `/all/takeoff` are on
+`callback_group_all_srv_` and go through the broadcaster, which never touches a stuck
+drone's `Crazyflie` object, so the fleet E-STOP (console, preflight GUI's `e` key) keeps
+working. The keep-alive timer is on `callback_group_cf_cmd`.
+
+**Not changed, on purpose.** `Crazyflie::processAllPackets` and
+`Crazyflie::waitForResponse` pop the same per-connection queue and the `Crazyflie` object
+has no mutex, so moving only `spin_once` or only `upload_trajectory` out of the group
+would make `spin_once` eat the reply a service waits for. Per-drone groups are the only
+safe split, and that is a concurrency refactor of the binary that owns the radio. Measure
+first: time a rebuild on the bench (five drones, props off, on the floor). If the freeze
+stays ~1.0 s (as on 2026-10-05), lower `RECOVERY_TIMEOUT_MS` toward 300-500 ms instead,
+for a ~4-7 s worst case at no concurrency risk. A refactor must keep the other four drones
+publishing `/cfX/pose` at 10 Hz and answering `land` / `arm` while one rebuilds, and needs
+a server-level recovery gate and an upload mutex (today both are accidental: the shared
+group serialises recoveries, and `crazyflie_py` waits for each upload).
+
+### Crazyradio firmware 5.1 (fixed 2026-11-17)
+
+On 2026-11-17 the links failed one way: the drones heard the laptop (-39 to -72 dBm) but
+only 2-30 % of their replies were acknowledged (40-47 % on 2026-11-06). Connecting seven
+drones took 95-309 s instead of 27-29 s, and "Unexpected number of unicast packets" lines
+(the drone counts each resend after a lost ack, the
+server counts the packet once) rose from 7-11 a minute to 150-1,600. One
+radio ran firmware 5.1, which Bitcraze has retired (5.2 fixed malformed USB replies in
+5.1's inline mode, and `crazyflie-link-cpp` switches inline mode on for any Crazyradio 2.0
+on 5.1 or newer); the other ran 5.4. With both on 5.5: seven drones connected in 28 s,
+46 % acked, and matches flew. A 5.5 radio reports 5.04 over USB (its build says 5.4.0);
+only `CURRENT.UF2` in bootloader mode tells them apart. Ruled out that day, among others:
+server code and config, drone firmware, Wi-Fi, Bluetooth, the USB hub (direct ports were worse), the
+console, the Starlings, the charging pods, the mocap rate. Flashing and the other levers:
+[troubleshooting.md](troubleshooting.md#crazyradio--drones).
+
+### OPEN: `/poses` arrives late between processes on the laptop (2026-11-17)
+
+On 2026-11-17 the mocap node published an even 50 Hz, but other processes on the same
+laptop received it with gaps (a bag recorder: up to 1.6 s, 41.7 Hz on average), and every
+new ROS process took 12-23 s to start talking (1.8 s on 11-06; one guard show hung over
+12 minutes before its first line). A take-off aborted itself 4 s after lifting because
+the show's own copy of `/poses` was stale while the recorder was receiving. The likely
+cause, not proved: 57 abandoned Fast DDS shared-memory files in `/dev/shm`, left by
+processes killed with SIGKILL; every run that day also followed a suspend and resume. Remedy to try: reboot,
+or stop the stack and the console, `fastdds shm clean`, `ros2 daemon stop`, restart.
+
+### A second Crazyradio is the best probe
+
+With the server holding one dongle, a second lets another process talk to the same drone.
+The link library skips any radio whose serial it cannot query (`USBManager.cpp:188-207`),
+so to other processes the free stick is `devId 0`: address it as
+`radio://0/80/2M/E7E7E7E70X`, not `radio://1/...` (e.g.
+`ros2 run crazyflie log --uri ... --var kalman.stateX`). Two dongles on one channel collide
+briefly: fine for a read-only probe, not for flight.
+
+### Two dongles: channels at least 2 apart at 2M
+
+A 2M channel is ~2 MHz wide, so crazyflie-link-cpp refuses two dongles on adjacent
+channels (`Channels 80 and 81 are already served by Crazyradio 0`). The comments in
+`crazyflies.yaml` record the channels in use.
+
+### Two logging traps
+
+1. `[cfX] Logging to /pose at N Hz` is printed on intent, before the block exists: a
+   block that never delivers leaves no trace.
+2. The link warnings (`Low unicast receive rate`, `High latency`) fire only while a rate
+   is bad, so silence is not health. A "when did each drone die" timeline built from the
+   last warning per drone produced a convincing and false pattern on 2026-10-02. Measure
+   the topics directly, all drones at once: a sequential `ros2 topic hz` misses a drone
+   that drops while you sample another.
+
+## ROS 2, build and tools
+
+### A node never hears its own `/parameter_events`
+
+On this rig a node's own `/parameter_events` are never delivered back to itself (other
+processes' arrive). So upstream's `ParameterEventHandler` never fired and
+`ros2 param set` silently never reached the drones; the server applies `<cf>.params.*` /
+`all.params.*` in an `add_on_set_parameters_callback` instead, inside the service call.
+Fresh rclpy processes also see DDS discovery sometimes never complete: parameter calls
+time out and `Crazyswarm()` can hang on `all/emergency`. Hence `scripts/led.sh` drives the
+`ros2` CLI (its daemon keeps the graph warm) and `color_led.py` calls `set_parameters`
+directly. It is also why `trace_cf` is read only at connect.
+
+### `declare_parameter(name, {})` is a trap
+
+A bare `{}` matches both the `(name, default_value)` and the `(name, ParameterDescriptor)`
+overloads; gcc picks the descriptor, so the parameter has no default and rclcpp throws
+`NoParameterOverrideProvided` at runtime. The compile-time hint is only "would use
+explicit constructor". Spell the default out (`std::vector<std::string>{}`). Fixed in
+`natnet_ros2.cpp`.
+
+### Console blind after a Wi-Fi switch
+
+The mission console runs every check through the `ros2` CLI daemon it starts, and its
+fleet journal is a long-running `ros2 topic echo /rosout`. Both join DDS on the network
+the laptop had when the console started. After a Wi-Fi switch (2026-11-05, hangar →
+`motive`) both went deaf while RViz, the preflight GUI and the drones, all started later,
+worked: health said "crazyflie_server not running" during a real flight. Reproduced with
+`scripts/offline_window.sh console_network`: the old daemon's `ros2 node list` was empty
+while `--no-daemon` saw the server, and the journal heard 0 of 2 `land` commands.
+`ros2 daemon stop` fixes health but not the journal (a separate process). The mission
+window's 3D view is not affected (the browser talks to foxglove_bridge directly).
+
+### Environment traps (closed)
+
+- **`set -u` vs ROS `setup.bash`:** sourcing it under `set -u` aborts on the unbound
+  `AMENT_TRACE_SETUP_FILES`, so the build never ran and `install/` stayed empty.
+  `build.sh` wraps the source in `set +u` / `set -u`.
+- **conda:** ROS 2 runs nodes with `/usr/bin/python3`. With conda active, rosidl built the
+  message bindings for the wrong Python (a `cpython-312` `.so` on a 3.10 box), and every
   `ros2 topic echo` of a workspace message died with
-  `The message type '.../NamedPoseArray' is invalid`. RUNTIME is still undefended:
-  deactivate conda before `ros2 launch`.
-- **Preflight GUI needs `libxcb-cursor0` on 22.04/jammy.** pip `cfclient` pulls
-  PyQt6 >= 6.5, whose xcb platform plugin needs it; jammy doesn't install it by
-  default, so the preflight node dies at start with
-  `Could not load the Qt platform plugin xcb`. `install_deps.sh` installs it
-  (plus `python3-tk`).
-- **Compiler warnings: first-party code must stay clean; ~25 remain, all
-  third-party and reviewed.** A clean build used to emit ~77 warnings. Most came
-  from mocap backends this rig never uses, so they are no longer compiled at all
-  (see `motion_capture_tracking/CMakeLists.txt`) — that removed an overlapping-buffer
-  `sprintf` in the Qualisys SDK, strict-aliasing type-punning, and a truncating
-  `strncpy` in VRPN, none of it reachable with `type: "optitrack"`. The ~25 left are
-  ALL in `deps/librigidbodytracker` (+1 in `deps/libmotioncapture/src/optitrack.cpp`)
-  and were each checked: `-Wsign-compare` on loops bounded by drone counts,
-  `-Wreorder` whose initializers are all constants (so declaration-order init is
-  identical), and unused locals. **Benign — do not mass-patch upstream to silence
-  them, and do NOT add `-w`/`-Wno-*` to those targets**: this workspace patches
-  vendored deps (e.g. the NatNet timeout in `optitrack.cpp`), so blanket suppression
-  would hide OUR future mistakes in exactly the files we edit. Any NEW warning in
-  `src/natnet_ros2` or `src/crazyswarm2` is a real regression — fix it.
-- **`declare_parameter(name, {})` is a trap.** A bare `{}` is ambiguous between the
-  `(name, default_value, …)` and `(name, ParameterDescriptor, …)` overloads; gcc
-  picks the descriptor one, declaring the parameter with NO default so rclcpp throws
-  `NoParameterOverrideProvided` at runtime instead of using the empty default. It
-  warns at compile time but only as "would use explicit constructor". Always spell
-  the default out (`std::vector<std::string>{}`). Fixed in `natnet_ros2.cpp`.
-- **RViz and the preflight GUI are ON by default** in `launch.py`
-  (`rviz:=false` / `preflight:=False` to disable). `foxglove:=True` by default
-  but needs `ros-$ROS_DISTRO-foxglove-bridge` (installed by `install_deps.sh`);
-  view via the Foxglove Studio app, not a window.
-- **Mocap "died" / `/poses` 0 publishers** — CONFIRMED cause on this rig: a
-  leftover process bound to UDP 1511. Two `SO_REUSEPORT` sockets on 1511 → the
-  kernel gives each NatNet datagram to only ONE socket → the mocap node starves
-  and hangs silently in libmotioncapture `connect()` (no crash, not in
-  `ros2 node list`). Diagnose `ss -uanp | grep :1511`; kill the orphan and
-  relaunch. Ping to the Motive PC proves nothing (unicast ≠ multicast).
-- **Motive address:** `motion_capture.yaml` `hostname: "auto"` → `launch.py`
-  discovers the Motive PC via a NatNet ping broadcast on UDP 1510 (lab DHCP
-  drifts: .100 → .124 → .152). Override: `mocap_hostname:=<ip>` launch arg or
-  `CRAZYSWARM_MOCAP_HOST`. Must be an IPv4 literal; the launch aborts loudly if
-  nothing answers instead of the node hanging silently.
-- **`/poses` silent with Wi-Fi and the wire both up (FIXED 2026-11-23).** The
-  NatNet data arrives by multicast, and the driver joins the group on
-  `interface_ip`. Upstream's node never forwarded that parameter, so the join used
-  `0.0.0.0` = the default route's interface. NetworkManager had ranked Wi-Fi first
-  (metric 600 against the wire's 20100, its no-internet penalty), so the join
-  landed on Wi-Fi: Motive answered, ping and discovery worked, and no frame
-  arrived. Symptom: `ip maddr show dev <wifi>` lists `239.255.42.99` and the wired
-  device does not. Fix: vendored patch 0007 forwards `interface_ip`, and
-  `interface_ip: "auto"` makes `launch.py` use the address the route to Motive
-  leaves from. The launch prints `mocap: NatNet multicast joined on <ip>`; it
-  should be this machine's 192.168.9.x address. Override:
-  `mocap_interface_ip:=<ip>` or `CRAZYSWARM_MOCAP_IFACE`. Verified with Wi-Fi up:
-  55 Hz `/poses`, join on the wire.
-- **Motive transmission type is read once at connect** (the vendored
-  `motion_capture_tracking` requires Multicast or Broadcast Frame Data; never
-  install the apt package — 1.0.9 hard-codes a foreign interface IP) — after changing it, fully
-  restart the launch. A frozen mocap node ignores SIGINT (blocked in `recv`);
-  launch escalates to SIGKILL — check `pgrep -f motion_capture_tracking` for
-  leftovers (they make the next connect SIGABRT).
-- **Rigid-body orientation.** Create the Motive rigid body with the drone's
-  forward axis on global +X. `locSrv.extPosStdDev=1e-3` force-fuses mocap
-  position, so position error is ~1 mm even with a rotated body — a yaw offset
-  is invisible at rest and a fly-away in flight. The preflight GUI's banner /
-  `err.yaw` catches it (±5° fly; 5–15° fix; >20° no fly).
-- **ROS apt 404 churn.** `ros-<distro>-{sensor-msgs,tf2-ros,ament-cmake-auto}` can
-  404 when apt tries to *upgrade* to a pruned pool version. `install_deps.sh` uses
-  `--no-upgrade` for these (desktop already provides them).
-- **natnet NatNet SDK is NOT committed.** `src/natnet_ros2/.gitignore` excludes
-  `deps/NatNetSDK/*`; CMake runs `install_sdk.sh`, which downloads it with `wget`
-  (x86_64 or ARM) on the first build. A fresh clone therefore needs internet once,
-  and the rig network has none: build on another network first, or copy the folder.
-- **Same-process DDS loopback failure.** On this rig a node's OWN
-  `/parameter_events` messages are never delivered back to itself (events from
-  *other* processes arrive fine). Three consequences: (1) runtime firmware-param
-  pushes in `crazyflie_server.cpp` use `add_on_set_parameters_callback`
-  (synchronous, inside the `set_parameters` service call — no pub/sub
-  round-trip) instead of upstream's ParameterEventHandler, which never fired,
-  so `ros2 param set` silently never reached the drones; (2) `scripts/led.sh`
-  deliberately drives the `ros2` CLI (its long-running daemon keeps the ROS
-  graph warm) instead of rclpy — fresh rclpy processes see DDS discovery never
-  complete and parameter service calls time out; (3) `Crazyswarm()` in a fresh
-  rclpy process can hang waiting on `all/emergency` for the same reason
-  (`color_led.py` avoids Crazyswarm() and calls `set_parameters` directly).
-- **Ctrl-C kills the ROS context BEFORE your handler runs — so "land on abort"
-  silently does nothing.** `rclpy.init` (inside `Crazyswarm()`) installs its own
-  SIGINT handler that shuts the context down; by the time `KeyboardInterrupt`
-  reaches the script, `allcfs.land()` dies with `failed to initialize wait set:
-  the given context is not valid` — at exactly the moment it is needed, leaving
-  the drones flying their last command. Verified failing in sim 2026-09-20.
-  Fix: after `Crazyswarm()` returns, take the signal back with
-  `signal.signal(signal.SIGINT, ...)` (and SIGTERM, which the console's Stop
-  sends) and raise your own exception — `take_signals()` in
-  **`crazyflie_shows/abort.py`**, which every show that can arm must use.
-  Restore `SIG_DFL` for **both** signals once
-  the abort starts, so a second Ctrl-C can still kill the process. That also
-  means ANY second signal kills it mid-landing — this entry used to say the
-  restore stops the console's SIGTERM escalation from interrupting a slow
-  landing; it does the opposite (`SIG_DFL` SIGTERM terminates). So the console
-  now waits **15 s** after SIGINT before SIGTERM for a flight script
-  (`procs.FLIGHT_STOP_ESCALATION`), and the mission window's Abort sends ONE
-  SIGINT and never escalates (`procs.interrupt`). **`ShowAborted` is a
-  `BaseException`** (since 2026-10-09): as an `Exception` it was swallowed by
-  `escort_show.operator_said()`'s `except Exception` around `select()`, so a
-  Ctrl-C at a paced gate did NOTHING — measured in sim, the show sat at its ARM
-  gate after SIGINT. Never wrap a select/publish in a bare `except Exception`
-  that could catch it either. Set `armed = True` **before** the arm loop, not after, or a
-  signal mid-loop skips the abort and leaves part of the fleet armed. Note `ros2 run` does
-  NOT forward a signal sent to it alone; a terminal Ctrl-C reaches the child
-  because it goes to the whole foreground process group, so test an abort with
-  `kill -INT <the script's own PID>`, not the wrapper's.
-- **"Link alive, log data dead": a drone stops publishing ALL telemetry while
-  still answering.** Seen repeatedly 2026-10-02, five drones on one Crazyradio
-  2.0. `/cfX/pose`, `/cfX/status` AND `/cfX/kalman_preflight` all read **exactly
-  0.00 Hz** (not degraded) for one or more drones, picked at random per session
-  and frozen for it; the victim set changes every launch. The link is NOT down:
-  the server keeps completing latency ping round trips (`on_latency`, 10-35 ms,
-  ~0.84/s) and `ros2 param set` still reaches the drone (an LED write works).
-  The DRONE is not at fault either: a second Crazyradio in a separate process
-  connects and streams its log at 10 Hz, with hours of drone uptime (no reboot).
-  **Recovery is now automatic** -- the telemetry watchdog below recreates that
-  one drone's log blocks in place. The manual fallback is to restart the server
-  (its connect sequence does `logReset()` and recreates the blocks).
-  Power-cycling drones is NOT needed -- that is the supervisor-LOCKED case
-  below, a different failure.
-  Diagnose with `warnings.communication.publish_stats: true` (already on) ->
-  `/cfX/connection_statistics`, plus `scripts/link_stall_recorder.py`, which
-  dumps the 60 s precursor for EVERY drone the moment one stalls.
-  **Counter semantics (verified 2026-10-05, an earlier note here was wrong):**
-  `sent_count` ~175/s on a live drone; `ack_count` counts VALID acks (the
-  safelink discard invalidates the ack first, so a high ack_count RULES OUT
-  safelink); `receive_count` counts acks pushed to the app queue but ALSO the
-  drone's 1-byte "nothing to send" nulls, because the null filter is commented
-  out, so `receive == ack` is normal and is NOT proof of payloads; and
-  `enqueued_count` is the OUTGOING queue depth, a gauge (0 is healthy, and it
-  underflows to 2^64-1 during a stall -- a library accounting bug).
-  **MEASURED at a real stall (cf5, 2026-10-05):**
-  while cf5 published nothing, the server was still sending ~175/s and getting
-  ~167 valid acks/s. So the drone answers every poll and has nothing to send, on
-  that link only -- which rules out airtime starvation AND the safelink discard.
-  **Ruled out by measurement, do not re-chase:** telemetry rates (ours are
-  byte-identical to upstream AI-DA-STC and flew for weeks); the console
-  (dashboard open vs closed changed nothing -- 12 connections and continuous
-  probing, all five drones still 10.0 Hz; argv, env values, cgroup and limits
-  identical to a shell launch); CPU/graphics load (24 cores, load 3.6, server
-  2.5%); pty back-pressure (nothing ever blocked in a tty write); apt overlay
-  shadowing; DDS config; the dongle (reproduced on the same stick); drone
-  firmware (all five identical, rev0 2570053570); leftover log blocks
-  (`logReset`, create and `start` are all acked); and the radio loop skipping
-  connections (it services every connection every iteration,
-  `CrazyradioThread.cpp:195`).
-  **LOCALISED 2026-10-05 by packet tracing (`trace_cf:=all`).** At the freeze the
-  link trace reads `log=0 null=~200 other=1` and the host trace agrees
-  (`log=0 dispatched=0`): **zero log packets ever leave the drone on that
-  connection** -- it answers every poll with a 1-byte "nothing to send" null.
-  So nothing is dropped, misdispatched or failing validation host-side; there is
-  nothing arriving to drop. That kills the two host-side explanations outright
-  (lost before dispatch, and misdelivery to another connection) and leaves the
-  drone's per-link log production. The inline-mode desync theory is NOT
-  supported: it would affect every connection and raise unrequested-block
-  warnings, and neither happens.
-  Context, not cause: freezes follow a ~3 s link disturbance and a backlog flush
-  (`log=50 null=1` in one second), but other drones survive identical saturated
-  bursts (cf1 took `log=34 null=0` and stayed healthy), so the flush alone is
-  not sufficient.
-  **ROOT CAUSE, FOUND IN THE FIRMWARE 2026-10-05 -- the drone deletes its own
-  log blocks when it thinks WE went away.** `logRunBlock()` in the firmware's
-  `src/modules/src/log.c` ends with
+  `The message type '.../NamedPoseArray' is invalid`. `build.sh` now strips conda/venv
+  and passes `-DPython3_EXECUTABLE=/usr/bin/python3`; at runtime, deactivate conda
+  yourself.
+- **cffirmware (simulator only):** not a pip package; `setup_sim_firmware.sh` builds it
+  from `crazyflie-firmware` tag 2025.02. Its CMSIS submodule needs `git-lfs`, and the
+  `setup.py` egg leaves out the compiled `_cffirmware*.so`, so the script puts
+  `crazyflie-firmware/build` on `PYTHONPATH`.
+- **Sim `plan_start_trajectory` arity:** the binding built here takes 5 arguments
+  (`p, trajectory, reversed, relative, start_from`, verified 2026-09-17), and calling it
+  with 7 killed the sim server at the first `startTrajectory`. `crazyflie_sil.py` picks
+  the call by `inspect.signature` arity; never hard-code either.
+- **NatNet SDK not committed:** `install_sdk.sh` downloads it with `wget` on the first
+  `natnet_ros2` build, so a fresh clone needs internet once, which the rig network lacks.
+- **ROS apt 404s:** upgrading `ros-<distro>-{sensor-msgs,tf2-ros,ament-cmake-auto}` can
+  404 on a pruned pool version; `install_deps.sh` installs them with `--no-upgrade`.
+- **Preflight GUI on 22.04:** pip `cfclient` pulls PyQt6 ≥ 6.5, whose xcb plugin needs
+  `libxcb-cursor0`; without it the node dies with
+  `Could not load the Qt platform plugin xcb`. `install_deps.sh` installs it.
 
-      // Check if the connection is still up, oherwise disable
-      // all the logging and flush all the CRTP queues.
-      if (!crtpIsConnected()) { logReset(); crtpReset(); }
+### LED convention
 
-  and `crtpIsConnected()` -> `radiolinkIsConnected()` in `src/hal/src/radiolink.c`
-  is just `(xTaskGetTickCount() - lastPacketTick) < M2T(1000)`, where
-  `lastPacketTick` is refreshed ONLY when the DRONE RECEIVES a CRTP packet
-  (`SYSLINK_RADIO_RAW`/`_BROADCAST` in `radiolinkSyslinkDispatch`). So **one
-  second without receiving anything makes a drone delete every log block and
-  flush its CRTP queues** -- and it never tells the host. The nRF51 goes on
-  acking polls at the radio level, so every host-side counter stays perfect.
-  That is the entire syndrome. It also promotes the "~3 s link disturbance
-  before each freeze" from context to CAUSE: the drone's receive gap crossed
-  1000 ms. The firmware source is on this box (`~/crazyflie-firmware`, tag
-  2025.02, same version the fleet runs) -- read it before theorising about the
-  radio again.
-  **What the trigger therefore IS, and is not** (measured 2026-10-05, correcting
-  a first guess that the 1 Hz warning ping sat on the threshold): a healthy
-  drone on this rig reports `/cfX/status` `num_rx_unicast` ~168/s and
-  `num_rx_broadcast` ~145/s, and `count_rx_unicast` is incremented in the SAME
-  `radiolinkSyslinkDispatch` branch that refreshes `lastPacketTick` -- so the
-  timer is refreshed ~170 times a second by the link library's own auto-pings.
-  The margin is not thin. Tripping it takes a GENUINE >= 1 s window in which
-  that one drone receives nothing at all, which is exactly the "~3 s link
-  disturbance" seen before every freeze. **What causes that outage is the one
-  thing still open.** `server.yaml` `keepalive_frequency: 4.0` adds a guaranteed
-  per-drone unicast floor (4/s on top of ~170/s): cheap insurance if auto-ping
-  behaviour ever changes, NOT a fix -- a starved connection starves the
-  keep-alive too, since both go through the same radio thread. Its timer runs on
-  `callback_group_cf_cmd`, not the mutually-exclusive `callback_group_cf_srv`
-  where the watchdog's rebuild runs, so a rebuild cannot silence it.
-  **So the recovery, not the prevention, is what makes the rig usable.**
-  **How it was measured, before the firmware was read: the drone DROPS its log
-  blocks.** The
-  watchdog's first remedy was a stop/start of the existing blocks; at a real cf5
-  stall that came back as `Could not start log block!` -- a response, not a
-  timeout, so the drone answered the control request and REFUSED it. A block
-  cannot be started if it no longer exists on the aircraft. That single result
-  explains the whole syndrome: no block -> nothing to send -> every poll
-  answered with a null -> a link that measures perfectly healthy. It also
-  explains why only a server restart ever recovered it (its connect sequence
-  re-CREATES the blocks) and why a second dongle always worked (a fresh
-  connection creates its own). What makes the drone drop them is still open --
-  it is the firmware's own 1 s radio-activity timeout, above.
-  **FIX IN PLACE -- the telemetry watchdog** (`server.yaml`
-  `telemetry_watchdog_s: 5.0`, `check_telemetry_watchdog()` in
-  `crazyflie_server.cpp`): when a drone delivers no log data for that long while
-  its latency echo is still current (< 2 s), the server recovers that one drone
-  in two tiers -- **tier 1** `restart_log_blocks()` (stop/start, cheap, works if
-  the blocks still exist), and when that throws, **tier 2**
-  `rebuild_log_blocks()`: destroy the block objects, `logReset()`, then create
-  and start them all again, which is the logging half of a server restart
-  without the restart. Tier 2 is why every block is now registered through
-  `add_log_builder()` at connect instead of just being constructed -- the
-  builder closure is the only record of how to make that block again.
-  **VERIFIED ON HARDWARE 2026-10-05:** cf5 stalled twice in one 20-minute run;
-  each time tier 1 was refused, tier 2 recreated the blocks, and `/cf5/pose`,
-  `/cf5/status` and `/cf5/kalman_preflight` were all back **~1.0 s** after the
-  stall was declared -- no server restart, no power cycle. Note the stall
-  RECURS on the same drone, so the watchdog treats it as an ongoing condition,
-  not a one-off. Every wait on the recovery path is **bounded**
-  (`RECOVERY_TIMEOUT_MS` = **1000 ms x 2** per request -- an earlier version of
-  this note said 300 ms, which the code raised after a real start answered
-  later than that; it bails out entirely if `logReset` goes unanswered) because
-  the link timer shares a mutually-exclusive callback group with `land` and
-  `emergency` -- an unbounded wait there would be worse than the stall. **That
-  group is FLEET-WIDE, not per drone** (created once in the `CrazyflieServer`
-  constructor and handed to every `CrazyflieROS`), and it also carries the 1 ms
-  `spin_once` that is the only place log data is dispatched -- so a stuck wait
-  costs ALL drones' per-drone services and ALL telemetry. See the open item
-  below. The connect path still waits unbounded, deliberately, unchanged.
-  **THREE CORRECTNESS FIXES 2026-10-06, found by reading the firmware rather
-  than the host:**
-  (1) **tier 1's `start()` was still unbounded.** Blocks built at connect carry
-  `m_timeout_ms = 0`, and the one-arg `start()` forwards it, so tier 1 ran the
-  unbounded wait -- the trap `627ab55` closed for uploads, left open one
-  function away. `stop()` was already bounded; only `start()` was missed. There
-  is now a two-arg `start(period, timeout_ms)` with **no default argument**,
-  and tier 1 passes the bound. Do not give it a default or collapse the
-  forwarder: bounding CONNECT would make one busy link kill all five drones'
-  launch, because a throw out of a log-block builder is not caught at the
-  `CrazyflieROS` construction site.
-  (2) **a log-control answer could satisfy the wrong wait.**
-  `crtpLogControlResponse::valid()` tests only port 5 / channel 1 / 3-byte
-  payload, which EVERY log-control reply satisfies -- and tier 1 is literally
-  `stop(); start(p);`, so a late stop answer was read as "start succeeded".
-  Tier 1 then "worked", logged `log blocks restarted`, and the watchdog never
-  escalated to the tier 2 that actually fixes it. Waits now match on the
-  command byte and the block id, which works because the firmware answers by
-  REUSING the request packet (`log.c` `logControlProcess` overwrites only
-  `data[2]` and `size`). **`logReset` is matched on the command ONLY** --
-  `crtpLogResetRequest` is `Packet(5,1,1)`, so `data[1]` of a reset reply is
-  indeterminate and matching an id there would reject the drone's own answer.
-  (3) **the rebuild destroyed our own log blocks BEFORE probing the drone.** An
-  unanswered `logReset` left that drone with zero host-side blocks while the
-  aircraft may still have held live ones. The probe now comes first, so a
-  failed probe is a no-op.
-  It **refuses to act unless the drone may not be airborne**: mocap must
-  positively show it on the floor (`z <= 0.10 m`), unknown altitude counts as
-  airborne, AND `commanded_flight_` must be clear. That flag was dead code
-  until 2026-10-06 -- declared false, set false, read once, **never set true**
-  -- so the gate was the mocap test alone despite a comment implying more. It
-  is now set by every handler that can put a drone in the air, the `/all/*`
-  broadcasts included, and cleared by mocap. The gate is also re-checked
-  between builders, because it used to be evaluated once while the bounded
-  worst case to the last builder is several seconds. Set `telemetry_watchdog_s`
-  to 0 to disable.
-  **Packet tracing** (`ros2 launch crazyflie launch.py trace_cf:=all`, or a
-  comma-separated subset) prints ONE summary per second per drone from the link
-  layer and from `processPacket`, plus per-packet lines only for anomalies. It
-  is a launch argument, NOT `--ros-args` (`ros2 launch` has no such flag), and
-  is read at connect because this rig's `/parameter_events` never loop back.
-- **An UPLOAD can wedge the server permanently -- the worst failure on this
-  rig, and the watchdog above cannot save you from it.** Seen 2026-10-05
-  mid-show: all five drones stopped publishing telemetry during the trajectory
-  upload and **did not recover when the show was stopped**, because the server
-  itself was stuck, not the drones. The chain, each link verified in the log or
-  the source:
-  1. The upload saturates the radio and starves the other connections --
-     measured `[cf5] Low unicast receive rate (0.10 < 0.90). Sent: 2807.
-     Received: 289`, i.e. the drone got 10% of what was sent to it.
-  2. A starved drone crosses the firmware's 1 s radio-activity timeout and runs
-     `logReset(); crtpReset();` (see the stall entry above). **`crtpReset()`
-     flushes its CRTP queues -- including the memory-write response the server
-     is at that moment waiting for.**
-  3. `Crazyflie::uploadTrajectory` waited for that response with an UNBOUNDED
-     `waitForResponse`, so the service callback never returned.
-  4. `callback_group_cf_srv` is **mutually exclusive** and carries that drone's
-     `land`, `takeoff`, `arm`, `emergency` and `spin_once` AND the telemetry
-     watchdog's timer. One stuck upload therefore disables all of them for that
-     drone, for good. `[cfX] upload_trajectory(...)` is logged on ENTRY, so a
-     line with nothing after it is the signature. The preflight GUI showing
-     `takeoff (cfX): timed out waiting for response` is the same wedge.
-  SIGINT will not stop a server in this state (its threads are blocked); it
-  needs SIGKILL, and `ros2 launch` leaves the node behind.
-  **FIXED**: the memory-write wait is now bounded (500 ms x 2, the chunk resent
-  up to 3 times) and `uploadTrajectory` throws if it still gets nothing. The
-  server catches that, logs FATAL, and records the id in `bad_trajectories_` --
-  **`start_trajectory` then REFUSES that id** until it uploads cleanly, because
-  the caller otherwise flies a partially written trajectory. Do not "simplify"
-  that refusal away. (`UploadTrajectory.srv` DOES carry `success`/`message` and
-  `crazyflie_py` raises on it -- an earlier note here and a comment in the
-  server both said otherwise. `StartTrajectory.srv` is the one with no response
-  fields, which is why `bad_trajectories_` still matters on the broadcast path.
-  That set is now mutex-guarded: it is written on `callback_group_cf_srv` and
-  read from the broadcast handler on `callback_group_all_srv_`, and a
-  concurrent read/write of a `std::set` is UB.)
-  **ALSO FIXED 2026-10-06 -- the reply was matched by SHAPE, not identity.**
-  `crtpMemoryWriteResponse::valid()` checks only port 4 / channel 2 / 6-byte
-  payload, so the chunk RESEND that `627ab55` introduced could leave the host
-  one reply out of phase for the rest of the upload, and a chunk whose request
-  was then lost counted as written -- `success = true` for a trajectory with a
-  24-byte hole. `sizeof(poly4d)` is 132 and 132 % 24 != 0, so the hole lands
-  mid coefficient array and the drone flies a hybrid of two polynomials;
-  `piecewise_eval` applies whatever bytes are there with **no validation, no
-  clamp and no finiteness check**, and the supervisor only reacts to TUMBLED
-  and battery. The wait now matches the memory id and the 32-bit address
-  (the firmware echoes both -- `crtp_mem.c` `memWriteProcess`, whose own
-  comment reads *"Dont' touch the first 5 bytes, they will be the same."*), and
-  a non-zero status THROWS instead of being logged, because it can only mean
-  `(offset + length) <= sizeof(trajectories_memory)` failed -- deterministic,
-  so not retried. Tightening the predicate removed an accidental latency
-  absorber, so a stale reply now counts as proof the drone is alive-but-
-  backlogged and buys more time, under a 10 s per-chunk and 90 s per-call cap.
-  **Still unbounded, same trap:** most other `waitForResponse()` calls in
-  `crazyflie_cpp` (params, log TOC). They run at connect, where blocking is the
-  documented behaviour, but any of them reached while the rig is saturated can
-  wedge a drone's services the same way. Bound them before calling them from a
-  service handler.
-- **`requestMemoryToc` ALREADY matches ids -- do not "fix" it.** An audit
-  reported that it consumes GetInfo replies positionally with no id check, so a
-  late reply would shift every later entry and a trajectory write could go to
-  the wrong memory. **That reading is inverted**, and the mistake is easy to
-  repeat: `Crazyflie.cpp:19` is an unconditional `#define FIRMWARE_BUGGY` with
-  no `#undef` anywhere, so the `#ifndef FIRMWARE_BUGGY` branch -- the one that
-  would consume positionally -- is **preprocessed away**. The compiled function
-  is a single send-wait ping-pong whose LIVE branch is
-  `if (res::id(p) != i) { warn; --i; }`; the `assert` is the dead `#else`. The
-  drone cannot reorder these anyway: `memTask` is one FreeRTOS task draining
-  one FIFO and replying synchronously with a blocking send, and it echoes the
-  requested id. Two further traps if you do edit it: dropping the `--i` removes
-  the only absorber for a duplicated request, and
-  `m_memoryTocEntries[res::id(p)]` would be an unbounded indexed write driven
-  by a byte the drone chose, into a vector sized from an earlier packet --
-  heap corruption in the process that owns the only radio. The ping-pong also
-  has a firmware reason: `crtpRxTask` blocks **forever** on a full port queue
-  ("we should never drop a packet"), so keeping one GetInfo outstanding keeps
-  at most one MEM packet in that 16-deep queue.
-- **OPEN: `callback_group_cf_srv` is ONE fleet-wide mutually-exclusive group.**
-  Created once in the `CrazyflieServer` constructor and handed to every
-  `CrazyflieROS`, it carries each drone's `land`/`takeoff`/`arm`/`emergency`/
-  `go_to`/`start_trajectory`/`upload_trajectory`, the telemetry watchdog timer,
-  AND the 1 ms `spin_once` that is the only place log data is dispatched. A
-  `MultiThreadedExecutor` does not help: rclcpp runs one callback at a time from
-  a mutually-exclusive group. So a stuck wait on ONE drone costs all five
-  drones' per-drone services and ALL telemetry -- which explains the measured
-  2026-10-05 "all five stopped publishing during the upload" with no firmware
-  involvement needed. Worst-case tier-2 rebuild is a ~14 s fleet-wide freeze.
-  **Not changed, deliberately**: per-drone groups are the only safe
-  granularity, and that is a concurrency refactor of the binary that owns the
-  radio. `Crazyflie::processAllPackets` and `Crazyflie::waitForResponse` pop the
-  **same per-connection receive queue** and match replies by shape, and the
-  `Crazyflie` object has no mutex -- so splitting only `spin_once`, or only
-  `upload_trajectory`, out of the group makes `spin_once` eat the reply a
-  service is blocked on. **Measure before refactoring:** time
-  `restart_log_blocks()`/`rebuild_log_blocks()` on the bench with five drones,
-  props off, on the floor. If the freeze stays ~1.0 s (as measured 2026-10-05),
-  take the cheap fix instead -- lower `RECOVERY_TIMEOUT_MS` toward 300-500,
-  which shrinks the worst case to ~4-7 s at zero concurrency risk. If it goes
-  ahead, the acceptance criterion is that **while one drone rebuilds, the other
-  four keep publishing `/cfX/pose` at 10.0 Hz and their `land`/`arm` still
-  answer**; and it needs a server-level recovery gate (the shared group is
-  currently a de-facto "one recovery at a time" lock) plus an upload mutex
-  (today's sequencing is accidental -- `crazyflie_py` happens to spin until each
-  upload future completes).
-  **Mitigating, and verified:** `/all/emergency`, `/all/land` and `/all/takeoff`
-  are on `callback_group_all_srv_` and go through `broadcaster_`, which never
-  touches a stuck drone's `Crazyflie` object -- so the fleet e-stop, the
-  console's E-STOP and the preflight GUI's `e` key keep working through all of
-  this. That is why these are "high", not "critical".
-- **STILL OPEN: what causes the >= 1 s receive gap in the first place.** The
-  firmware's reaction is fully explained (`radiolink.c` -> `log.c`
-  `logReset(); crtpReset();`) and a healthy drone here sees ~168 unicast rx/s,
-  so tripping it takes a genuine outage. The live candidate, UNMEASURED, is the
-  broadcast-priority skip in `crazyflie-link-cpp/src/CrazyradioThread.cpp`: if
-  ANY broadcast connection has a queued packet or a pending retry, every
-  non-broadcast connection is `continue`d for the whole pass -- and
-  `posesChanged` feeds the broadcast connection continuously at the 50 Hz mocap
-  rate. That is upstream code; it deserves its own measurement, not a drive-by
-  edit.
-- **A second Crazyradio is the best diagnostic probe on this rig.** With the
-  server holding one dongle, a second one lets another process talk to the same
-  drone: the link library **skips any radio whose serial it cannot query**
-  (`USBManager.cpp:188-207`), so the server's claimed stick is invisible to
-  other processes and the free one is `devId 0` to them -- address it as
-  `radio://0/80/2M/E7E7E7E70X`, not `radio://1/...`. That is how the drone was
-  exonerated above (`ros2 run crazyflie log --uri ... --var kalman.stateX`).
-  Both dongles on one channel do collide briefly: fine for a read-only probe,
-  not for flight.
-- **Two logging traps that waste hours.** (1) `"[cfX] Logging to /pose at N Hz"`
-  is printed on INTENT, before the block is created -- a block that never
-  delivers leaves no trace. (2) The link warnings (`Low unicast receive rate`,
-  `High latency`) only fire while a rate is BAD, so **absence of warnings is not
-  evidence of health**; a "when did each drone die" timeline built from the last
-  warning per drone is an artifact (it produced a convincing but entirely false
-  reverse-connection-order pattern on 2026-10-02). Measure topics directly, all
-  drones simultaneously -- sequential `ros2 topic hz` misses a drone that drops
-  while you are sampling another.
-- **Supervisor LOCKED latches after an e-stop; only a power cycle clears it.**
-  `/cfX/status` `supervisor_info` with bit `0x40` set and `CAN_BE_ARMED` (0x01)
-  clear means the firmware will refuse to arm, and the state machine has exactly
-  one transition out of locked -- back to locked, blocker `supervisorAlways`
-  (`supervisor_state_machine.c`). Battery out and in, per drone. Verified
-  2026-10-02: all five sat locked with healthy batteries (4.10-4.22 V) after an
-  e-stop, and the only symptom was that nothing flew. Every show now checks
-  this BEFORE uploading — `check_supervisor`/`report_supervisor` in
-  **`crazyflie_shows/preflight.py`** — because the upload is ~55 s and the
-  arming failure used to come after it. `arm()` is fire-and-forget
-  (`crazyflie_py` never inspects the response), so a refused arm is otherwise
-  invisible: the only positive confirmation a drone actually flew is its mocap
-  altitude. A silent `/cfX/status` is counted as a NOTE, not a refusal,
-  because that is also what the telemetry stall looks like — watch that drone
-  on takeoff.
-- **Server BLOCKS FOREVER on the first unreachable enabled drone.** The cpp
-  server connects drones in lexicographic `std::map` order and hangs
-  **silently** on the first enabled drone that doesn't answer radio — one
-  unreachable drone kills the whole launch (no error, no `/all/*` services,
-  needs SIGKILL). Go/no-go rule: **scan every enabled address before every
-  launch** — `./scripts/scan_fleet.sh`, which derives the list from the yaml
-  and reports GO/NO-GO. Never scan a list written down in prose: the five
-  copies that used to exist in this repo had all drifted, and the drone none
-  of them named (cf4) is the one the yaml marks intermittent.
-  cf6 died this way 2026-08-04 (silent on full channel/datarate
-  sweeps at its own AND factory address — physical check needed).
-- **Two Crazyradios (when running two dongles — current rig is single-dongle):
-  channels must be ≥2 apart at 2M.** A 2M channel is ~2 MHz wide, so adjacent
-  channels overlap and crazyflie-link-cpp refuses the pair — USBManager.cpp:
-  `"Channels 80 and 81 are already served by Crazyradio 0"`. Historical
-  two-dongle rig: cf1 on `radio://0/80/2M`, cf11 on `radio://1/90/1M`
-  (10 channels clear).
-- **URI datarate must match the drone.** A wrong datarate in the URI (e.g. `2M`
-  for a drone talking `1M`) makes the server hang **forever** waiting for a
-  drone that never answers — no error, and the `/all/*` services are never
-  created. Verify with a scan on the drone's address
-  (`scan --address 0xE7E7E7E711` → `radio://*/90/1M/...`).
-- **ONE `crazyflies.yaml`: `crazyflie/config/`.** It is what the server reads,
-  what every planner reads, and what `sync_initial_positions.py` writes.
-  `crazyflie_shows` shipped a second copy until 2026-10-02 — that is gone, and
-  do not reintroduce one: the copies drifted (the show's had no cf8 while the
-  workspace's did, so the planner verified one fleet and the server flew
-  another). `launch.py`/`show_launch.py` still accept
-  `crazyflies_yaml_file:=<path>` for a one-off fleet; `show_launch.py` prints a
-  **FLEET YAML OVERRIDE** banner naming the file and the `--yaml` sync command,
-  because an override silently decouples the file the server seeds from the
-  file the sync writes. Per-show fleet changes should be an `enabled:` edit in
-  the one file, not a second file.
-- **`initial_position` comes from `/poses`, never `/cfX/pose`.** The onboard
-  estimate is seeded by the yaml — copying it back is circular. **Use
-  `scripts/sync_initial_positions.py`** (mocap up, server not yet started): it
-  samples `/poses`, matches each drone to the rigid body of the same name, and
-  rewrites only the `initial_position` triples in place (comments preserved).
-  **Scope is the ROOM, not the fleet** (changed 2026-10-02): it writes a mark
-  for every drone mocap is streaming, `enabled` or not, so switching fleets
-  between shows never carries a stale mark — place once, sync once, then enable
-  whichever subset the show needs (`--enabled-only` for the old behaviour). An
-  enabled drone that is not streamed is still a refusal; a parked one is
-  skipped, and a parked drone standing <1 m from a flying one is reported as a
-  mark that cannot be used until it moves. It REFUSES to write when an enabled
-  drone is not streamed, is moving
-  (>10 mm spread over the window), sits above 0.5 m, or when two drones are
-  <0.30 m apart (marker sets merge; since 2026-11-06 the 1 m rule below only
-  WARNS, because guard/escort/STL layouts start closer and every planner checks
-  its own spacing) — `--dry-run` to preview, `--force` to override, `--with-z` to
-  write the measured z instead of keeping the yaml's. Manual equivalent: read
-  x/y from `ros2 topic echo /poses | grep -A5 -- '- name: cf1$'` and edit by
-  hand. Either way, restart the server (yaml read only at launch). For the
-  trajectory shows, enabled drones **≥1 m apart** (same-trajectory flight
-  preserves start separation; their planners check it),
-  and each drone at ITS OWN yaml position — wrong-corner placement = crossing
-  goTo paths = the real collision of 2026-08-04.
-- **Sim `plan_start_trajectory` arity — DO NOT ASSUME, PROBE.** This entry used
-  to claim the binding is 7-arg (`relative_position`/`relative_yaw` +
-  `start_from`/`start_yaw`). That is **backwards** for the build on this box:
-  verified 2026-09-17, `~/crazyflie-firmware/build/cffirmware.py` exposes
-  `plan_start_trajectory(p, trajectory, reversed, relative, start_from)` —
-  **5 args**. Calling it with 7 raises `TypeError: takes 5 positional arguments
-  but 7 were given`, which **kills the sim server outright at the first
-  `startTrajectory`** — the demo runs fine through takeoff, waypoints and the
-  gather, then the server dies mid-flight and the script hangs forever in the
-  next `sleep`. `crazyflie_sim/crazyflie_sil.py` now picks the call by
-  `inspect.signature(...)` arity at import, so either binding works. Sim-only;
-  hardware unaffected.
-- **Sim runs need `--ros-args -p use_sim_time:=true`** for any script that
-  streams setpoints or sleeps on a schedule (the escort included) — the sim clock is
-  only paced to wall time (`sim.realtime`, default true; it was ~4x slower before the
-  2026-11 speed-up) and runs flat out with `sim.realtime:=false`, so without the flag
-  the script drifts away from the physics. Hardware runs WITHOUT the flag.
-- **LED convention: green = drone connected and ready for command; red =
-  drones are in flight / a script is controlling them.** The server turns the
-  Color LED deck green on connect (and off on clean disconnect); every
-  crazyflie_py script sets it red for its lifetime and restores green on exit
-  (`crazyswarm_py.py`, atexit — survives exceptions and Ctrl-C; if rclpy is
-  already shut down the deck keeps its last color). Change colors manually
-  with `scripts/led.sh` or `ros2 run crazyflie_examples color_led`.
-- **Console blind after a Wi-Fi switch (2026-11-05).** The mission console runs
-  every check through the `ros2` CLI, and so through the `ros2` daemon, which it
-  spawns when it starts. Its fleet journal is a long-running
-  `ros2 topic echo /rosout`. Both join DDS on the network the laptop had **when
-  the console started**. Switch Wi-Fi afterwards (hangar → `motive`, because the
-  wired port is taken) and both go deaf, while RViz, the preflight GUI and the
-  drones, all launched after the switch, work normally. Symptom: health says
-  "crazyflie_server not running" and every drone is BLOCKED during a real flight.
-  Reproduced with `scripts/offline_window.sh console_network` (sim, private
-  domain). After the switch the old daemon's `ros2 node list` was **empty** while
-  `--no-daemon` saw the server. The journal heard **0 of 2** `land` commands while
-  reporting "listening". `ros2 daemon stop` fixes health but **not** the journal,
-  which is a separate process. Not affected: the mission window's 3D view (the
-  browser talks to foxglove_bridge directly; headless Chrome drew best-effort
-  `/poses` fine after the switch). **Fix today: switch networks first, then
-  start the console. If the network changes, restart the console and run
-  `ros2 daemon stop`.**
+Green: drone connected and ready for command. Red: a script is controlling the drones.
+The server turns the Color LED deck green on connect and off on a clean disconnect; every
+`crazyflie_py` script sets it red for its lifetime and restores green on exit
+(`crazyswarm_py.py`, `atexit`, which survives exceptions and Ctrl-C; if rclpy is already
+shut down, or after a hard link loss, the deck keeps its last colour). Set colours by hand
+with `scripts/led.sh` or `ros2 run crazyflie_examples color_led`.
 
+---
+
+Full earlier text: `git show 678bac1:docs/rig/known-issues.md` (and the 2026-11-17 session
+report: `git show 678bac1:docs/rig/radio-link-2026-11-17.md`).

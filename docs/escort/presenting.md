@@ -1,10 +1,10 @@
 # Escort: presenting to guests
 
-The show is operator-paced, so you can talk for as long as you need at each stage.
-Nothing moves on until Enter is pressed. A full run takes about 4 to 6 minutes.
+The show is operator-paced: nothing moves on until Enter is pressed, so you can talk as
+long as you need at each stage. A full run takes about 4 to 6 minutes.
 
 **Two people:** the *operator* at the laptop presses Enter (and can narrate), and the
-*pilot* flies the DJI. Agree beforehand who says "bring it up" and "bring it down". Those
+*pilot* flies the DJI. Agree beforehand who says "bring it up" and "bring it down": those
 are the only two moments when the show waits for the pilot instead of the operator.
 
 ## The script
@@ -25,47 +25,20 @@ geometry, not speed.**
 
 ![What the lights mean](../diagrams/11-light-legend.png)
 
-If the whole fleet goes **amber**, the show is waiting for someone. If the defenders go
-**cyan**, the DJI left its box: the pilot flies back toward the middle and they resume.
-
 ## Questions you will get
 
-**"Is it pre-programmed?"** The defence is not: it works out where the threat is 20 times a
-second. Move the DJI and the whole ring follows and re-aims.
-
-**"What stops a crash?"** Minimum distances are enforced on every command before it
-leaves the laptop. There is also a geofence, automatic landing if the cameras lose a
-drone, and a one-click emergency stop.
-
-**"Could it get through?"** Yes, if it were fast enough (about 1 m/s here, against the
-0.6 m/s it flies) or if the DJI moves during the attack. We know roughly where that line is.
-
-**"Do the defenders push it away?"** No. They hold their line, and the attacker is the
-one that keeps its distance. Nobody touches anybody.
-
-**"Would this work outdoors?"** Not as it is: it depends on the cameras. What carries
-over is the behaviour: turning the ring, picking the blocker, and the safety rules.
-
-**"How does it know where everything is?"** Motion-capture cameras track reflective
-markers. All decisions are made on this laptop and sent out over one radio.
-
-More answers, sorted by audience: [details/qna.md](details/qna.md).
+The answers, shortest first, are in [details/qna.md](details/qna.md) (start with Tier 1),
+with the claims to keep honest at the end.
 
 ## When something goes wrong, live
 
+Have these ready. Narrating a failure calmly is worth more than a clean run.
+
 | What happened | Say |
 |---|---|
-| The attacker reaches the DJI | "That one got through, and that is the honest state of it. Three defenders cannot seal a circle; they can only turn to meet the threat." |
-| The ring goes cyan and stops | "The geofence tripped: the DJI left the box the ring can hold, so the ring parked instead of following it out." |
+| The attacker reaches the DJI | "That one got through, and that is the honest state of it. Three defenders cannot seal a circle; they can only turn to meet the threat, and if the DJI moves at the same time they run out of time." |
+| The ring goes cyan and stops | "The geofence tripped: the DJI left the box the ring can hold, so the ring parked instead of following it out." The pilot flies back toward the middle and they resume. |
 | A drone lands by itself | "It lost tracking, so it landed. That is the rule: no position, no flight." |
 | A drone never arms | "A firmware safety latch. It needs a battery re-plug, which is deliberate." |
-| Nothing happens at all | "Give me a moment, this is a research rig." Then stop talking and fix it. |
-
-## Claims to keep honest
-
-- **"It cannot get through"** is true for *this room and these settings*, not in general.
-- Say the attacker is **as fast as** the defenders, never "faster". It plans at 0.8 m/s,
-  but its commands go through the same 0.6 m/s limit.
-- **"Ten different attacks"** is true: runs that differed only in the defenders' starting
-  places produced attacks from all around the circle.
-- "I don't know, I can find out" is a good answer. Never upgrade a claim under pressure.
+| E-STOP fired | "That was me, or the software. Everything on the floor is the correct result of an abort: it is one click and it always works." |
+| Nothing happens at all | "Give me a moment, this is a research rig." Then stop talking and fix it. Do not debug out loud. |

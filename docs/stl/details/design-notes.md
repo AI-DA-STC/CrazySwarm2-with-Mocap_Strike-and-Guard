@@ -1,9 +1,9 @@
 # STL game: design notes
 
-5 defenders vs 5 intruders: a colleague's Signal-Temporal-Logic game, flown
-on ten Crazyflies. Added 2026-10-13. The plain-language version is
-[../stl/how-it-works.md](../how-it-works.md); code is under
-`src/crazyswarm2/crazyflie_shows/` and `src/crazyswarm2/crazyflie_examples/`.
+5 defenders vs 5 intruders: a colleague's Signal-Temporal-Logic game, flown on ten
+Crazyflies. Added 2026-10-13. Plain-language version: [how-it-works.md](../how-it-works.md);
+how to fly it: [run.md](../run.md). Code is under `src/crazyswarm2/crazyflie_shows/` and
+`src/crazyswarm2/crazyflie_examples/`.
 
 | File | What it is |
 |---|---|
@@ -38,12 +38,11 @@ The guard re-uses several of these ideas, not the code:
 
 ## Why the flight can be checked before takeoff
 
-The game never reads mocap. Every setpoint comes from its own model, and its
-only randomness is one generator. So **a seed fixes the whole flight**:
-`stl_game.play(seed)` computes every `goTo`, `land` and LED cue up front
-(~1 s), `verify()` checks that table, and `fly()` sends that same table. A
-seed that `plan_stl` passes is the flight `stl_show` flies. Every run prints
-its seed, and `seed:=N` replays it.
+The game never reads mocap, and its only randomness is one generator, so a seed fixes the
+flight ([diagram](../how-it-works.md#the-big-difference-from-the-escort-it-is-planned-before-take-off)).
+In code: `stl_game.play(seed)` computes every `goTo`, `land` and LED cue up front (~1 s),
+`verify()` checks that table, and `fly()` sends that same table. A seed that `plan_stl`
+passes is the flight `stl_show` flies.
 
 If a later version closes the loop on mocap, this property is gone, and with
 it the pre-flight proof. The port would then need the escort's approach
@@ -97,29 +96,21 @@ Not changed:
 
 ## Measured 2026-10-20 (this repo, v3)
 
-- **The game square is not the measured room.** `stl_game` centres its 4 m x 4 m square
-  on the world origin; `arena.yaml`'s tracked volume is centred at `ARENA_CENTRE`
-  (-0.213, -0.072), tested clean to 2.00 m and lost at 2.24 m. Distances from that
-  centre: intruder goals 2.14 / 2.33 / 2.29 / 2.62 / 2.71 m (four beyond the lost
-  radius), defender start slots 1.41-2.19 m, square corners 2.63-3.03 m. Neither
-  `verify()` nor `plan_stl` checks the room, by design ("Not changed" above). Fly the
-  edges in a test before trusting them, or ask the colleague to shrink or move the
-  square.
+- **The game square against the room (closed).** In the old room, measured from
+  `arena.yaml`'s centre, four of the five intruder goals (2.29-2.71 m) lay beyond the
+  2.24 m where tracking was lost. The big arena (2026-11) contains the whole square.
+  Neither `verify()` nor `plan_stl` checks the room, by design ("Not changed" above).
 - **Simulator, ten drones, seed 0, `min_sep:=0.04`, drones on their start slots:**
   takeoff to disarm, 5 BLOCKED, exit 0. On the committed marks instead, the show
   correctly refused (cf10-cf11 start move 0.010 m).
 
-## Running it
+## Settings
 
-```bash
-ros2 run crazyflie_shows plan_stl                       # seeds 0-19 on the yaml marks
-ros2 run crazyflie_shows stl_show --ros-args -p dry_run:=true
-ros2 run crazyflie_shows stl_show --ros-args -p seed:=7 -p min_sep:=0.10
-```
-
-All ten drones must be `enabled: true`: cf1/2/4/5/8 defend, cf10-14 intrude
-(`defenders:=` / `intruders:=` to change, in slot order). Any other enabled
-drone stays on the ground but is still landed by an abort.
+All ten of the game's drones (`DEFENDER_CF_NAMES`, `INTRUDER_CF_NAMES`) must be
+`enabled: true`; `defenders:=` / `intruders:=` (comma lists, in slot order; `plan_stl
+--defenders` / `--intruders` likewise) fly others. Any other enabled drone stays on the
+ground but is still landed by an abort. Other parameters: `seed` (-1 draws one),
+`min_sep` (0.15 m), `dry_run`, `check_placement`, `placement_tol`.
 
 ## When v4 arrives
 
@@ -138,3 +129,7 @@ drone stays on the ground but is still landed by an abort.
 5. Re-run `plan_stl` without `--against` for the new separation numbers, then
    `dry_run`, then sim, then hardware, and update the numbers above with a
    date.
+
+---
+
+Full earlier text: `git show 678bac1:docs/stl/details/design-notes.md`

@@ -1,14 +1,8 @@
 # Running the guard show
 
-Defenders protect a VIP (a fixed point, or a hand-flown DJI) from attackers. You
-choose how many of each, and which strategy each team uses. A safety layer sits
-under both strategies and keeps every drone apart, out of the DJI's way and
-inside the room, whatever the strategies ask for.
-
-The shared steps (power, mocap, scanning, syncing) are in
-[../02-flight-day.md](../02-flight-day.md). This page is only what is different. How the
-game works: [how-it-works.md](how-it-works.md). Showing it to guests:
-[presenting.md](presenting.md).
+Defenders protect a VIP (a fixed point, or a hand-flown DJI) from attackers. This page
+is only what differs from the shared [flight day](../02-flight-day.md). The game:
+[how-it-works.md](how-it-works.md). Guests: [presenting.md](presenting.md).
 
 ![Guard flight day, in order](../diagrams/31-guard-flight-day.png)
 
@@ -21,16 +15,15 @@ ros2 run crazyflie_shows plan_guard --defenders 4 --attackers 3
 It plays a dozen matches against simulated drones and ends in **SAFE on every
 seed** or **SAFETY FAILED**. Do not fly a configuration that fails.
 
-To see the matches, open RViz and add `--rviz`:
+To watch the matches in RViz:
 
 ```bash
 rviz2 -d install/crazyflie_shows/share/crazyflie_shows/data/guard.rviz &
 ros2 run crazyflie_shows plan_guard --rviz --matrix
 ```
 
-`--matrix` plays every defence strategy against every attack strategy in turn, and
-`--matrix --rules all` does that under every rule set.
-`ros2 run crazyflie_shows plan_guard --list` names them all.
+`--matrix` plays every defence against every attack, and `--matrix --rules all` does
+that under every rule set. `plan_guard --list` names them all.
 
 ## 2. Stand the drones on their marks
 
@@ -51,28 +44,22 @@ ros2 run crazyflie_shows guard_show --ros-args -p use_sim_time:=true \
 
 On the drones, run the same command without `use_sim_time`, first with
 `-p dry_run:=true` (every check, nothing armed), then for real. Add
-`-p vip_mode:=mocap` to protect the DJI. With `-p paced:=true` the show waits for
-Enter before arming, before the match starts and before landing. With the DJI, it
-also waits while the pilot takes it off and lands it; the drones hold and keep
-out of its way during every wait.
+`-p vip_mode:=mocap` to protect the DJI, and `-p paced:=true` to wait for Enter at each
+gate:
 
 ![The guard match, step by step](../diagrams/32-guard-match-sequence.png)
 
 Or use the web console (`./console/run.sh`), **Missions → Guard (N v M)**: every
-choice is a field, the waits are buttons, and the 3D view shows the match.
+choice is a field, the gates are buttons, and the 3D view shows the match.
 
 For a new set-up on real drones, start small: 1 v 1, slow and wide apart, then add
 drones and speed one step at a time.
 
-**Speed and the onboard controller.** Both teams fly at 1 m/s by default, and the
-show switches the drones to the **Mellinger** controller for the match (and back
-afterwards). With Mellinger a drone runs about a tenth of a second behind its
-commands; four matches flew it at 1 m/s on 2026-11-23, with no near miss. The
-drones' standard controller (`-p controller:=pid`, or **pid** in the console's
-controller field) runs about half a second behind, so at 1 m/s two drones can pass
-closer than the minimum distance. If you fly it, set both teams to 0.6 m/s
-(`-p v_max_defense:=0.6 -p v_max_attack:=0.6`, or the two speed fields in the console)
-and check it with `plan_guard` first.
+**Speed and the onboard controller.** Both teams fly 1 m/s, on the Mellinger controller
+by default. To fly the standard controller (`-p controller:=pid`, or **pid** in the
+console), slow both teams to 0.6 m/s (`-p v_max_defense:=0.6 -p v_max_attack:=0.6`, or
+the console's two speed fields) and check it with `plan_guard` first. Why:
+[how-it-works.md](how-it-works.md#why-the-drones-run-late-and-what-to-do-about-it).
 
 ## Choosing the strategies
 
@@ -82,51 +69,33 @@ Add `-p defense:=<name> -p attack:=<name>` (`--defense`, `--attack` for the plan
 |---|---|
 | `shell` (default), `zone`, `hunter`, `ring` | `coordinated` (default), `flood`, `wolfpack`, `direct` |
 
-What each one does, and which pairings make even matches:
-[how-it-works.md](how-it-works.md#the-strategies). Check a new pairing with
-`plan_guard --defense <name> --attack <name>` first.
+What each does, and which pairings are even:
+[how-it-works.md](how-it-works.md#the-strategies).
 
 ## Choosing the rules
 
-Add `-p rules:=<name>` (`--rules <name>` for the planner):
+Add `-p rules:=<name>` (`--rules <name>` for the planner): `tag` (default), `pressure`,
+`zone`, `zone_pressure` or `timer`, explained in
+[how-it-works.md](how-it-works.md#the-rules).
 
-| Rules | In one line |
-|---|---|
-| `tag` (default) | a defender that stays close to an attacker long enough takes it out |
-| `pressure` | either side takes a drone out by outnumbering it nearby; one against one is a standoff |
-| `zone` | like `tag`, but each side can only be taken out on the other side's ground |
-| `zone_pressure` | like `pressure`, on the other side's ground |
-| `timer` | nobody is taken out; the defence must hold until the clock runs out |
+**Contested strikes:** `-p strike_block:=0.8` (the console's **Contested strikes**
+field; `--rparam strike_block=0.8` for the planner) makes a defender within 0.8 m of an
+attacker stop its strike. It works with every rule set and is off (`0`) unless set.
 
-Check a rule set with `plan_guard --rules <name>` before flying it.
-
-**Contested strikes.** Normally an attacker strikes by staying near the VIP, even with
-a defender right beside it. Add `-p strike_block:=0.8` (the console's **Contested
-strikes** field) to change that: a defender within 0.8 m of an attacker stops its
-strike. It works with every rule set, and it is off (`0`) unless you set it. For the
-planner, add `--rparam strike_block=0.8`.
+Check every new pairing or rule set with `plan_guard` before flying it.
 
 ## What you will see
 
-**Form-up.** Just before START (after the DJI gate when there is one), the
-defenders fly slowly to a ring round the VIP. The attackers **stay where they are
-hovering**. With the DJI as the VIP, the form-up waits until the DJI is in the air,
-and then the defenders' ring **follows the DJI** wherever the pilot takes it, until
-START. The match starts from where they are at START, not from the floor marks.
+**Form-up** (described in [how-it-works.md](how-it-works.md#the-start-of-a-match)). It
+starts just before START, after the DJI gate when there is one. The show prints
+`NOT A FAIR START yet` until every attacker is far enough from the defenders, then
+`fair start`; only then press START. Under `timer` nobody can be taken out, so there is
+no check. Options: `-p form_up_attackers:=follow` (the console's **Attackers during the
+form-up**) makes the attackers follow the VIP too, on an arc on their own side;
+`-p form_up:=false` (`--no-form-up` for the planner) starts from the floor marks.
 
-While an attacker is within half a metre of a defender's reach, the show prints
-`NOT A FAIR START yet`, because the match would open with a take-out. The pilot flies
-the DJI further from the attackers until the show prints `fair start`, and then the
-operator presses START. (Under `timer` nobody can be taken out, so there is no check.)
-
-To make the attackers follow the VIP as well, onto an arc on their own side, add
-`-p form_up_attackers:=follow` (the console's **Attackers during the form-up**
-field). Turn the whole form-up off with `-p form_up:=false` (and `--no-form-up` for
-the planner).
-
-**The match, the lights and the finale** are explained in
-[how-it-works.md](how-it-works.md#what-the-lights-mean). Every move in the finale still
-goes through the safety layer; turn it off with `-p finale:=false`.
+**The lights and the finale:** [how-it-works.md](how-it-works.md#what-the-lights-mean).
+The finale also goes through the safety layer; `-p finale:=false` turns it off.
 
 **In RViz or the console's 3D view**, the map shows what each drone means to do:
 
@@ -147,11 +116,8 @@ red (compromised) at the end.
 
 **Near misses** pause the match, or land everything
 ([how-it-works.md](how-it-works.md#layers-of-safety)). After each flight the show
-prints any near misses and the closest pair, and says where the run's trace was saved.
+prints any near misses and the closest pair, and where the run's trace was saved.
 
 Ctrl-C (or the console's Abort) lands everything where it is.
 
-How it is put together, and how to write your own strategy or rule set:
-[details/modules.md](details/modules.md). Why it is built this way:
-[details/theory.md](details/theory.md). What was measured:
-[details/design-notes.md](details/design-notes.md).
+To write your own strategy or rule set: [details/modules.md](details/modules.md).

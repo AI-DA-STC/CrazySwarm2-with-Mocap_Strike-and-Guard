@@ -1,364 +1,227 @@
-# MOCAP — OptiTrack setup, rigid bodies, and frequency tuning
+# MOCAP: OptiTrack setup, rigid bodies, and frequency tuning
 
-This stack uses an OptiTrack camera system running **Motive** (on the Windows
-host) to localize the drones. Motive streams pose data over NatNet (multicast)
-to `motion_capture_tracking` — started by `launch.py` — which publishes
-`/poses` for the swarm server. The open `natnet_ros2` + `pose_bridge.py` path
-is an alternative, not the default (see [running.md section B](running.md#b-hardware-flight-with-optitrack)).
+OptiTrack's **Motive** (on the Windows PC) streams every rigid body's pose over NatNet to
+`motion_capture_tracking`, which `launch.py` starts and which publishes `/poses` for the
+server. The `natnet_ros2` + `pose_bridge.py` path is an alternative, not the default
+([running.md B](running.md#b-hardware-flight-with-optitrack)).
 
-Four things must be right before flight: a **good calibration**, a **clean rigid
-body per drone**, the **rigid body's forward axis on +X** (Section 2), and a
-**streaming rate matched to your radio bandwidth**.
-
-> Config files referred to below as `config/<name>.yaml` live at
-> `src/crazyswarm2/crazyflie/config/<name>.yaml`.
-
----
+Before flight: a good calibration, one clean rigid body per drone with its nose on +X
+(section 2), and a streaming rate the radio can carry (section 3). `config/<name>.yaml`
+below means `src/crazyswarm2/crazyflie/config/<name>.yaml`.
 
 ## 1. Camera calibration (brief)
 
 Full procedure: <https://docs.optitrack.com/motive/calibration>.
 
-1. **Mask extraneous reflections.** In Motive's *Calibration* pane, with no
-   markers in the volume, use **Mask Visible** so the cameras ignore fixed
-   reflective sources (shiny floor, window frames, LED fixtures).
-2. **Wand the volume.** Select **Start Wanding** and wave the calibration wand
-   through the whole flight volume, covering all heights and corners until each
-   camera collects enough samples (the per-camera bars fill up).
-3. **Calculate** and apply the result; aim for an "Exceptional" / "Excellent"
-   mean error.
-4. **Set the ground plane** with the calibration square, defining the origin and
-   axes. Use **Z-up** so the orientation matches what crazyswarm2 expects.
+1. **Mask reflections.** With no markers in the volume, *Calibration* pane →
+   **Mask Visible**, so the cameras ignore the shiny floor, window frames, lights.
+2. **Wand the volume.** **Start Wanding** and cover every height and corner until each
+   camera's sample bar fills.
+3. **Calculate** and apply; aim for an "Exceptional" / "Excellent" mean error.
+4. **Set the ground plane** with the calibration square, **Z-up**.
 
-> **Reading the camera LED — is a camera seeing noise?**
-> Each OptiTrack camera has a status LED. When a camera is **flashing white**, it
-> is detecting reflections / marker-like blobs in its view. Before flight you want
-> the cameras *quiet* (no flashing) when the volume is empty — a camera that keeps
-> flashing white with nothing in the volume is seeing stray reflections or noise
-> and should be re-masked (step 1) or the offending reflector removed. During
-> flight, flashing white simply means it sees the drone markers, which is expected.
+A camera flashing white sees marker-like blobs. With the volume empty the cameras should
+be quiet; one that keeps flashing sees stray reflections: re-mask (step 1) or remove the
+reflector. In flight, flashing just means it sees the drones.
 
 ## 2. Defining rigid bodies
 
 Full procedure: <https://docs.optitrack.com/motive/rigid-body-tracking>.
 
-Each drone needs its own rigid body so Motive streams one pose per drone:
+1. Place the drone so its markers show as a small cluster in the *Perspective* view,
+   **nose along global +X**. The body's zero orientation is captured now; a rotated body
+   is a fly-away ([why](known-issues.md#rigid-body-orientation)). The preflight GUI's red
+   banner / `err.yaw` catches it ([preflight-gui.md](preflight-gui.md#the-orientation-warning-read-this));
+   RViz shows it as rotated axes between `<cf>` and `<cf>_mocap`. If in doubt, delete the
+   body, re-orient the drone and recreate it.
+2. Select the markers, right-click → **Rigid Body → Create From Selected Markers**
+   (**Ctrl+T**).
+3. **Name it exactly like the robot key in `config/crazyflies.yaml`** (e.g. `cf1`). The
+   natnet path publishes `/<name>/pose`, and `pose_bridge.py` takes its roster from the
+   same yaml.
+4. Enable streaming of IDs / names; the body's axes must not jitter or flip. Keep marker
+   patterns **asymmetric and different between drones** so Motive does not swap them.
 
-1. Place the drone in the volume so its markers (or the single active marker /
-   mocap-deck pattern) are visible. The markers should appear as a small cluster
-   in the *Perspective* view. **Point the drone's forward axis along global +X
-   before creating the body** — see the orientation rule below.
-2. Select those markers, right-click → **Rigid Body → Create From Selected
-   Markers** (or press **Ctrl+T**).
-3. In the rigid body's properties, give it a **name that matches everything
-   downstream** — the same string used in:
-   - `config/crazyflies.yaml` (the robot key, e.g. `cf1`),
-   - `pose_bridge.py` `DRONES` (**alternative natnet_ros2 path only** — it
-     reads the roster from `crazyflies.yaml` since 2026-10-06, so there is
-     nothing to keep in sync; before that it carried a hardcoded
-     `['cf1', 'cf2']` that had been wrong for months),
-   - the `/<name>/pose` topic published by `natnet_ros2`.
-4. Enable **streaming IDs / names** and make sure orientation looks stable (the
-   rigid body's axes shouldn't jitter or flip). Keep marker patterns
-   **asymmetric and distinct between drones** so Motive doesn't swap their IDs.
-
-> **Orientation rule.** The rigid body's zero orientation is captured at
-> creation, so create it with the drone's **forward axis aligned to global
-> +X**. Otherwise the onboard yaw inherits a constant offset: mocap *position*
-> is force-fused into the Kalman (`locSrv.extPosStdDev = 1e-3`), so position
-> looks perfect (~1 mm) even with a rotated body — the offset is invisible at
-> rest and becomes a fly-away in flight. The preflight GUI catches this (red
-> misalignment banner / dashed `err.yaw`, see
-> [preflight-gui.md](preflight-gui.md#the-orientation-warning-read-this)); RViz
-> shows it as rotated axes between the `<cf>` and `<cf>_mocap` frames. If in
-> doubt, delete the rigid body, re-orient the drone, and recreate it.
-
-> The marker geometry in `config/motion_capture.yaml`
-> (`marker_configurations`) must match the physical marker layout on the drone
-> (`default_single_marker`, `mocap_deck`, etc.).
+`marker_configurations` in `config/motion_capture.yaml` must match the physical marker
+layout (`default_single_marker`, `mocap_deck`, ...).
 
 ## 2b. Setting `initial_position` from `/poses`
 
-Whenever the drones' floor placement changes, update each drone's
-`initial_position` in `config/crazyflies.yaml` from **mocap truth**. Use the
-script; it carries the safety refusals that a hand edit does not:
+Whenever the drones' floor placement changes, update `initial_position` in
+`config/crazyflies.yaml` from mocap, never from `/cfX/pose`
+([why](known-issues.md#initial_position-comes-from-poses-never-cfxpose)). Use the script;
+it carries refusals a hand edit lacks:
 
-1. **Place** the drones on the floor where they will take off (the show
-   planners' `--marks` output, or `scripts/place_drones.py`, says where).
-2. **Bring up mocap WITHOUT the server**, so there is no radio owner:
+1. **Place** the drones where they will take off (a planner's `--marks` output, or
+   `scripts/place_drones.py`).
+2. **Start mocap without the server**, so nothing owns the radio:
    ```bash
    ros2 launch crazyflie launch.py server:=False
    ```
 3. **Preview, then apply:**
    ```bash
    python3 scripts/sync_initial_positions.py --dry-run     # shows the diff, writes nothing
-   python3 scripts/sync_initial_positions.py               # prompts; --yes to skip the prompt
+   python3 scripts/sync_initial_positions.py               # prompts; --yes skips the prompt
    ```
-   It samples `/poses`, matches each drone to the rigid body of the same name
-   and rewrites only the `initial_position` triples, comments preserved. It
-   writes a mark for **every drone mocap streams, enabled or not** (so
-   switching fleets between shows never carries a stale mark;
-   `--enabled-only` restores the old behaviour). It **refuses** when an enabled
-   drone is not streamed, is moving (>10 mm spread over the window), sits above
-   0.5 m, or when two drones are <1 m apart; `--force` overrides and `--with-z`
+   It matches each drone to the rigid body of the same name and rewrites only the
+   `initial_position` triples (comments kept), for **every drone mocap streams, enabled or
+   not**, so switching fleets never leaves a stale mark (`--enabled-only`: the old
+   scope). It **refuses** when an enabled drone is not streamed, is moving (> 10 mm spread
+   over the window), sits above 0.5 m, or when two drones are under 0.30 m apart (their
+   marker sets can merge). Under 1 m apart it only warns. `--force` overrides; `--with-z`
    writes the measured z instead of keeping the yaml's.
-4. **Restart the server** — the yaml is read **only at launch**; an edit while
-   the server runs changes nothing.
-5. **Re-run the planner** (`plan_escort --marks`): the plan is a function of the marks.
+4. **Restart the server**: it reads the yaml only at launch.
+5. **Re-run the planner** (e.g. `plan_escort --marks`).
 
-Manual equivalent, if you must: read x/y from
-`ros2 topic echo /poses | grep -A5 -- '- name: cf1$'` and edit by hand.
+By hand, if you must: read x/y from `ros2 topic echo /poses | grep -A5 -- '- name: cf1$'`.
 
-Rules — each one is load-bearing:
-
-- **NEVER copy from `/cfX/pose`.** That is the onboard estimate, which is
-  **seeded by the yaml** — copying it back is circular and just launders
-  whatever stale value was there. `/poses` is the mocap ground truth.
-- **Every pair of enabled drones ≥ 1 m apart.** The multi-drone demos fly the
-  same relative trajectory on every drone, so the flight **preserves the start
-  separation** — the spacing on the floor is the spacing in the air.
-- **Each drone sits at ITS OWN yaml position.** The flight scripts compute
-  **absolute** `goTo` targets from `initial_position` (return-home =
-  `initial_position` + height), so two drones swapped between corners means
-  the return-home / formation `goTo` paths **cross** — this caused a **real
-  mid-air collision on 2026-08-04**. Match names on the floor to names in the
-  yaml before every flight.
+Each drone must sit at **its own** yaml position: the flight scripts compute absolute
+`goTo` targets from it (return home = `initial_position` + height), so swapped drones fly
+crossing paths, the mid-air collision of 2026-08-04. For the trajectory shows, keep every
+pair of enabled drones **≥ 1 m apart**: they fly the same relative trajectory, so the
+spacing on the floor is the spacing in the air. Each planner checks its own spacing.
 
 ## 2c. The world frame, the measured arena, and what a recalibration breaks
 
-Everything the shows and the planners know about the room is in
-`src/crazyswarm2/crazyflie/config/arena.yaml` (since 2026-10-09), which
-`src/crazyswarm2/crazyflie_shows/crazyflie_shows/safety.py` reads at import (print it, do not
-copy it: `python3 -c "from crazyflie_shows import safety as s; print(s.ARENA_CENTRE, s.ARENA_RADIUS_TESTED, s.ARENA_RADIUS_PLAN, s.ARENA_RADIUS_LOST)"`).
+Everything the shows and planners know about the room is in `config/arena.yaml`, read by
+`crazyflie_shows/safety.py` at import. Print it, do not copy it:
+`python3 -c "from crazyflie_shows import safety as s; print(s.ARENA_CENTRE, s.ARENA_RADIUS_TESTED, s.ARENA_RADIUS_PLAN, s.ARENA_RADIUS_LOST)"`.
 
-- **The frame is whatever Motive's ground plane defines.** Z is up (a ground
-  plane that is not Z-up must be recalibrated) and each drone's nose must lie
-  along global **+X** when its rigid body is created — see section 2. Look at
-  the axis triad in Motive, not at your memory of it. `scripts/check_mocap_yaw.py`
-  prints each body's own X axis in the world live (mocap up, server not running)
-  while you square the drones.
-- **The arena was surveyed 2026-10-01** by carrying a tracked body and by
-  flying (`scripts/measure_arena.py`, `scripts/arena_flight_sweep.py`; raw
-  data under `data/arena/`). The tracked volume is anisotropic, roughly a
-  truncated cone; `ARENA_RADIUS_TESTED` is where flight was clean,
-  `ARENA_RADIUS_LOST` is where a flying drone actually lost tracking, and
-  `ARENA_RADIUS_PLAN` is tested minus the tracking margin, the number a plan
-  must stay inside.
-- **Motive was recalibrated 2026-10-08, and the frame moved.** The room, the
-  cameras and the drones did not. The old-to-new transform was fitted on three
-  undisturbed drones (rotate +91.59 deg, translate [+0.043, -0.098] m, max
-  residual 0.0159 m; their pairwise distances still agreed with the yaml to
-  <= 21 mm, which is what shows the frame moved and not the drones). `ARENA_CENTRE`
-  was carried across; the radii are invariant. **A transformed survey is not a
-  survey:** re-run `scripts/arena_flight_sweep.py` before trusting the edges.
-- **2026-11-02: the rig moved to the big arena.** New cameras, a full new
-  calibration, a new world frame. Nothing carries over from the old frame; the
-  old room's state is git tag `pre-big-arena`, the move is `post-big-arena`.
-  - **Ground plane:** set with the calibration square on a raised stand, using
-    Motive's *Custom* ground plane (the square's three markers selected) and a
-    *Vertical Offset* equal to the floor-to-marker-centre height in mm. The
-    *Auto* ground plane has no offset field and assumes the square is on the
-    floor; leaving the offset at 0 with a raised square put z = 0 about 1.4 m
-    above the floor. The plane is gravity-level; the floor slopes about 1 deg, so
-    grounded drones read slightly different z. Takeoff and land heights are
-    absolute z, so check that drones on the floor read near 0 before every flight
-    day.
-  - **Streaming:** Motive's *Local Interface* (Data Streaming pane) was unset after
-    the move, so nothing answered discovery. It must name the wired adapter.
-  - **arena.yaml was re-surveyed the same day:** a carried walk, then a flown
-    climb and edge loops (the header of the file has the details and the data
-    files). Tracking held everywhere it was tested. The radius is limited by
-    furniture, not by the cameras, so the arena is now a POLYGON in arena.yaml
-    (`polygon:`): a rectangle with the chamfer and the step cut out, traced by a
-    carried boundary lap and then flown round. Containment checks use it; the
-    circle is kept, inside it, for geometry built around a centre (the escort).
-    Delete the key to fall back to the circle. The ceiling IS the cameras'
-    limit: a flown climb lost tracking just above 7.2 m (they are mounted below
-    the ~15 m roof).
-- **After any Motive recalibration or rigid-body rename:** do not fly; re-sync the
-  marks (2b); transform every world-frame number in the escort config *by its kind*
-  (a point is rotated and translated, an offset is rotated, an absolute bearing
-  has the angle added; the escort got this wrong three ways on 2026-10-08, see
-  [../escort/details/design-notes.md](../escort/details/design-notes.md#what-flew-and-what-broke-as-of-2026-10-08)); re-run the planner.
+- **The frame is whatever Motive's ground plane defines.** Look at the axis triad in
+  Motive, not at your memory of it. `scripts/check_mocap_yaw.py` prints each body's X
+  axis live (mocap up, server stopped) while you square the drones.
+- **The radii** (surveyed 2026-10-01 by carrying a tracked body and by flying,
+  `scripts/measure_arena.py` and `scripts/arena_flight_sweep.py`, data in `data/arena/`):
+  `ARENA_RADIUS_TESTED` is where flight was clean, `ARENA_RADIUS_LOST` where a flying
+  drone lost tracking, `ARENA_RADIUS_PLAN` tested minus the tracking margin, the limit a
+  plan must stay inside.
+- **2026-10-08 recalibration (old room):** the frame moved while the room did not. The
+  fit on three undisturbed drones: rotate +91.59°, translate [+0.043, -0.098] m, max
+  residual 0.0159 m (their pairwise distances still matched the yaml within 21 mm).
+  `ARENA_CENTRE` was carried across; the radii are invariant. A transformed survey is not a survey: re-fly the sweep before
+  trusting the edges.
+- **2026-11-02: the rig moved to the big arena.** New cameras, calibration and frame;
+  nothing carries over. Git tags: `pre-big-arena`, `post-big-arena`.
+  - *Ground plane:* the square sat on a raised stand, so it was set with Motive's
+    *Custom* ground plane (the square's three markers) and a *Vertical Offset* equal to
+    the floor-to-marker-centre height in mm. *Auto* assumes the square is on the floor;
+    with the offset at 0 it put z = 0 about 1.4 m above the floor. The plane is
+    gravity-level and the floor slopes about 1°, so grounded drones read slightly
+    different z. Takeoff and land heights are absolute: check that drones on the floor
+    read near 0 every flight day.
+  - *Streaming:* Motive's *Local Interface* was unset after the move, so nothing answered
+    discovery. It must name the wired adapter.
+  - *arena.yaml* was re-surveyed the same day (carried walk, flown climb and edge loops;
+    details in the file's header). The radius is limited by furniture, not cameras, so
+    the arena is a `polygon:` (a rectangle less the chamfer and the step, traced by a
+    carried lap and flown round). Containment uses it; the circle is kept inside it for
+    geometry built around a centre (the escort). Delete the key to fall back to the
+    circle. The ceiling is the cameras' limit: a flown climb lost tracking (the
+    measured heights are in the file's header).
+- **After any recalibration or rigid-body rename:** do not fly. Re-sync the marks (2b);
+  transform every world-frame number in the escort config by its kind (a point: rotate
+  and translate; an offset: rotate; an absolute bearing: add the angle; the escort got
+  this wrong three ways on 2026-10-08,
+  [escort design notes](../escort/details/design-notes.md#what-flew-and-what-broke-as-of-2026-10-08));
+  re-run the planner.
 
 ## 3. Frequency / bandwidth tuning (240 → 50 Hz)
 
-By default an OptiTrack system may stream at **240 Hz**. That is far more than the
-Crazyflie needs and it loads the Crazyradio link, because **every mocap pose is
-forwarded to the drone over the radio** as an external position update. Drop the
-rate to **50 Hz**, which is plenty for stable position hold, and trim the drone
-log topics so the 2 Mbit/s radio is not maxed out.
+Every `/poses` message is forwarded to the drones over the radio, so the mocap rate
+competes with telemetry and setpoints for the same 2 Mbit/s. 50 Hz is plenty for position
+hold.
 
-### 3a. Lower the streaming rate in Motive
+### 3a. The rate Motive streams
 
-1. **View → Settings → Streaming** (or the *Data Streaming* pane).
-2. Make sure **Broadcast Frame Data** is enabled and the NatNet streaming engine
-   is on (turn off VRPN/Trackd if unused).
-3. Set the **data signal / transmission type** to **Multicast** (not Unicast).
-   The vendored `motion_capture_tracking` accepts the multicast stream (and
-   Motive's **Broadcast Frame Data** variant, which is what this rig actually
-   sends); it does **not** support Unicast
-   (this repo uses `type: "optitrack"`, the open parser, in
-   `config/motion_capture.yaml` — see Section 5 for why). The
-   transmission type is read **once at connect** — after changing it in Motive,
-   fully restart the launch (and check for leftover frozen mocap processes
-   first, see [troubleshooting.md](troubleshooting.md#mocap-pipeline)). See Section 4
-   for what multicast vs unicast actually means.
-4. Set the **point cloud / camera rate** to **50 Hz** (Motive *Settings →
-   Cameras → Rate*, or the system rate). The streaming rate follows the camera
-   frame rate, and must match `poses.qos.deadline: 50.0` in
-   `config/motion_capture.yaml`.
+In Motive, **View → Settings → Streaming** (or the *Data Streaming* pane):
 
-**When Motive must stay fast (since 2026-11-17).** The Starlings share the volume
-and need Motive at 240 Hz, so 3a is no longer an option. The vendored node then
-limits itself instead: `max_rate: 55.0` in `config/motion_capture.yaml` (local patch
-0006, `src/motion_capture_tracking/VENDORED.md`). It still reads every frame off the
-socket, so nothing queues and each published frame is the newest, but it runs the
-tracker and publishes `/poses`, `/tf` and `pointCloud` on a fixed schedule of at most
-55 Hz. It only steps down: at 50 Hz from Motive every frame passes untouched (measured
-50.2 in, 50.2 out; a 50.0 ceiling would drop about one frame in 250, since Motive
-really sends 50.2 Hz), and it never repeats a frame to fill a gap, which would hide a
-real dropout from the server.
-Without it, on 2026-11-17 the server received about 117 `/poses` per second, every
-one forwarded over both Crazyradios, with low-receive-rate warnings from every drone.
-`max_rate: 0` restores one message per Motive frame.
+1. Enable **Broadcast Frame Data** and the NatNet engine (VRPN / Trackd off if unused).
+2. Transmission type **Multicast**, not Unicast (section 4). It is read once at connect:
+   after changing it, restart the whole launch, checking first for leftover mocap
+   processes ([troubleshooting](troubleshooting.md#mocap-pipeline)).
+3. Camera / system rate **50 Hz** (*Settings → Cameras → Rate*). The stream follows it.
 
-### 3b. Match the ROS side to 50 Hz
+**When Motive must stay at 240 Hz** (the Starlings share the volume, since 2026-11-17),
+the node limits itself: `max_rate: 55.0` in `config/motion_capture.yaml` (patch 0006,
+`src/motion_capture_tracking/VENDORED.md`). It still reads every frame, so each published
+one is the newest, but publishes `/poses`, `/tf` and `pointCloud` at most 55 times a
+second. It only steps down: at Motive's 50 Hz every frame passes (measured 50.2 in, 50.2
+out; a 50.0 ceiling would drop one in ~250), and it never repeats a frame, which would
+hide a dropout. Without it, on 2026-11-17 the server got ~117 `/poses` a second, each
+forwarded over both Crazyradios, and every drone warned of a low receive rate.
+`max_rate: 0` gives one message per Motive frame.
 
-These are already set in this repo — keep them consistent if you change the rate:
+### 3b. The ROS side
 
-- **`config/motion_capture.yaml`** → `max_rate: 55.0` (see above).
+Already set; keep them consistent with Motive's rate:
 
-- **`pose_bridge.py`** → `PUBLISH_HZ = 50.0` (was 240). The publish timer and QoS
-  deadline both derive from this. Publishing faster than Motive streams only
-  resends stale poses.
-- **`config/motion_capture.yaml`** → `topics.poses.qos.deadline: 50.0` so the QoS
-  deadline corresponds to the 50 Hz period.
+- `config/motion_capture.yaml`: `max_rate: 55.0`, and `topics.poses.qos.deadline: 50.0`
+  (the Motive rate).
+- `scripts/pose_bridge.py` (natnet path only): `PUBLISH_HZ = 50.0`. Publishing faster than
+  Motive streams only resends stale poses.
 
 ### 3c. Trim drone log topics to protect radio bandwidth
 
-In `config/crazyflies.yaml`, the `all.firmware_logging` block controls how much
-telemetry each drone streams back over the radio. High log rates compete with the
-mocap pose uplink and the control setpoints for the same 2 Mbit/s. The values in
-this repo are intentionally low:
+`all.firmware_logging` in `config/crazyflies.yaml` sets what each drone sends back:
+`pose` at 10 Hz, `status` at 1 Hz, and the `kalman_preflight` custom topic at 5 Hz, which
+feeds the preflight GUI (keep it). The comments there record why `pose` stays at 10 Hz.
 
-```yaml
-all:
-  firmware_logging:
-    enabled: true
-    default_topics:
-      pose:
-        frequency: 10   # Hz   (was higher)
-      status:
-        frequency: 1    # Hz
-    custom_topics:
-      kalman_preflight:
-        frequency: 5    # Hz — feeds the preflight GUI; keep enabled
-        vars: [kalman.stateX, kalman.stateY, kalman.stateZ, motion.deltaX,
-               motion.deltaY, range.zrange, stateEstimateZ.vx, stateEstimateZ.vy]
-```
+- Drones on one Crazyradio share its bandwidth. For two dongles, see
+  [known-issues.md](known-issues.md#two-dongles-channels-at-least-2-apart-at-2m)
+  (channels) and [the connect hang](known-issues.md#the-server-hangs-forever-on-the-first-unreachable-drone)
+  (datarate).
+- Turn on the commented-out blocks (attitude, kalman, downwash) only while debugging,
+  then off again.
+- **A saturated radio shows** as latency / receive-rate warnings from the server
+  (`min_unicast_receive_rate` in `config/server.yaml`), choppy hold, dropped log packets,
+  or a supervisor emergency landing.
 
-Guidelines:
-
-- **Drones on the same URI channel share one radio's bandwidth.** This rig
-  currently runs **single-dongle**: the whole enabled fleet (`./scripts/scan_fleet.sh --list`) on `radio://0/80/2M` —
-  workable because the log rates below are trimmed low. **When running two
-  dongles** — as this rig historically did (cf1 on `radio://0/80/2M`, cf11 on
-  `radio://1/90/1M`) — two rules, both proven the hard way here (see the
-  comments in `config/crazyflies.yaml`):
-  - **Channels ≥2 apart at 2M.** A 2M channel is ~2 MHz wide; adjacent
-    channels make crazyflie-link-cpp refuse the pair outright:
-    `Channels 80 and 81 are already served by Crazyradio 0`.
-  - **Per-drone datarate must match the URI.** A `2M` URI on a drone whose
-    radio runs at `1M` makes the server **hang forever at connect** — and the
-    `/all/*` services (takeoff/land/arm) are never created. Verify with a scan
-    on the drone's address (`./scripts/scan_fleet.sh`, or by hand `ros2 run crazyflie scan --address <address from the yaml>`).
-- Keep total logging modest: `pose @ 10 Hz`, `status @ 1 Hz`, the
-  `kalman_preflight` block `@ 5 Hz` is enough for monitoring. Add high-rate
-  logging (50 Hz attitude/kalman
-  blocks are commented out in the YAML) only when actively debugging, and remove
-  it again for normal flight.
-- **Symptoms of a saturated radio:** latency / receive-rate warnings from
-  `crazyflie_server` (`min_unicast_receive_rate` in `config/server.yaml`),
-  choppy position hold, dropped log packets, or the firmware supervisor
-  triggering an emergency landing.
-
-The config files live in `src/crazyswarm2/crazyflie/config/`. Edit them there, then
-rebuild:
-
-```bash
-./scripts/build.sh crazyflie
-```
+After editing a config: `./scripts/build.sh crazyflie`.
 
 ## 4. Multicast vs unicast (primer)
 
-- **Multicast** — Motive sends ONE stream to a multicast group address; every
-  client that joins the group receives it. Needs healthy IGMP on the LAN (the
-  switch/router must forward group joins) — and any process squatting on UDP
-  1511 can silently starve the real client (see
-  [troubleshooting.md](troubleshooting.md#mocap-pipeline)).
-- **Unicast** — Motive sends a separate copy of the stream to each client. No
-  IGMP dependency, at the cost of per-client bandwidth on the Motive PC.
-- The number of **drones** is unaffected by the choice: all rigid bodies ride
-  in every NatNet frame either way, and the drones themselves get their poses
-  over the Crazyradio, not the network.
-- The vendored `motion_capture_tracking` path used by `launch.py` (open
-  `optitrack` parser, socket bound to `0.0.0.0:1511`) hears **Multicast** and
-  Motive's **Broadcast Frame Data** (this rig: frames go to `255.255.255.255:1511`
-  even though the Motive GUI says Multicast, because the profile flag
-  `BroadcastInsteadOfMulticast` is set). It does **not** support Unicast. The
-  `natnet_ros2` / closed-source NatNet SDK client binds the group address and is
-  **deaf to broadcast** — that is why it sees nothing on this rig.
+- **Multicast:** Motive sends one stream to a group address and every client that joins
+  receives it. Needs IGMP working on the LAN; a process squatting on UDP 1511 starves the
+  real client ([troubleshooting](troubleshooting.md#mocap-pipeline)).
+- **Unicast:** one copy per client. No IGMP, more load on the Motive PC.
+- Neither limits the number of drones: every rigid body rides in every frame, and the
+  drones get their poses over the Crazyradio, not the network.
+- The vendored node (open `optitrack` parser, socket on `0.0.0.0:1511`) hears Multicast
+  and Motive's **Broadcast Frame Data**. This rig sends broadcast, to
+  `255.255.255.255:1511`, although Motive's GUI says Multicast (the profile flag
+  `BroadcastInsteadOfMulticast` is set). Unicast is not supported. The closed-source
+  NatNet SDK client (`natnet_ros2`) binds the group address and is deaf to broadcast,
+  which is why it sees nothing here.
 
 ## 5. Networking: mocap over a router (lab setup)
 
 ![The lab network](../diagrams/20-lab-network.png)
 
-The lab rig can also run with the mocap PC **wired to a lab router**, with the
-ground-station laptop joining the **same subnet over 5 GHz Wi-Fi**. This network
-carries only the **laptop ↔ Motive-PC link** — the drones ride the Crazyradio
-and never join the subnet (Section 4):
+Reserve fixed addresses for the Motive PC and laptops in the router's DHCP, use gigabit
+ports for the wired Motive PC, and **restart Motive after switching it (or your laptop)
+between wired and Wi-Fi**: its streaming address follows the active interface, but not at
+once. In `config/motion_capture.yaml`:
 
-- **Reserve static IPs via the router's DHCP** for the mocap PC and laptops so
-  addresses stay stable across reboots.
-- **Motive's streaming IP follows the active interface** — after switching the
-  mocap PC (or your laptop) between wired and Wi-Fi, **restart Motive** so the
-  streaming address updates; it does not reflect immediately.
-- **Gigabit ports recommended** on the router/switch for the wired mocap PC.
+![From Motive to the drones](../diagrams/50-mocap-path.png)
 
-**Concrete consequence:** switching your laptop between the router Wi-Fi and the
-direct LAN **changes the Motive PC's address**, so `config/motion_capture.yaml`
-must be updated to match:
+- **`hostname: "auto"`**: `launch.py` sends a NatNet discovery ping (UDP 1510 broadcast)
+  and uses whichever Motive answers, logging `mocap: Motive at <ip> (from NatNet
+  discovery)`; if none answers, the launch aborts with a message. Discovery needs you on
+  Motive's LAN segment (`ip route get <ip>` must not say `via`). To pin an address:
+  `mocap_hostname:=<ip>` or `CRAZYSWARM_MOCAP_HOST=<ip>` (an IPv4 literal).
+- **`interface_ip: "auto"`**: the multicast join uses the source address of the route to
+  Motive (`ip route get <motive>`), not the default route, which is Wi-Fi when Wi-Fi and
+  the wire are both up ([why](known-issues.md#poses-silent-with-wi-fi-and-the-wire-both-up-fixed-2026-11-23)).
+  The launch logs `mocap: NatNet multicast joined on <ip> (from <source>)` and warns if
+  the route goes through a gateway. Override: `mocap_interface_ip:=<ip>` or
+  `CRAZYSWARM_MOCAP_IFACE=<ip>`. Needs vendored patch 0007. Check:
+  `ip maddr show dev <wired iface>` lists `239.255.42.99`.
+- **`type: "optitrack"`** (the open parser) is required on Wi-Fi: the closed-source
+  parser wedges for good on a Wi-Fi multicast stall.
 
-- **`hostname:`** — leave it at `"auto"`: at launch, `launch.py` broadcasts a
-  NatNet discovery ping on UDP 1510 and uses whichever Motive answers, logging
-  `mocap: Motive at <ip> (from NatNet discovery)`. The lab Motive PC gets its
-  address from DHCP and has moved several times (.100 → .124 → .152); every
-  move used to leave `/poses` silent. If discovery fails, the launch **aborts
-  with a message** instead of hanging. To pin an address without editing the
-  file: `ros2 launch crazyflie launch.py mocap_hostname:=<ip>` or
-  `export CRAZYSWARM_MOCAP_HOST=<ip>`. Discovery needs you on the Motive PC's
-  LAN segment (broadcast does not cross routers) — `ip route get <ip>` must
-  not say `via`.
-- **`interface_ip:`** — leave it at `"auto"`. NatNet frames arrive by multicast,
-  and the driver joins the group on `interface_ip`. With `0.0.0.0` (upstream's
-  value) the join lands on the **default route's** interface. With Wi-Fi
-  (internet) and the wire (Motive) both up, NetworkManager ranks Wi-Fi first
-  (metric 600 against the wire's no-internet 20100), so the join lands on Wi-Fi.
-  Ping, discovery and the command socket still work, but no frame ever arrives.
-  `"auto"` makes `launch.py` use the source address of the route to Motive
-  (`ip route get <motive>`). It warns if that route goes through a gateway, and
-  logs `mocap: NatNet multicast joined on <ip> (from <source>)`. Override:
-  `mocap_interface_ip:=<ip>` or `export CRAZYSWARM_MOCAP_IFACE=<ip>`. Upstream's
-  node never forwarded this parameter to the driver. Setting it does nothing
-  without vendored patch 0007 (`src/motion_capture_tracking/VENDORED.md`). Check:
-  `ip maddr show dev <wired iface>` lists `239.255.42.99`. Fixed 2026-11-23; the
-  write-up is in [known-issues.md](known-issues.md).
-- **`type: "optitrack"`** (the open parser) is **REQUIRED on Wi-Fi** — the
-  closed-source parser wedges **permanently** on a Wi-Fi multicast stall and
-  never recovers.
+Then restart Motive and relaunch. Getting this wrong leaves `/poses` silent with no
+error. Lab addresses and router details are kept privately; ask the lab admin.
 
-Then **restart Motive and relaunch** the stack. Symptom of forgetting:
-`/poses` stays silent with **no error**.
+---
 
-Lab-specific addresses and router details are kept privately; ask the lab admin.
+Full earlier text: `git show 678bac1:docs/rig/mocap.md`

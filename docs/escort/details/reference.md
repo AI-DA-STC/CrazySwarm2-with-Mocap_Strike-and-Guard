@@ -1,35 +1,31 @@
 # Escort: operator reference
 
-Three defenders ring a VIP; a fourth drone attacks; the ring rotates so a
-defender sits on the threat bearing. **Reactive, not choreographed** — the
-only show here whose path is not known before takeoff.
-
-Every command, argument and number, on one page, for an operator who has done the
-[step-by-step guide](../run.md) once. Why any of it is the way it is:
-[design-notes.md](design-notes.md).
+Every command, setting and number on one page, for an operator who has done
+[run.md](../run.md) once. Why it is this way: [theory.md](theory.md); when and how it got
+here: [design-notes.md](design-notes.md).
 
 ---
 
-## 0. Ground checks — no radio, no mocap, no drones
+## 0. Ground checks: no radio, no mocap, no drones
 
 ```bash
-ros2 run crazyflie_shows plan_escort              # must end "static case OK"
+ros2 run crazyflie_shows plan_escort              # must not end "REFUSED"
 ros2 run crazyflie_shows plan_escort --marks      # must end "MARKS OK"
-ros2 run crazyflie_shows plan_escort --sweep      # how fast the VIP may move
+ros2 run crazyflie_shows plan_escort --sweep      # fastest VIP walk that still clears
+ros2 run crazyflie_shows plan_escort --scripted   # the same check against the fixed script
 ros2 run crazyflie_shows plan_escort --plot /tmp/escort.png
 ```
 
-`plan_escort` verifies the *same* objects the flight commands, so a pass here
-is worth something. It currently reports **"the walking case is NOT cleared"** —
-that is expected and refers to a 0.30 m/s walking VIP. The static case, which
-is what you fly, passes. `--sweep` reports **0.00 m/s** with the reactive
-attacker (any VIP motion during the attack takes a defender inside 0.75 m of
-it) and 0.15 m/s with `--scripted`: brief the pilot to **hold the DJI still
-while the attacker is pressing**.
+`plan_escort` verifies the *same* objects the flight commands, so a pass means something.
+With the shipped numbers it ends "OK - static and walking cases both clear" against the
+reactive attacker, and "static case OK; the walking case is NOT cleared" with
+`--scripted`. `--sweep` clears 0.20 m/s with either attacker. Both are expected: brief the
+pilot to **hold the DJI still while the attacker is pressing**
+([design-notes.md, item 1](design-notes.md#decisions-still-open)).
 
 ## 1. Place the drones and sync
 
-Mocap and the GUIs, **no server** — nothing owns the radio, nothing is armable:
+Mocap and the GUIs, **no server**: nothing owns the radio, nothing can arm.
 
 ```bash
 ros2 launch crazyflie launch.py server:=False
@@ -38,9 +34,27 @@ python3 scripts/sync_initial_positions.py
 ros2 run crazyflie_shows plan_escort --marks     # re-check: "MARKS OK"
 ```
 
-`place_drones.py` re-reads the config while running, so edits move the marks
-without a restart. Stand each drone on its mark (green at 10 cm), then sync —
-the yaml must record where they **are**, not where they were meant to go.
+`place_drones.py` re-reads the config while running, so edits move the marks without a
+restart. Stand each drone on its mark (green at 10 cm), then sync: the yaml must record
+where the drones **are**, not where they were meant to go.
+
+What `--marks` lays out, and why:
+
+- **The VIP mark is fixed, not inferred from the fleet**: room centre plus `vip_offset`
+  from `EscortConfig`. Syncing moves the drones in the plan, never the mark, so place
+  the drones around the mark.
+- **Defenders stand on the ring they will hold** (`ring_radius` from the mark, 120 degrees
+  apart). The gather is then a lift, and the slot assignment by bearing is unambiguous;
+  drones bunched in a corner share a bearing.
+- **The attacker starts beyond `ring_radius + min_adv_sep`** (1.80 m; the mark is 0.3 m
+  further out still), on its entry bearing. Closer, it starts inside the ring and its
+  first leg crosses the defenders.
+- **Everything stays inside the arena and at least 1 m apart**: the sync tool refuses
+  closer marks, and `--marks` picks the ring phase that keeps the ring furthest from the
+  walls (it prints how far the ring reaches).
+
+Marks move whenever `ring_radius` or `vip_offset` changes, or Motive is recalibrated:
+**print them, never copy them from prose.**
 
 ## 2. Scan, then launch
 
@@ -49,7 +63,7 @@ the yaml must record where they **are**, not where they were meant to go.
 ros2 launch crazyflie launch.py
 ```
 
-Clear the preflight GUI for every drone that will fly.
+Then the preflight GUI ([flight day 4](../../02-flight-day.md#4-preflight-go--no-go)).
 
 ## 3. Fly
 
@@ -62,16 +76,44 @@ ros2 run crazyflie_shows escort_show --ros-args \
     -p vip_mode:=point -p adversary:=reactive -p paced:=true
 ```
 
-In **sim**, add `-p use_sim_time:=true` to this *and* to any teleop. On
-hardware, never.
+In **sim**, add `-p use_sim_time:=true` to this *and* to any teleop. On hardware, never.
 
-**Or from the console:** Dashboard → Missions → **Escort demo** opens the
-escort's own window ([console.md](../../rig/console.md)). The defaults there ARE the paced command
-above; every gate is a button (Continue = Enter, Land now = `q`), the VIP /
-adversary keyboard starts with it and stays locked until `ESCORT LIVE`, the
-simulation clock follows the running stack, and **Abort & land** is one Ctrl-C.
+**Paced** (`paced:=true`): arming and every attacker leg wait for Enter, and `q` lands.
+Each press announces what the attacker does next (`leg 2/3 STARTED: ATTACK - it finds
+its own way in`), and the show says when a phase is COMPLETE (for the reactive attack:
+when it stands down). Input is read as a line, so it works from a plain terminal and from
+the console's stdin box. Pacing holds only the attacker: show time, the ring, every
+clamp and every watchdog keep running. **Unpaced**, `duration` bounds the run and the
+reactive attacker advances a phase every 40/3 s.
 
-## Arguments — all of them, with defaults
+**From the console:** Dashboard → Missions → **Escort demo** opens the escort's own
+window ([console.md](../../rig/console.md)). Its defaults ARE the paced command above;
+every gate is a button (Continue = Enter, Land now = `q`), the VIP / adversary keyboard
+starts with it and stays locked until `ESCORT LIVE`, the simulation clock follows the
+running stack, and **Abort & land** is one Ctrl-C.
+
+**A DJI as the VIP** needs no config: `/poses` carries every rigid body Motive reports (the
+driver publishes `mocap->rigidBodies()`, not only the drones in `crazyflies.yaml`). Build
+the body in Motive with asymmetric markers and pass `-p vip_mode:=mocap -p
+vip_name:=<name>`. The ring then rides `vip_height_offset` above the DJI; if the pilot
+leaves the altitude band, the defenders stay inside it and the gap is reported, not
+chased.
+
+**In the simulator:**
+
+- **Restart `ros2 launch` between runs.** `crazyflie_sim` does not implement
+  `notifySetpointsStop`, so a drone that was streamed stays in low-level mode, and the next
+  run's gather `goTo` kills the sim server (`ValueError: goTo from low-level modes not yet
+  supported`, only in the launch log). It looks like the escort hanging at "gathering onto
+  the ring". Hardware does not have this problem.
+- **The pose path is not exercised.** The sim publishes no `/poses` and
+  `cf.get_position()` returns `[0, 0, 0]`, so both trust checks fire on every run and say
+  so (`live pose [0.0, 0.0, 0.0] is not near its slot ... seeding from the slot instead`,
+  `ignoring the live pose of cf1, cf3 -- too far from what was commanded to be
+  believable`). Sim verifies geometry, sequencing and clamps; reading real poses is first
+  exercised on hardware.
+
+## Arguments: all of them, with defaults
 
 ```
 dry_run           false      verify and report, then exit
@@ -88,16 +130,16 @@ vip_point         <mark>     m, static VIP; default room centre + vip_offset
 vip_name          operator   rigid body to escort      (vip_mode:=mocap)
 vip_airborne      <auto>     default true only when vip_mode:=mocap
 adversary         reactive   reactive | scripted | external | manual | none
-                             (reactive flew for guests 2026-10-08)
 adversary_name    adv        its rigid body            (adversary:=external)
-defenders         ''         e.g. cf1,cf2,cf3 -- comma-separated STRING;
-                             default = the 3 enabled drones nearest the VIP mark
+defenders         ''         e.g. cf1,cf2,cf3 -- comma-separated STRING (an empty
+                             list default would be typed BYTE_ARRAY and reject
+                             names); default = the 3 enabled drones nearest the VIP mark
 adversary_drone   ''         which drone attacks; default = the enabled drone
                              farthest from the VIP mark
 
 # EscortConfig overrides -- each re-verified before takeoff, refused if it
 # does not check out
-ring_radius       1.0    m   also the chord the closing wall uses
+ring_radius       1.0    m   also sets the chord the closing wall uses
 height            1.2    m
 v_max             0.6    m/s
 phase_rate        0.3    rad/s
@@ -108,14 +150,15 @@ rate_hz           20.0       setpoint stream rate per drone
 vip_height_offset 0.3    m   ring altitude relative to an airborne VIP
 ```
 
-`probe < alert < release < retreat` must hold. `plan_escort` refuses if it
-does not — run it after changing either radius.
+`probe < alert < release < retreat` must hold; `plan_escort` refuses if it does not, so
+run it after changing either radius. Overriding `defenders` or `adversary_drone`: dry-run
+first, because an override is how an attacker ends up parked inside the ring.
 
 ## Teleop (no DJI, nobody in the room)
 
-Separate terminal, **needs a real TTY** — or the mission window, where choosing
-VIP `manual` / adversary `manual` starts the teleop for you and gives it a key
-pad. Publishes a virtual target; commands no drone.
+Separate terminal, **needs a real TTY**, or the mission window, where choosing VIP
+`manual` / adversary `manual` starts the teleop for you with a key pad. It publishes a
+virtual target and commands no drone.
 
 ```bash
 # you drive the attacker, VIP is a fixed point
@@ -127,50 +170,80 @@ ros2 run crazyflie_shows escort_show   --ros-args -p vip_mode:=manual -p adversa
 ros2 run crazyflie_shows escort_teleop --ros-args -p target:=vip
 ```
 
-`wasd`/arrows in plan view, `q`/`e` altitude (adversary only), space stop,
-`c` re-centre, `x` quit. Hold the key — velocity decays 0.35 s after the last
+`wasd`/arrows in plan view (as `plan_escort --plot` draws it: x right, y up), `q`/`e`
+altitude (adversary only), space stop, `c` re-centre, `x` quit. Hold the key: the terminal
+has no key-release event, so velocity decays `key_timeout` (0.35 s) after the last
 keystroke.
 
-**Start the teleop, then touch nothing until `ESCORT LIVE` appears.** The show
-reads the target before takeoff and checks the gather against it; a target
-already moving makes the gather refuse (`gather legs close to 0.00 m`) and land.
+**Start the teleop, then touch nothing until `ESCORT LIVE` appears.** The show reads the
+target before takeoff and checks the gather against it; a target already moving makes the
+gather refuse (`gather legs close to 0.00 m`) and land.
+
+- **A VIP target moves at `escort.max_vip_speed`** (0.30 m/s), the budget the ring has
+  after turning. Faster is a fine test **on purpose** (`-p speed:=...`), and misleading by
+  accident.
+- **The show refuses to arm until the teleop is publishing.**
+- **A stale target counts as a lost body** (below), so closing the teleop is a legitimate
+  way to end a test.
+- **The teleop clamps to the arena itself**, so what you steer is what the show will try
+  to fly.
+
+## Lights
+
+Colours are the `LED_*` constants in `escort_show.py`; the legend is in
+[how-it-works.md](../how-it-works.md#what-the-lights-mean). Cyan is reserved for the
+geofence hold. Cues are sent after motion commands, can never stop the show, and are off
+under `use_sim_time`.
 
 ## Numbers
 
 ```
-ring            1.00 m radius, 1.20 m altitude, 3 defenders 120 deg apart
+ring            3 defenders, 1.00 m radius, 120 deg apart (1.73 m gaps), 1.20 m up
                 (+0.30 m above the DJI when it is airborne)
+wall            wings close to 58 deg either side of the blocker (0.97 m apart)
+slot order      by bearing, fixed at the gather; the nearest slot blocks
+ring turn       0.30 rad/s at rest, 0.55 rad/s while blocking
+speeds          defenders capped at 0.60 m/s and 1.0 m/s^2; the attacker plans at
+                0.80 m/s but its setpoint goes through the same guard, so it FLIES at
+                0.60 m/s at most
+engagement      starts at 2.10 m (attacker to VIP), releases at 2.22 m
+separations     0.80 m defender-defender, 1.00 m defender-to-VIP; the attacker keeps
+                0.80 m off every defender; a defender yields only inside 0.70 m
+break-even      ~0.99 m/s attacker speed (0.55 rad/s x ~1.8 m)
+VIP speed       budget 0.30 m/s at rest, 0.05 m/s while blocking; --sweep clears
+                0.20 m/s with both attackers -- still hover during the attack
+geofence        the VIP must stay at least ring_radius (1.00 m) inside the room's
+                NEAREST edge (the arena.yaml polygon less its tracking margin), or the
+                ring HOLDS and all three defenders go CYAN. It resumes once the VIP is
+                0.25 m further in AND inside the parked ring: fly it to the MIDDLE,
+                not just back in.
+room            arena.yaml polygon less its tracking margin; ceiling 1.85 m
+rates           /poses 50 Hz in, setpoints 20 Hz per drone, one radio
 
 MARKS AND THE ARENA CENTRE ARE NOT WRITTEN HERE ON PURPOSE. Print them:
     ros2 run crazyflie_shows plan_escort --marks
-Every coordinate in this block was in the pre-2026-10-08 world frame. Motive
-was recalibrated that day and the frame rotated ~91.6 deg, so the numbers that
-used to sit here became wrong in a way that still LOOKED plausible -- which is
-exactly how a drone gets stood on the wrong mark. The marks also move whenever
-ring_radius or vip_offset changes. The planner reads the live config; prose
-does not.
-geofence        the VIP must stay at least ring_radius (1.00 m) inside the
-                arena edge -- the NEAREST edge of the arena.yaml polygon less
-                0.10 m (since 2026-11-03; it was a radius about room centre)
-                -- or the ring HOLDS and all three defenders go CYAN. It
-                resumes once the DJI is 0.25 m further in AND inside the
-                parked ring -- so fly it to the MIDDLE, not just back in.
-VIP speed       0.30 m/s budget at rest, 0.05 m/s while blocking (the ring
-                turns at 0.55 rad/s then); --sweep clears 0.20 m/s with both
-                attackers in the big arena (0.00 reactive / 0.15 scripted in
-                the old room) -- still hover during the attack
-attacker        plans at 0.80 m/s but its setpoint goes through the same guard
-                as a defender's, so it FLIES at 0.60 m/s at most
+Copies in prose went wrong when the frame rotated on 2026-10-08 and still LOOKED
+plausible, which is how a drone gets stood on the wrong mark.
 ```
 
-Marks move whenever `ring_radius` or `vip_offset` does — **print them, do not
-copy them from here.**
+Anything not here: `plan_escort`, or the banner `escort_show` prints before it arms. Both
+read the live config.
+
+## When an input goes quiet
+
+![When an input goes quiet](../../diagrams/47-escort-watchdogs.png)
+
+Parameters: `self_stale_s` 0.3 s, `self_stale_land_s` 1.0 s, `vip_stale_hold_s` 0.4 s, `vip_stale_land_s` 2.0 s (the VIP teleop uses the same two).
+
+Containment also aborts the show when a drone's measured pose passes the room edge by
+`contain_margin` (0.25 m), or stays `track_error_m` (0.60 m) off its command for
+`track_error_s` (0.8 s).
 
 ## Reviewing a run against the video
 
-Every line the show prints carries show time **and** wall clock, and the
-`ESCORT LIVE` banner prints `t0`, so `t+` converts to a timecode without
-guessing. On exit — including aborts — the show prints a table:
+Every line the show prints carries show time **and** wall clock, and the `ESCORT LIVE`
+banner prints `t0`, so `t+` converts to a timecode. On exit, aborts included, the show
+prints the table to lay against the recording:
 
 ```
   GEOFENCE EPISODES (2)
@@ -180,27 +253,24 @@ guessing. On exit — including aborts — the show prints a table:
     the defenders were CYAN for exactly these windows
 ```
 
-That is the table to lay against the recording. The LED tells the operator the
-fence is on *now*; this is what tells you *when*, afterwards — and matching the
-colour changes to fence events was impossible after the 2026-10-07 run because
-nothing printed an absolute time.
-
-For an independent check, run the monitor in a second terminal. It recomputes
-the same fence predicate from `/poses` alone and commands nothing, so its
-timeline can be diffed against the show's own claim:
+For an independent check, run the monitor in a second terminal. It subscribes only and
+commands nothing, and recomputes the fence from `/poses` alone, so its timeline can be
+diffed against the show's:
 
 ```bash
 python3 scripts/watch_escort.py --log ~/escort-$(date +%F-%H%M).jsonl
 ```
 
-It prints a hold table of its own at exit, and the JSONL carries `wall` and
-`clock` on every entry.
+It reports mocap gaps per body (the DJI included), distance to the clamp, containment and
+lost-tracking limits, commanded versus actual position, the minimum pair separation and any
+defender at or below the DJI's altitude. It prints its own hold table at exit, and the
+JSONL carries `wall` and `clock` on every entry. Flight logs in general:
+[flight-logs.md](../../rig/flight-logs.md).
 
 ## Abort
 
-| situation | do |
+| Situation | Do |
 |---|---|
-| paced, between legs | `q` + Enter — lands normally |
+| paced, between legs | `q` + Enter: lands normally |
 | running, any time | **Ctrl-C lands** (it takes SIGINT back from rclpy) |
 | drone misbehaving | E-STOP (`e` in the preflight GUI, or `ros2 service call /all/emergency std_srvs/srv/Empty '{}'`). Costs a battery re-plug on every drone. |
-| teleop quits | VIP stale 0.4 s → hold, 2.0 s → land. Adversary stale → freezes |

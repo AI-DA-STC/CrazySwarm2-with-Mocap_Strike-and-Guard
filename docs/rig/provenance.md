@@ -1,9 +1,8 @@
 # Provenance: what is inherited, and what is ours
 
 Most of this repo is other people's code, copied in unchanged. This page says who owns
-each layer, measured by comparing each vendored tree with the exact upstream commit it
-came from (2026-10-19). Use it to judge where a refactor is cheap and where it means
-maintaining a divergent copy of upstream.
+each layer, measured against the exact upstream commit each vendored tree came from
+(2026-10-19), so you can judge where a refactor is cheap and where it forks upstream.
 
 ## The layers
 
@@ -23,7 +22,7 @@ Files compared with line endings ignored. "Diff lines" counts added plus removed
 |---|---|---|---|---|
 | `src/crazyswarm2` (excluding `crazyflie/deps`) | IMRCLab `ae23edc` | 333 | 18 | 41 removed (upstream's Sphinx manual); added: `crazyflie_shows/`, `arena.yaml`, 6 AI-DA-STC files, the STL original |
 | `src/crazyswarm2/crazyflie/deps` (crazyflie_cpp, crazyflie-link-cpp) | submodules of `ae23edc` | 528 | 8 | |
-| `src/motion_capture_tracking` | IMRCLab `ros2@64d3af2`, libmotioncapture `24321e4` | 1828 | 4 | 3 patches + `VENDORED.md` added |
+| `src/motion_capture_tracking` | IMRCLab `ros2@64d3af2`, libmotioncapture `24321e4` | 1828 | 4 | 3 patches then (0003-0005; 0006 and 0007 came later) + `VENDORED.md` |
 | `src/natnet_ros2` | L2S-lab `883b095` | 30 | 2 | the NatNet SDK is NOT committed: `install_sdk.sh` downloads it at build time |
 
 Who changed the 26 changed Crazyswarm2 files (diff lines):
@@ -36,8 +35,8 @@ Who changed the 26 changed Crazyswarm2 files (diff lines):
 | Configs (`crazyflies.yaml`, `server.yaml`, `motion_capture.yaml`, rviz) | 139 | 174 |
 | Examples, `crazyflie_py`, simulator, build files, `UploadTrajectory.srv` | 251 | 79 |
 
-This project's server and library changes are itemised, with reasons, in
-[server-changes.md](server-changes.md). The mocap driver's patches are in
+Itemised with reasons: the server and library changes in
+[server-changes.md](server-changes.md), the mocap driver's patches in
 [`src/motion_capture_tracking/VENDORED.md`](../../src/motion_capture_tracking/VENDORED.md).
 
 Wholly our own code (lines, as of 2026-10-19): the escort, 4,209; the STL port, show and planner (`stl_game`, `stl_show`, `plan_stl`), 1,721, around a colleague's algorithm (his original, 1,246 lines, is kept unchanged in `crazyflie_examples`); the shared show safety code (`abort`,
@@ -50,19 +49,19 @@ show (`serpent`, `serpent_show`), 437.
 ## What this means for refactoring
 
 - **The inherited code is not ours to restructure** (about 99% of its files are
-  unchanged). Every change there is a merge conflict at the next upstream update, so it
-  should stay small and go back by pull request. The server patches are already the
-  largest divergence; the one open refactor there (per-drone callback groups: the
-  "OPEN: `callback_group_cf_srv`" entry in [known-issues.md](known-issues.md)) is a concurrency
-  change to the binary that owns the radio.
+  unchanged). Every change there is a merge conflict at the next upstream update, so keep
+  it small and send it back by pull request. The server patches are already the largest
+  divergence; the one open refactor there
+  ([per-drone callback groups](known-issues.md#open-one-fleet-wide-callback-group)) is a
+  concurrency change to the binary that owns the radio.
 - **The data flow is inherited too.** Mocap → `/poses` → server → radio is IMRCLab's
   design, and the Bitcraze firmware sets the command model. Changing either means
   leaving Crazyswarm2, not refactoring it.
 - **Our own code is where refactoring is free:** `crazyflie_shows`, `console/` and
-  `scripts/`. The known knot is that `escort_show` imports helpers from the carousel
-  and constellation modules (`swarm_show`, `constellation`, `constellation_show`,
-  `plan_show`), which is why that code is still in this repo. Moving those helpers into
-  a shared module would let it go.
+  `scripts/`. The known knot: `escort_show` imports helpers from the carousel and
+  constellation modules (`swarm_show`, `constellation`, `constellation_show`,
+  `plan_show`), which is why that code stays. Moving those helpers into a shared module
+  would let it go.
 
 ## Regenerating the numbers
 
@@ -78,3 +77,7 @@ done
 
 Same loop for `motion_capture_tracking` (`ros2@64d3af2`) and `natnet_ros2` (`883b095`).
 To split by author, compare against the team repo's `main` as well.
+
+---
+
+Full earlier text: `git show 678bac1:docs/rig/provenance.md`

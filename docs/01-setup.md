@@ -1,16 +1,14 @@
 # 1. Setup
 
-You do this once per laptop. It takes about 30 minutes, mostly downloads.
+Once per laptop, about 30 minutes, mostly downloads. Ubuntu 22.04 with ROS 2 Humble (the
+demo laptop) or Ubuntu 24.04 with ROS 2 Jazzy.
 
-**Supported:** Ubuntu 22.04 with ROS 2 Humble (what the demo laptop runs), or
-Ubuntu 24.04 with ROS 2 Jazzy.
-
-> **Using conda?** Run `conda deactivate` first, in every terminal you use for this
-> project. ROS 2 needs the system Python, and conda breaks it in confusing ways.
+> **Using conda?** Run `conda deactivate` in every terminal for this project. ROS 2 needs
+> the system Python.
 
 ## Step 1: install ROS 2
 
-Copy and paste this whole block. It picks the right ROS version for your Ubuntu.
+Paste this whole block. It picks the ROS version for your Ubuntu.
 
 ```bash
 source /etc/os-release
@@ -43,19 +41,15 @@ cd ~/strike-and-guard
 sudo apt install -y python3-scipy
 ```
 
-`setup.sh` installs the dependencies and builds everything. Run it on a network with
-internet: the first build also downloads OptiTrack's NatNet SDK, and the Motive network
-has no internet. It must finish with a line
-starting `OK: motion_capture_tracking from .../install/...`. If it prints `ERROR`,
-fix that first (see [troubleshooting](troubleshooting.md)).
+`setup.sh` installs the dependencies and builds everything. It needs internet (the first
+build downloads OptiTrack's NatNet SDK; the Motive network has none). It must end with a
+line starting `OK: motion_capture_tracking from .../install/...`; if it prints `ERROR`,
+fix that first ([troubleshooting](troubleshooting.md)).
 
-> **Never** `apt install ros-<distro>-motion-capture-tracking`. This repo carries its
-> own fixed copy of that camera driver. The apt version silently receives no camera
-> data on this network.
+> **Never** `apt install ros-<distro>-motion-capture-tracking`. This repo carries its own
+> fixed copy of that camera driver; the apt one silently receives nothing here.
 
 ## Step 3: let your user talk to the radio (real drones only)
-
-Skip this if you only want the simulator.
 
 ```bash
 sudo groupadd plugdev 2>/dev/null; sudo usermod -aG plugdev $USER
@@ -71,7 +65,7 @@ Then log out and back in.
 
 ## Step 4: build the simulator (simulator only)
 
-The simulator runs the real drone firmware on your laptop. Build it once:
+The simulator runs the real drone firmware on your laptop:
 
 ```bash
 ./scripts/setup_sim_firmware.sh
@@ -81,8 +75,8 @@ cd ~ && python3 -c "import cffirmware; print('cffirmware OK')"
 
 ## Step 5: open a terminal the right way
 
-Every terminal you use for this project needs these lines first. Add the last one to
-`~/.bashrc` if you like.
+Every terminal for this project starts with these lines (put the last one in
+`~/.bashrc` if you like):
 
 ```bash
 cd ~/strike-and-guard
@@ -91,10 +85,8 @@ source install/setup.bash
 export ROS_DOMAIN_ID=42      # any number 1-100 nobody else in the lab uses
 ```
 
-**Why `ROS_DOMAIN_ID`:** the lab network is shared. Without your own number, your
-laptop hears other people's drone commands, and they hear yours.
-
-Check it worked:
+The lab network is shared: without your own `ROS_DOMAIN_ID`, your laptop hears other
+people's drone commands, and they hear yours. Check:
 
 ```bash
 ros2 pkg prefix motion_capture_tracking   # must print a path inside ~/strike-and-guard/install
@@ -104,6 +96,6 @@ Next: [the flight-day routine](02-flight-day.md), then pick a demo: [escort](esc
 
 ---
 
-**Later:** after editing anything in `src/`, rebuild with `./scripts/build.sh` (or just
-one package, e.g. `./scripts/build.sh crazyflie_shows`) and re-run
-`source install/setup.bash`. On a low-memory machine use `LOW_MEM=1 ./scripts/build.sh`.
+**Later:** after editing `src/`, run `./scripts/build.sh` (or one package:
+`./scripts/build.sh crazyflie_shows`), then `source install/setup.bash` again. Low memory:
+`LOW_MEM=1 ./scripts/build.sh`.

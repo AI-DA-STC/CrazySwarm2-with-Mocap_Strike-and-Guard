@@ -92,6 +92,9 @@ ros2 run crazyflie_shows guard_show --ros-args -p use_sim_time:=true \
 ros2 run crazyflie_shows plan_serpent   # then serpent_show: the one-minute big-arena show
 ```
 
+Session state (what is current, waiting on people, next steps) is in
+`.claude/handoff.md`: read it after this file, update it before stopping.
+
 ## Rules that prevent real accidents
 
 The evidence for each is in `docs/rig/known-issues.md`; read the entry before

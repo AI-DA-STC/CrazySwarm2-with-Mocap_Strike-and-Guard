@@ -1,121 +1,171 @@
 # Troubleshooting: the full list
 
 Symptom, cause and fix for everything this rig is known to do. The short version is
-[troubleshooting.md](../troubleshooting.md); the evidence behind each entry is in
+[troubleshooting.md](../troubleshooting.md); the evidence behind an entry ("why") is in
 [known-issues.md](known-issues.md).
 
 ## Setup / build
 
 | Symptom | Cause / fix |
 |---------|-------------|
-| `Unsupported Ubuntu <ver>` from a script | Only 22.04 (Humble) and 24.04 (Jazzy) are supported. Or `source /opt/ros/<distro>/setup.bash` before running so `$ROS_DISTRO` is set. |
-| Mocap node dies with exit code **-6** (`set_option: No such device`), or `/poses` has 1 publisher and **never any data**, and `ros2 pkg prefix motion_capture_tracking` prints `/opt/ros/...` | The apt package `ros-<distro>-motion-capture-tracking` (1.0.9 on Humble, queued for Jazzy) hard-codes a foreign interface IP `141.23.110.162` into the NatNet socket code. The driver is **vendored** in `src/motion_capture_tracking` ([VENDORED.md](../../src/motion_capture_tracking/VENDORED.md)): `sudo apt remove ros-$ROS_DISTRO-motion-capture-tracking ros-$ROS_DISTRO-motion-capture-tracking-interfaces`, `./scripts/build.sh`, re-source, and confirm the prefix is now `.../install/motion_capture_tracking`. |
-| `vcs: command not found` | `sudo apt install python3-vcstool` (also installed by `install_deps.sh`). |
-| `colcon build` fails on `crazyflie_interfaces` | Source ROS 2 first; ensure `ros-dev-tools` / `rosidl` packages are installed (`scripts/install_deps.sh`). |
-| Missing submodule headers (`crazyflie_tools`, link-cpp) | `cd src/crazyswarm2 && git submodule update --init --recursive`, then rebuild. |
-| `natnet_ros2` build fails at "NatNet SDK not found" / `install_sdk.sh` | The SDK is downloaded at build time via `wget` from cloudfront — needs `wget` (installed by `install_deps.sh`) and internet access. Behind a proxy/offline, download `NatNet_SDK_4.4_ubuntu*.tar` manually and extract into `src/natnet_ros2/deps/NatNetSDK/`. |
-| Out-of-memory during build (SBC) | `LOW_MEM=1 ./scripts/build.sh`. |
-| Package not found after build | Re-source: `source install/setup.bash`. After editing `.msg`/`.srv` rebuild `crazyflie_interfaces` **and** dependents. |
-| `install/` missing / `setup.sh` "built" but no workspace | The build aborted before `colcon`. Fixed in current scripts (ROS `setup.bash` + `set -u`); `git pull` and re-run, or build by hand (`./scripts/build.sh`). |
-| `ModuleNotFoundError: No module named 'cffirmware'` (on `backend:=sim`) | The simulator needs the firmware bindings. Run `./scripts/setup_sim_firmware.sh` once ([setup step 4](../01-setup.md#step-4-build-the-simulator-simulator-only)). Not needed for hardware backends. |
-| `make bindings_python` fails: `git-lfs: not found` / `arm_add_f32.c: No such file or directory` | The CMSIS submodule uses Git LFS. `sudo apt install -y git-lfs && git lfs install`, then in `~/crazyflie-firmware`: `git submodule update --init --recursive --force`, then re-run `make bindings_python`. (`setup_sim_firmware.sh` now installs git-lfs.) |
-| `No module named '_cffirmware'` (sim, even though `import cffirmware` worked in `build/`) | The `setup.py` egg didn't bundle the compiled `.so`. Put the build dir on PYTHONPATH instead: `echo 'export PYTHONPATH=$HOME/crazyflie-firmware/build:$PYTHONPATH' >> ~/.bashrc && source ~/.bashrc`. Verify from your home dir, not `build/`. |
-
-> **Mismatched ROS distro.** If you built under one distro but source another at
-> runtime, you get typesupport / ABI errors. Keep `$ROS_DISTRO` consistent between
-> `build.sh` and your runtime shells.
+| `Unsupported Ubuntu <ver>` from a script | Only 22.04 (Humble) and 24.04 (Jazzy) are supported; or `source /opt/ros/<distro>/setup.bash` first so `$ROS_DISTRO` is set. |
+| Mocap node dies with exit **-6** (`set_option: No such device`), or `/poses` has a publisher and never any data, and `ros2 pkg prefix motion_capture_tracking` prints `/opt/ros/...` | The broken apt driver shadows the vendored one ([why](known-issues.md#never-install-the-apt-motion-capture-tracking)). `sudo apt remove ros-$ROS_DISTRO-motion-capture-tracking ros-$ROS_DISTRO-motion-capture-tracking-interfaces`, `./scripts/build.sh`, re-source; the prefix must now be `.../install/motion_capture_tracking`. |
+| `vcs: command not found` | `sudo apt install python3-vcstool` (`install_deps.sh` does). |
+| `colcon build` fails on `crazyflie_interfaces` | Source ROS 2 first; `ros-dev-tools` / `rosidl` must be installed (`scripts/install_deps.sh`). |
+| Missing submodule headers (`crazyflie_tools`, link-cpp) | `cd src/crazyswarm2 && git submodule update --init --recursive`, rebuild. |
+| `natnet_ros2`: "NatNet SDK not found" / `install_sdk.sh` fails | The SDK is downloaded with `wget` on the first build: needs internet. Offline, download `NatNet_SDK_4.4_ubuntu*.tar` and extract it into `src/natnet_ros2/deps/NatNetSDK/`. |
+| Out of memory during the build (SBC) | `LOW_MEM=1 ./scripts/build.sh`. |
+| Package not found after a build | `source install/setup.bash`. After editing `.msg`/`.srv`, rebuild `crazyflie_interfaces` and its dependents. |
+| `install/` missing although `setup.sh` "built" | The build aborted before `colcon` ([`set -u`](known-issues.md#environment-traps-closed)); current scripts are fixed. `git pull`, or run `./scripts/build.sh`. |
+| Typesupport / ABI errors at runtime | Built under one ROS distro, sourced another. Keep `$ROS_DISTRO` the same for `build.sh` and every shell. |
+| `invalid message type`, `No module named '_cffirmware'`, odd rclpy errors | conda is active ([why](known-issues.md#environment-traps-closed)). `conda deactivate`, new terminal. |
+| `No module named 'cffirmware'` (`backend:=sim`) | Run `./scripts/setup_sim_firmware.sh` once ([setup step 4](../01-setup.md#step-4-build-the-simulator-simulator-only)). Hardware does not need it. |
+| `make bindings_python`: `git-lfs: not found` / `arm_add_f32.c: No such file or directory` | `sudo apt install -y git-lfs && git lfs install`; in `~/crazyflie-firmware`, `git submodule update --init --recursive --force`; re-run. (`setup_sim_firmware.sh` now installs git-lfs.) |
+| `No module named '_cffirmware'` in sim, though `import cffirmware` works inside `build/` | The egg lacks the compiled `.so`. `echo 'export PYTHONPATH=$HOME/crazyflie-firmware/build:$PYTHONPATH' >> ~/.bashrc && source ~/.bashrc`; test from your home directory. |
 
 ## Simulation
 
 | Symptom | Cause / fix |
 |---------|-------------|
-| Sim server **crashes with a `TypeError`** the moment a script calls `start_trajectory` | `plan_start_trajectory`'s binding arity differs between cffirmware builds. On this box the binding built from tag 2025.02 is **5-arg** (`p, trajectory, reversed, relative, start_from`, verified 2026-09-17), and calling it with 7 arguments raises `TypeError: takes 5 positional arguments but 7 were given`, which kills the sim server at the first `startTrajectory`. `crazyflie_sim/crazyflie_sil.py` now picks the call by `inspect.signature` arity at import, so either binding works — never hard-code either. **Sim-only; hardware unaffected.** Re-vendoring an older crazyswarm2 reintroduces the crash. |
-| In sim, a flight script finishes in seconds / commands fire before the previous motion completes | The script slept on wall clock instead of the sim clock (`/clock`), which is only paced to wall time (`sim.realtime`) and runs flat out with `sim.realtime:=false`. Run it with `--ros-args -p use_sim_time:=true` ([running.md section A](running.md#a-simulation-no-hardware-no-mocap)). On hardware run **without** the flag. |
+| Sim server dies with `TypeError: takes 5 positional arguments but 7 were given` at the first `start_trajectory` | An older `crazyflie_sil.py` that hard-codes the arity ([why](known-issues.md#environment-traps-closed)). The vendored one probes it; re-vendoring an older crazyswarm2 brings the crash back. Sim only. |
+| A script finishes in seconds, or commands fire before the last move ends | It slept on the wall clock. Add `--ros-args -p use_sim_time:=true` ([running.md A](running.md#a-simulation-no-hardware-no-mocap); [why](known-issues.md#use_sim_timetrue-in-the-simulator-never-on-hardware)). Never on hardware. |
+| The second sim run hangs | Restart the `ros2 launch` between sim runs. |
 
 ## Crazyradio / drones
 
 | Symptom | Cause / fix |
 |---------|-------------|
-| Drone never connects | Check `uri` in `src/crazyswarm2/crazyflie/config/crazyflies.yaml`; USB permissions ([setup step 3](../01-setup.md#step-3-let-your-user-talk-to-the-radio-real-drones-only)); each drone needs a unique address. |
-| Server **hangs at startup**; `/all/*` services (takeoff/land/arm/emergency) never created | The server connects drones in **lexicographic `std::map` order** and **BLOCKS FOREVER, silently**, on the first enabled drone that doesn't answer radio — **one unreachable drone kills the whole launch** (no error; the hung server needs SIGKILL). Causes: dead drone (cf6 went silent on full channel/datarate sweeps 2026-08-04 — at its own **and** the factory address; needs a physical check), wrong address, or a URI **datarate mismatch** — e.g. a `2M` URI for a drone whose radio runs at `1M` (bitten by cf11 on this rig; `ros2 run crazyflie scan --address 0xE7E7E7E711` → `radio://*/90/1M/...`). **Go/no-go rule: scan every enabled address before every launch** — `./scripts/scan_fleet.sh` (derives the list from `crazyflies.yaml`; a list written into prose drifts); fix the URI or set the drone `enabled: false`. |
-| Two dongles refused: `Channels 80 and 81 are already served by Crazyradio 0` (crazyflie-link-cpp) | **When running two dongles** (the current rig is single-dongle: every enabled drone on `radio://0/80/2M`, see `./scripts/scan_fleet.sh --list`): channels too close — a 2M channel is ~2 MHz wide, so **space channels ≥2 apart at 2M** (historical two-dongle rig: cf1 on 80, cf11 on 90). See the comments in `crazyflies.yaml`. |
-| Latency / receive-rate warnings; choppy hold | Radio saturated — lower `firmware_logging` rates and mocap rate ([mocap.md section 3](mocap.md#3-frequency--bandwidth-tuning-240--50-hz)); use one dongle per 1–2 drones. |
-| Won't arm / nothing flies, no error | **Dominant cause: supervisor LOCKED after an e-stop.** `ros2 topic echo /cfX/status --once` shows `supervisor_info` with bit `0x40` set and `CAN_BE_ARMED` (0x01) clear. The firmware state machine has exactly one transition out of locked (back to locked), so **only a battery out-and-in, per drone, clears it** (verified 2026-10-02). `arm()` is fire-and-forget, so a refused arm is invisible; the only positive proof a drone flew is its mocap altitude. Every show checks this before uploading (`crazyflie_shows/preflight.py`). Otherwise: tumbled / can't-fly bits — place level, retry. To verify arming + motors end-to-end, run the prop-spin ground test: `ros2 run crazyflie_examples arming` — 10 s of low-PWM prop spin ([running.md section F](running.md#prop-spin-ground-test-arming-example)). **Ground only, props spin.** |
-| Not sure what state the rig is in (drones with the Color LED deck) | Read the LED: **green = drone connected and ready for command; red = drones are in flight / a script is controlling them** (`Crazyswarm()` sets red for its lifetime, `atexit` restores green on exit); **dark** = clean server shutdown (after a hard link loss the LED keeps its last color instead). |
-| **One drone silent**: `/cfX/pose`, `/cfX/status` and `/cfX/kalman_preflight` all exactly 0.00 Hz while the others are fine and the drone still answers `ros2 param set` | The "link alive, log data dead" stall (first seen 2026-10-02): the drone deleted its own log blocks after a >= 1 s window of receiving nothing (firmware `radiolink.c` -> `log.c logReset(); crtpReset();`, read in source 2026-10-05) and never told the host. **The server's telemetry watchdog (`telemetry_watchdog_s: 5.0` in `server.yaml`) recovers it automatically, about 1 s after declaring the stall (measured 2026-10-05)** — but only when mocap shows the drone on the floor (z <= 0.10 m). Manual fallback: restart the server. Do not power-cycle drones for this. Evidence and the long list of disproved theories: [known-issues.md](known-issues.md) "Link alive, log data dead"; diagnose with `scripts/link_stall_recorder.py` and `launch.py trace_cf:=all`. |
-| **All drones stop publishing during a trajectory upload**; preflight GUI shows `takeoff (cfX): timed out waiting for response`; log shows `[cfX] upload_trajectory(...)` with nothing after it | The server wedged: an unbounded wait on a memory-write reply the drone flushed, inside the fleet-wide mutually exclusive callback group ([known-issues.md](known-issues.md), "An UPLOAD can wedge the server permanently"). Bounded since 2026-10-05, but if it still happens: `/all/emergency`, `/all/land` and `/all/takeoff` still work (separate group). The server ignores SIGINT in this state: `pkill -9 -f crazyflie_server`, check `pgrep -f crazyflie_server` and UDP 1511, relaunch. Never upload to armed drones. |
-| Ctrl-C on a show left the drones flying their last command; `failed to initialize wait set: the given context is not valid` | `rclpy.init` (inside `Crazyswarm()`) shuts the ROS context down before your handler runs. Shows must claim the signals back with `take_signals()` from `crazyflie_shows/abort.py` (the escort does). For a script that did not: E-STOP (costs a battery cycle per drone) or `/all/land`. |
-| You can see another person's `/all/takeoff` / nodes you did not start | ROS domain 0 is **shared with the lab**. Set `ROS_DOMAIN_ID` (different from the neighbours', in every terminal and the console) before flying. |
-| Drifts then emergency-lands | Estimator diverging — usually no `/poses` reaching the server (see mocap below). |
+| A drone never connects | Check its `uri` in `crazyflie/config/crazyflies.yaml` (each drone needs its own address) and USB permissions ([setup step 3](../01-setup.md#step-3-let-your-user-talk-to-the-radio-real-drones-only)). |
+| Server hangs at startup; the `/all/*` services never appear | An enabled drone does not answer: dead, wrong address, or a URI datarate that differs from the drone's ([why](known-issues.md#the-server-hangs-forever-on-the-first-unreachable-drone)). `./scripts/scan_fleet.sh`; fix the URI or set the drone `enabled: false`. Kill the hung server with `pkill -9 -f crazyflie_server`. |
+| `Channels 80 and 81 are already served by Crazyradio 0` | Two dongles on adjacent channels. Keep them at least 2 apart at 2M ([why](known-issues.md#two-dongles-channels-at-least-2-apart-at-2m)). |
+| Won't arm, nothing flies, no error | Supervisor LOCKED after an E-STOP: `ros2 topic echo /cfX/status --once` shows `supervisor_info` bit `0x40` set and `0x01` clear. Battery out and in, every drone ([why](known-issues.md#supervisor-locked-after-an-e-stop)). Otherwise tumbled / can't-fly bits: place level, retry. End-to-end arming test (ground only, props spin 10 s): `ros2 run crazyflie_examples arming` ([running.md](running.md#prop-spin-ground-test-arming-example)). |
+| Unsure what state the rig is in (Color LED deck) | Green: connected and ready. Red: a script controls the drones. Dark: clean server shutdown ([LED convention](known-issues.md#led-convention)). |
+| **One drone silent**: its `/cfX/pose`, `/cfX/status` and `/cfX/kalman_preflight` all at 0.00 Hz, while it still answers `ros2 param set` | The drone dropped its own log blocks after a ≥ 1 s receive gap ([why](known-issues.md#link-alive-log-data-dead)). The server's telemetry watchdog recovers it about 1 s after declaring the stall, but only while mocap shows the drone on the floor. Otherwise restart the server; do not power-cycle. Diagnose with `scripts/link_stall_recorder.py` and `launch.py trace_cf:=all`. |
+| **All drones stop publishing during a trajectory upload**; `takeoff (cfX): timed out waiting for response`; log ends at `[cfX] upload_trajectory(...)` | The server wedged on a reply the drone flushed ([why](known-issues.md#an-upload-can-wedge-the-server-fixed-2026-10-05); bounded since 2026-10-05). `/all/emergency`, `/all/land`, `/all/takeoff` still work. The server ignores SIGINT: `pkill -9 -f crazyflie_server`, check `pgrep -f crazyflie_server` and UDP 1511, relaunch. Never upload to armed drones. |
+| Ctrl-C on a show left the drones flying; `failed to initialize wait set: the given context is not valid` | The script did not take the signals back from rclpy ([why](known-issues.md#ctrl-c-kills-the-ros-context-before-your-handler-runs)). Now: E-STOP (a battery cycle per drone) or `/all/land`. Fix the script: `take_signals()` from `crazyflie_shows/abort.py`. |
+| Commands or nodes you did not start | ROS domain 0 is shared with the lab ([why](known-issues.md#set-ros_domain_id-domain-0-is-shared-with-the-lab)). Set your own `ROS_DOMAIN_ID` in every terminal and the console. |
+| Drifts, then emergency-lands | Estimator diverging, usually no `/poses` reaching the server: see [Mocap pipeline](#mocap-pipeline). |
+| Latency / receive-rate warnings, choppy hold | Radio saturated. Lower the `firmware_logging` rates and the mocap rate ([mocap.md 3](mocap.md#3-frequency--bandwidth-tuning-240--50-hz)), or spread the drones over more dongles. |
+| Slow connects, low acknowledged share, hundreds of `Unexpected number of unicast packets` a minute | Replies lost one way. On 2026-11-17 this was Crazyradio firmware 5.1 ([why](known-issues.md#crazyradio-firmware-51-fixed-2026-11-17)). Measure, then try the steps below one at a time. |
+
+`Motion capture rate off (#: N, Avg/Min/Max)` counts N one-second intervals outside the
+40-60 Hz band (rates in Hz); it is not the number of poses received. A Min under 10 Hz
+means a pose gap of over 100 ms.
+
+**Measure the link** from the newest server log (healthy, as on 2026-11-06: all drones
+connected within ~30 s, 40 % or more acknowledged, under 20 "received more than sent" a
+minute, a few seconds a minute of pose gaps at most):
+
+```bash
+f=$(ls -t ~/.ros/log/crazyflie_server_*.log | head -1)
+grep -E "\] Memories:" $f | awk -F'[][]' 'NR==1{s=$4} {printf "%.0fs ", $4-s} END{print "(connects)"}'
+awk -F'[][]' 'NR==1{t0=$4} {t=$4}
+/Low unicast receive rate/ { match($0,/Sent: [0-9]+\. Received: [0-9]+/); x=substr($0,RSTART,RLENGTH); split(x,a,/[^0-9]+/); su+=a[2]; re+=a[3] }
+/Unexpected number of unicast packets/ {u++}
+/Motion capture rate off/ { match($0,/Min: [0-9.]+/); if (substr($0,RSTART+5,RLENGTH-5)+0 < 10) g++ }
+END { m=(t-t0)/60; printf "%.1f min: ack %.2f, received-more-than-sent %.0f/min, seconds with a pose gap >100 ms %.1f/min\n", m, (su?re/su:0), u/m, g/m }' $f
+```
+
+**If the link is bad**, in this order, measuring after each:
+
+1. **Both Crazyradios on the same firmware release, 5.5** (5.1 is retired; Bitcraze
+   asks for 5.2 or newer). Stop the stack (the server holds
+   the radios). Releases: github.com/bitcraze/crazyradio2-firmware, one
+   `crazyradio2-<version>.uf2` each. Hold the button while plugging the radio in (LED
+   pulses red) and a drive appears; copy `CURRENT.UF2` off as a backup, then copy the new
+   file on. Roll back the same way. Files and backups on the rig laptop:
+   `~/crazyradio_firmware/`. The drones are not touched.
+2. **Reboot the laptop**, or stop the stack and console, `fastdds shm clean`,
+   `ros2 daemon stop`, restart ([why](known-issues.md#open-poses-arrives-late-between-processes-on-the-laptop-2026-11-17)).
+3. **Radios away from the laptop:** a USB extension, 1-2 m from the laptop and its
+   charger, raised. Plugged in directly, replies fell from 8-30 % to 2 %.
+4. **Less telemetry while flying:** turn `kalman_preflight` (5 Hz) down or off (edit with
+   the `config-editor` agent; it knows the log-block limits).
+5. **Only if still bad, 1M instead of 2M.** In cfclient connect at the current URI,
+   **Connect → Configure 2.x**, set 1M, keep channel and address, Write, power-cycle the
+   drone. Then change `/2M/` to `/1M/` in its URI in `crazyflies.yaml`, or the server
+   hangs at launch. Change every drone on one radio together; `./scripts/scan_fleet.sh`
+   before the stack.
+6. **Then channels**, same dialog and URI edit, once a measurement shows a quieter one.
+
+Do not raise Motive's rate for the Crazyflies: every pose forwarded is another radio
+broadcast. cfclient's own settings do not affect the stack (the server has its own link
+library).
 
 ## ROS 2 / DDS / parameters
 
 | Symptom | Cause / fix |
 |---------|-------------|
-| `ros2 param set /crazyflie_server <cf>.params.<group>.<name> <value>` succeeds on the ROS side but the drone never changes | Upstream relies on a ParameterEventHandler on `/parameter_events`, and on this rig a node's **own** parameter events are never delivered back to itself — the handler never fires. Fixed in the vendored `crazyflie_server.cpp`: an `add_on_set_parameters_callback` applies `<cf>.params.*` / `all.params.*` synchronously inside the service call ([running.md section F](running.md#runtime-firmware-parameters)). **Re-vendoring upstream silently reintroduces the bug.** |
-| Fresh `rclpy` processes stall: `set_parameters` / `list_parameters` calls time out, `Crazyswarm()` hangs forever waiting on `all/emergency` | DDS discovery in a brand-new process sometimes never completes on this rig. The long-running `ros2` CLI daemon keeps the ROS graph warm, so `ros2 param set` / `ros2 param list` complete reliably — that is why `scripts/led.sh` uses the CLI, and why `color_led.py` talks to `/crazyflie_server/set_parameters` directly instead of building a `Crazyswarm()`. |
-| Stray `/cf231/robot_description` in `ros2 topic list` even though no cf231 exists | **Harmless red herring**: a stale RViz **RobotModel display** in `config/config.rviz` still points at `/cf231/robot_description`. Not a phantom drone — ignore it, or delete the RobotModel display from the RViz config. |
-| Console says "crazyflie_server not running" / no drone status, but RViz and the preflight GUI work | The Wi-Fi changed after the console started; its `ros2` daemon and journal stay on the old network. Stop the console, `ros2 daemon stop`, start it again; next time switch networks first ([known-issues.md](known-issues.md), "Console blind after a Wi-Fi switch"). |
+| `ros2 param set /crazyflie_server <cf>.params.<group>.<name> <value>` succeeds but the drone never changes | A re-vendored upstream server: this rig never delivers a node's own `/parameter_events` ([why](known-issues.md#a-node-never-hears-its-own-parameter_events)). The vendored server applies them in `add_on_set_parameters_callback` ([running.md F](running.md#runtime-firmware-parameters)). |
+| Fresh `rclpy` processes stall: parameter calls time out, `Crazyswarm()` waits forever on `all/emergency` | DDS discovery in a new process sometimes never completes here. Use the `ros2` CLI (its daemon keeps the graph warm), as `scripts/led.sh` does. |
+| `/cf231/robot_description` in `ros2 topic list`, though no cf231 exists | Harmless: a stale RViz RobotModel display in `config/config.rviz`. Ignore it or delete that display. |
+| Console says "crazyflie_server not running" while RViz and the preflight GUI work | The network changed after the console started ([why](known-issues.md#console-blind-after-a-wi-fi-switch)). Stop the console, `ros2 daemon stop`, start it again. Switch networks before starting it. |
 
 ## Mocap pipeline
 
+![/poses is silent: what to check, in order](../diagrams/49-mocap-poses-silent.png)
+
 | Symptom | Cause / fix |
 |---------|-------------|
-| Mocap suddenly "died": `/poses` silent, `ros2 topic info /poses` shows **0 publishers**, mocap node absent from `ros2 node list` | **CONFIRMED on this rig:** a leftover process bound to UDP 1511 (e.g. a stray debug listener). With two `SO_REUSEPORT` sockets on 1511 the kernel delivers each NatNet datagram to only ONE socket — the mocap node starves and hangs **silently** inside libmotioncapture `connect()` (no crash, no publisher). Diagnose: `ss -uanp \| grep :1511` — two sockets = the bug. Fix: kill the orphan, relaunch. Note: ping to the Motive PC proves nothing (unicast works while multicast is starved). |
-| `/poses` silent, **no errors**, mocap node alive but `ros2 topic info /poses` shows 0 publishers and `ss -ulpn` shows no 1510/1511 socket for it | The node is blocked in `connect()` waiting for a NatNet reply from a **stale Motive address** (the lab Motive PC's DHCP lease has moved .100 → .124 → .152). Keep `hostname: "auto"` in `motion_capture.yaml` so `launch.py` discovers the current address (it logs `mocap: Motive at <ip>`), or pass `mocap_hostname:=<ip>`. On Wi-Fi also keep `type: "optitrack"` — the closed-source parser wedges permanently on Wi-Fi stalls ([mocap.md section 5](mocap.md#5-networking-mocap-over-a-router-lab-setup)). |
-| Launch aborts: `mocap hostname is 'auto' but no Motive answered a NatNet discovery ping` | You are not on the Motive PC's LAN segment (`ip route get <motive-ip>` says `via` → broadcast cannot reach it), Motive is not running / streaming is off, Motive's Data Streaming **Local Interface** is unset or loopback (seen after the 2026-11-02 move: the Motive PC answered ping but not NatNet), or the Windows firewall blocks NatNet. Fix the network, or pin the address with `mocap_hostname:=<ip>` (then the same causes make the node hang silently instead). |
-| `/poses` silent, **no errors**, Motive answers discovery and ping, and both Wi-Fi and the wire are up | The NatNet multicast join is on the wrong interface: `ip maddr show dev <wifi>` lists `239.255.42.99` and the wired device does not. Keep `interface_ip: "auto"` (vendored patch 0007; `launch.py` picks the source address of the route to Motive) and check the launch line `mocap: NatNet multicast joined on <ip>`. Override: `mocap_interface_ip:=<ip>` / `CRAZYSWARM_MOCAP_IFACE` ([mocap.md section 5](mocap.md#5-networking-mocap-over-a-router-lab-setup), [known-issues.md](known-issues.md)). |
-| Changed the Motive transmission type but the node still gets nothing | Transmission type is read **once at connect**. Fully restart the launch after changing it. The vendored `motion_capture_tracking` needs **Multicast** (Motive's Broadcast Frame Data variant is fine); Unicast is not supported ([mocap.md section 4](mocap.md#4-multicast-vs-unicast-primer)). |
-| Killed `ros2 run motion_capture_tracking ...` (or its terminal) but `ss -ulpn` still shows a socket on 1511 | Killing the `ros2 run` wrapper does not kill the node binary. `pkill -f motion_capture_tracking_node`, then confirm `ss -ulpn \| grep 1511` is empty before relaunching. |
-| Mocap node won't die on Ctrl-C; next launch's connect aborts with SIGABRT | A frozen mocap node ignores SIGINT (blocked in `recv`); the launch escalates to SIGKILL, but check `pgrep -f motion_capture_tracking` for leftovers before relaunching — a leftover can make the next connect abort. |
-| Yaw offset / fly-away despite perfect position; preflight GUI shows the red misalignment banner or large dashed `err.yaw` | Motive rigid body was created rotated. Recreate it with the drone's forward axis on global +X ([mocap.md section 2](mocap.md#2-defining-rigid-bodies)). Position error stays ~1 mm regardless (mocap position is force-fused) — don't let it reassure you. Go/no-go: ±5° fly; 5–15° fix first; >20° do not fly. |
-| `/poses` flows but **one drone is missing** from it (its `name:` entry never appears) | Its **rigid body isn't enabled/named in Motive** — the asset is unchecked, deleted, or renamed so it no longer matches the `crazyflies.yaml` robot key. Fix in Motive **before flight**: the server has no mocap for that drone. Per-drone filter: `ros2 topic echo /poses \| grep -A5 -- '- name: cf1$'`. |
-| `/<body>/pose` silent (natnet_ros2 path) | natnet not receiving frames: check `serverIP`/`clientIP` in the natnet launch match Motive's "Local Interface"; firewall off; multicast address/ports match; **Broadcast Frame** enabled in Motive. |
-| natnet node up but no topics | It's a LifecycleNode — it must reach **ACTIVE**. Launch with `activate:=true` or transition it manually. |
-| `/<body>/pose` flows, `/poses` silent (natnet_ros2 path) | `pose_bridge.py` reads its roster from `crazyflies.yaml` (since 2026-10-06); a body whose name is not a yaml key is ignored, and poses older than 0.25 s are dropped. Also check you did not leave `namespace:=` empty: natnet and the server would then both publish `/<name>/pose`. |
-| `/poses` flows, drone still drifts | Rate/QoS mismatch, or marker geometry in `src/crazyswarm2/crazyflie/config/motion_capture.yaml` doesn't match the physical layout; orientation flips → make marker patterns asymmetric. |
-| Cameras flash white with empty volume | Seeing stray reflections/noise — re-mask in Motive calibration or remove the reflector ([mocap.md section 1](mocap.md#1-camera-calibration-brief)). |
-| Wrong orientation / axes | Motive ground plane not **Z-up**; recalibrate the ground plane. |
+| `/poses` silent, `ros2 topic info /poses` shows **0 publishers**, mocap node missing from `ros2 node list` | A leftover process on UDP 1511 starves the node ([why](known-issues.md#mocap-died-an-orphan-on-udp-1511)). `ss -uanp \| grep :1511`: two sockets is the bug. Kill the orphan, relaunch. Ping proves nothing. |
+| `/poses` silent, no errors, node alive but 0 publishers, and no 1510/1511 socket for it in `ss -ulpn` | It waits in `connect()` for a stale Motive address ([why](known-issues.md#motives-address-and-local-interface)). Keep `hostname: "auto"` in `motion_capture.yaml` (the launch logs `mocap: Motive at <ip>`) or pass `mocap_hostname:=<ip>`. |
+| Launch aborts: `no Motive answered a NatNet discovery ping` | Not on Motive's LAN segment (`ip route get <motive-ip>` says `via`), Motive not running or not streaming, Motive's Data Streaming **Local Interface** unset or loopback, or the Windows firewall. Fix that, or pin `mocap_hostname:=<ip>` (the same causes then hang the node silently). |
+| `/poses` silent, no errors, Motive answers discovery and ping, Wi-Fi and the wire both up | The multicast join is on Wi-Fi ([why](known-issues.md#poses-silent-with-wi-fi-and-the-wire-both-up-fixed-2026-11-23)): `ip maddr show dev <wifi>` lists `239.255.42.99`. Keep `interface_ip: "auto"`; the launch line `mocap: NatNet multicast joined on <ip>` must show this laptop's Motive-network address. Override: `mocap_interface_ip:=<ip>` or `CRAZYSWARM_MOCAP_IFACE`. |
+| Changed Motive's transmission type, still nothing | It is read once at connect: restart the whole launch. Multicast (or Broadcast Frame Data) only; Unicast is not supported ([mocap.md 4](mocap.md#4-multicast-vs-unicast-primer)). |
+| Killed `ros2 run motion_capture_tracking ...` but `ss -ulpn` still shows 1511 | Killing the wrapper leaves the node. `pkill -f motion_capture_tracking_node`; `ss -ulpn \| grep 1511` must be empty before relaunching. |
+| Mocap node ignores Ctrl-C; the next connect aborts with SIGABRT | A frozen node ignores SIGINT; the launch escalates to SIGKILL. Check `pgrep -f motion_capture_tracking` for leftovers before relaunching. |
+| `/poses` flows but one drone is missing | Its rigid body in Motive is unchecked, deleted or renamed away from the `crazyflies.yaml` key. Fix in Motive before flight. Check: `ros2 topic echo /poses \| grep -A5 -- '- name: cf1$'`. |
+| Yaw offset or fly-away with perfect position; red misalignment banner, large `err.yaw` | The rigid body was created rotated ([why](known-issues.md#rigid-body-orientation)). Recreate it with the nose on global +X ([mocap.md 2](mocap.md#2-defining-rigid-bodies)). ±5° fly; 5-15° fix first; over 20° do not fly. |
+| `/poses` flows, drone still drifts | Rate or QoS mismatch, or `marker_configurations` in `motion_capture.yaml` does not match the markers; orientation flips: make the marker pattern asymmetric. |
+| Cameras flash white with an empty volume | Stray reflections: re-mask or remove the reflector ([mocap.md 1](mocap.md#1-camera-calibration-brief)). |
+| Wrong orientation or axes | Motive's ground plane is not Z-up: recalibrate it. |
+
+The alternative `natnet_ros2` path ([running.md B](running.md#b-hardware-flight-with-optitrack)):
+
+| Symptom | Cause / fix |
+|---------|-------------|
+| `/<body>/pose` silent | `serverIP` / `clientIP` in the natnet launch must match Motive's Local Interface; firewall off; multicast address and ports match; Broadcast Frame enabled. On this rig its NatNet SDK client is deaf to the broadcast frames Motive sends ([mocap.md 4](mocap.md#4-multicast-vs-unicast-primer)). |
+| natnet node up, no topics | It is a LifecycleNode: launch with `activate:=true` or transition it to ACTIVE. |
+| `/<body>/pose` flows, `/poses` silent | `pose_bridge.py` ignores bodies whose name is not a `crazyflies.yaml` key and drops poses older than 0.25 s. Do not leave `namespace:=` empty, or natnet and the server both publish `/<name>/pose`. |
 
 ## Preflight GUI
 
 | Symptom | Cause / fix |
 |---------|-------------|
-| **GUI window never appears** (server/RViz run fine, no obvious error) | Almost always matplotlib on this machine. Run `/usr/bin/python3 -c "import matplotlib.pyplot as p; print(p.get_backend())"` and read the result: **NumPy 1.x-vs-2.x traceback** → user-site NumPy 2.x poisons the apt matplotlib; `pip3 install --user "numpy<2"`. **`ModuleNotFoundError: matplotlib`** → `sudo apt install python3-matplotlib python3-tk`. **Prints `Agg`** → no GUI toolkit; `sudo apt install python3-tk` (with Agg, `plt.show()` returns instantly and the node *exits cleanly* — launch even logs "finished cleanly"). **Prints `TkAgg`/`QtAgg` cleanly** → run the script directly to see the real error: `python3 src/crazyswarm2/crazyflie/scripts/preflight_kalman_plotter.py`. See [setup step 2](../01-setup.md#step-2-get-the-code-and-build-it) for the full extra-deps install block. |
-| GUI absent **and** no `preflight` in the launch file (`grep -c preflight src/crazyswarm2/crazyflie/launch/launch.py` prints 0) | Clone predates the preflight GUI (added 2026-07-09). `git pull`, rebuild (`./scripts/build.sh`), re-source. |
-| *Nothing* opens (no RViz either); launch exits with `package 'X' not found` | A default-on node's package is missing (`joy`, `rviz2`, `foxglove_bridge`, `motion_capture_tracking`) — one missing package aborts the **entire** launch. Install it (`sudo apt install ros-$ROS_DISTRO-<pkg>` — **except** `motion_capture_tracking`, which is vendored: rebuild with `./scripts/build.sh` and re-source `install/setup.bash`) or disable the node (`teleop:=False`, `rviz:=false`, `foxglove:=False`, `mocap:=False`). |
-| Plotter works under `ros2 launch` but crashes with a NumPy error when run manually | The launch file shields the node with `PYTHONNOUSERSITE=1`; your manual shell doesn't. Run it as `PYTHONNOUSERSITE=1 python3 …` or fix the root cause with `pip3 install --user "numpy<2"`. |
-| A drone doesn't appear in the GUI | It has `enabled: false` in `crazyflies.yaml`, or the GUI was pointed at a different yaml with `--config`. |
-| GUI shows every drone (incl. disabled) plus a yaml warning | The GUI couldn't read `crazyflies.yaml` — it then accepts everything. Fix the path / pass `--config <path>`. |
-| Mocap Hz trace in the connectivity panel decays to 0 | Mocap died — see the Mocap pipeline table above (UDP 1511 orphan is the confirmed cause on this rig). |
-| kalman telemetry panel empty | The `kalman_preflight` custom log topic was removed/renamed in `crazyflies.yaml` — restore it ([running.md section G](running.md#g-enabling-extra-telemetry-logging-custom-topics)). |
+| **The window never appears** (server and RViz fine) | Usually matplotlib. Run `/usr/bin/python3 -c "import matplotlib.pyplot as p; print(p.get_backend())"`. **NumPy 1.x-vs-2.x traceback**: the apt matplotlib (NumPy 1 ABI) under the pip NumPy 2; re-run `./scripts/install_deps.sh`, which installs pip `matplotlib>=3.9`. **`ModuleNotFoundError`**: `sudo apt install python3-matplotlib python3-tk`. **Prints `Agg`**: no GUI toolkit, `sudo apt install python3-tk` (with Agg the node exits at once and the launch logs "finished cleanly"). **`Could not load the Qt platform plugin xcb`**: `sudo apt install libxcb-cursor0`. **Prints `TkAgg`/`QtAgg`**: run `python3 src/crazyswarm2/crazyflie/scripts/preflight_kalman_plotter.py` to see the real error. Full deps block: [setup step 2](../01-setup.md#step-2-get-the-code-and-build-it). |
+| Nothing opens, not even RViz; `package 'X' not found` | A default-on node's package is missing, which aborts the whole launch. RViz, the preflight GUI and Foxglove are on by default. `sudo apt install ros-$ROS_DISTRO-<pkg>` (`joy`, `rviz2`, `foxglove-bridge`; `motion_capture_tracking` is vendored: rebuild and re-source instead), or disable the node: `teleop:=False`, `rviz:=false`, `foxglove:=False`, `mocap:=False`. Foxglove is viewed in the Foxglove Studio app, not a window. |
+| A drone is missing from the GUI | It is `enabled: false`, or the GUI was given another yaml with `--config`. |
+| Every drone shown, disabled ones too, plus a yaml warning | The GUI could not read `crazyflies.yaml` and accepts everything. Fix the path or pass `--config <path>`. |
+| Mocap Hz trace decays to 0 | Mocap died: see [Mocap pipeline](#mocap-pipeline). |
+| kalman panel empty | The `kalman_preflight` custom topic was removed or renamed in `crazyflies.yaml`: restore it ([running.md G](running.md#g-enabling-extra-telemetry-logging-custom-topics)). |
 
 ## Color LED
 
 | Symptom | Cause / fix |
 |---------|-------------|
-| Deck never lights green on connect | Server log says `No Color LED deck detected … skipping LED set` — deck missing/loose, or the firmware doesn't expose the `colorLedBot` params. |
-| Which drones actually have a Color LED deck fitted? | `python3 scripts/deck_check.py` (server **stopped**: it opens the radio itself). Read-only: for every enabled drone in `crazyflies.yaml` it prints which decks the firmware detected and what the LEDs are showing. |
-| `led.sh` / `color_led` warn that no `…colorLedBot.wrgb8888` params were found | `firmware_params: query_all_values_on_connect` must be `True` in `config/server.yaml` (default in this repo — don't set it back to `False`); also confirm the drone actually connected and carries the deck. |
-| `color_led` exits with `/crazyflie_server/set_parameters not available after 10s` | The server isn't running (`ros2 launch crazyflie launch.py`) or your shell is on a different `ROS_DOMAIN_ID`. |
-| Color command "succeeds" but nothing changes under `backend:=sim` | Expected — LED control is hardware-only; the sim backend declares no firmware params. |
-| `color_led_cflib.py` can't open the radio link | The crazyflie_server is still running and owns the dongle — stop the launch first. Also check the in-file `URI` (marked `# EDIT ME`) matches your drone. |
+| The deck never lights green | Server log `No Color LED deck detected … skipping LED set`: deck missing or loose, or the firmware lacks the `colorLedBot` params. |
+| Which drones carry a Color LED deck? | `python3 scripts/deck_check.py` with the server stopped (it opens the radio): detected decks and LED state for every enabled drone. |
+| `led.sh` / `color_led`: no `…colorLedBot.wrgb8888` params | `firmware_params: query_all_values_on_connect` must stay `true` in `config/server.yaml`; and the drone must be connected and carry the deck. |
+| `color_led`: `/crazyflie_server/set_parameters not available after 10s` | The server is not running, or your shell is on another `ROS_DOMAIN_ID`. |
+| A colour "succeeds" but nothing changes under `backend:=sim` | Expected: LED control is hardware only. |
+| `color_led_cflib.py` cannot open the radio | The server owns the dongle: stop the launch. Check the in-file `URI` (`# EDIT ME`). |
 
 ## Quick diagnostics
 
 ```bash
 ros2 topic hz /cf1/pose       # onboard pose (firmware logging)
 ros2 topic hz /poses          # mocap output (~50 Hz expected)
-ros2 topic info /poses        # publisher count — 0 = mocap node dead/starved
-ss -uanp | grep :1511         # two sockets on 1511 = orphan starving the mocap node
+ros2 topic info /poses        # publisher count: 0 = mocap node dead or starved
+ss -uanp | grep :1511         # two sockets on 1511 = an orphan starving the mocap node
 pgrep -f motion_capture_tracking   # leftover frozen mocap process?
 ros2 topic echo /cf1/status --once          # battery / supervisor / link
 ros2 run tf2_tools view_frames               # TF tree
 ros2 node list ; ros2 topic list
-```
-
-```bash
 ./scripts/which_server.sh                # hardware server, sim server, both, or none?
-./scripts/which_server.sh --require sim  # non-zero exit unless ONLY the sim is up (2 = both: never fly)
+./scripts/which_server.sh --require sim  # non-zero unless ONLY the sim is up (2 = both: never fly)
 python3 scripts/check_mocap_yaw.py       # live yaw of every rigid body, to square them in Motive
 ```
+
+---
+
+Full earlier text: `git show 678bac1:docs/rig/troubleshooting.md`

@@ -1,16 +1,15 @@
 # Guard: presenting to guests
 
-Run it paced (the default in the console), so you can talk for as long as you need at
-each stage. Nothing moves on until someone presses Continue. A match lasts 5 to 20
-seconds; the whole run, with take-off, the DJI and the finale, takes about 3 minutes.
+Run it paced (the console's default): nothing moves on until someone presses Continue,
+so you can talk as long as you need. A match lasts 5 to 20 seconds; the whole run, with
+take-off, the DJI and the finale, about 3 minutes.
 
-**Two people:** the *operator* at the laptop presses Continue and narrates, and the
-*pilot* flies the DJI. The show waits for the pilot twice: when the DJI goes up, and when
-it comes down.
+**Two people:** the *operator* at the laptop presses Continue and narrates; the
+*pilot* flies the DJI up and, at the end, down.
 
-Before guests arrive, run the same choices in the simulator. Pick an even pairing (see
-[how-it-works.md](how-it-works.md#the-strategies)); a match that is over in three
-seconds is hard to narrate.
+Before guests arrive, run the same choices in the simulator. Pick an even pairing
+([how-it-works.md](how-it-works.md#the-strategies)): a three-second match is hard to
+narrate.
 
 ## The script
 
@@ -47,9 +46,8 @@ adds height, a moving VIP and a safety layer underneath.
 nearly every time; the even pairings are the ones worth watching.
 
 **"What stops a crash?"** A safety layer adjusts every command together, so no two
-drones get too close and nobody flies into the VIP. Strategies can't switch it off. On
-top of that, if two drones come too close anyway, the game pauses; much closer, and
-everything lands.
+drones get too close and nobody flies into the VIP, and strategies can't switch it off.
+If two drones come too close anyway, the game pauses; much closer, and everything lands.
 
 **"Can the teams cheat?"** Each strategy only sees what the cameras see of the other
 team, never its plan. That's enforced in the code, not left to good manners.
@@ -73,8 +71,7 @@ and the safety layer don't care where positions come from.
   if anything gets too close.
 - The strategies were checked over thousands of simulated matches. Only some pairings
   have flown on real drones.
-- The drones always run a little behind their commands: about a tenth of a second
-  with the Mellinger controller, and half a second without it (see
-  [how-it-works.md](how-it-works.md#why-the-drones-run-late-and-what-to-do-about-it)).
+- The drones always run a little behind their commands
+  ([how-it-works.md](how-it-works.md#why-the-drones-run-late-and-what-to-do-about-it)).
   Say "the safety margins are set for that", not "they move exactly where they're told".
 - "I don't know, I can find out" is a good answer. Never upgrade a claim under pressure.

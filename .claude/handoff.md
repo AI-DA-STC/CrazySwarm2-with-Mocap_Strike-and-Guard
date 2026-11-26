@@ -1,11 +1,11 @@
 # Claude handoff: Strike and Guard (Crazyflie rig)
 
-> **How to use this file.** Read it at the start of a session, after [CLAUDE.md](CLAUDE.md).
+> **How to use this file.** Read it at the start of a session, after [CLAUDE.md](../CLAUDE.md).
 > §1 is the current state, §2 is what is waiting on people, §3 is the next steps.
 > Update all three before you stop. The history behind them lives in the docs, not here:
-> [docs/guard/details/design-notes.md](docs/guard/details/design-notes.md) (the last three
+> [docs/guard/details/design-notes.md](../docs/guard/details/design-notes.md) (the last three
 > sections: landing out of the way, the form-up, 2026-11-23) and
-> [docs/rig/radio-link-2026-11-17.md](docs/rig/radio-link-2026-11-17.md).
+> [docs/rig/known-issues.md](../docs/rig/known-issues.md#crazyradio-firmware-51-fixed-2026-11-17) (the 2026-11-17 radio session).
 > Last updated: 24 November 2026.
 
 ## 1. Current state (as of 23-11)
@@ -28,6 +28,10 @@
 
 Everything above is committed on `big-arena` (5a4feec, af5f992), and the docs caught up
 on 24-11.
+
+**Docs, 26-11:** one folder per demo (`docs/<demo>/` guides + `details/`), `docs/rig/` for the
+shared parts, `docs/README.md` as the map; ~82k words cut to ~54k, slides 45-52 added.
+Earlier full texts: `git show 678bac1:<path>`.
 
 ## 2. Waiting on people
 
