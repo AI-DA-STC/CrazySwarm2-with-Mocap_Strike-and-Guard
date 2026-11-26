@@ -4,13 +4,13 @@
     scripts/footage/replay_flight.py ~/.ros/flight_logs/<stamp>_guard_show <out bag dir>
 
 The flight bag has /poses but not /guard/markers (left out on purpose, ~1.5 MB/s;
-docs/details/flight-logs.md). This re-runs the same Match (seed, rules,
+docs/rig/flight-logs.md). This re-runs the same Match (seed, rules,
 strategies from meta.json) on the LOGGED measured positions and the VIP's logged
 /poses, checks it against guard_trace.csv (setpoints, intents, events), and writes
 a bag of /poses (copied) + /guard/markers (made by guard/viz.py, exactly as
 guard_show draws them) that the console's 3D view plays back:
 
-    scripts/footage/rig.sh up                 # private domain, kiosk console (guard-footage.md)
+    scripts/footage/rig.sh up                 # private domain, kiosk console (docs/guard/details/footage.md)
     ros2 bag play <out bag dir> --rate 0.5    # and film it, as film.sh does
 
 The match is re-run with each tick's setpoints locked to the logged ones (what was

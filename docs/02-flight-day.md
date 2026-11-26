@@ -45,7 +45,7 @@ Print what is enabled now: `./scripts/scan_fleet.sh --list`.
 
 - **Motive:** create one rigid body per drone, named exactly as in `crazyflies.yaml`
   (`cf1`, `cf3`, ...). Point the drone's nose along the room's **+X** axis when you create
-  it. How: [details/mocap.md](details/mocap.md#2-defining-rigid-bodies).
+  it. How: [rig/mocap.md](rig/mocap.md#2-defining-rigid-bodies).
 - **Motive:** set streaming to **Multicast** at **50 Hz**.
 
 ## 1. Place the drones and record where they are
@@ -94,7 +94,7 @@ In the preflight window, check every drone (← / → switches drone):
 | Yaw error (`err.yaw`, dashed) | within ±5° | above 20°, or a red banner |
 
 A yaw error means the Motive rigid body was created with the drone pointing the wrong
-way. Recreate it. Screenshots of good and bad: [details/preflight-gui.md](details/preflight-gui.md).
+way. Recreate it. Screenshots of good and bad: [rig/preflight-gui.md](rig/preflight-gui.md).
 
 ## 5. Dry run, then fly
 
@@ -119,12 +119,12 @@ commands against where mocap saw them, battery and radio, and a report. To recor
 flight started from a terminal, put `./scripts/record_flight.sh` in front of the
 command. The folder is printed at the start and at the end (under
 `~/.ros/flight_logs/`). Open `report.txt` in it. What everything means is in
-[details/flight-logs.md](details/flight-logs.md).
+[rig/flight-logs.md](rig/flight-logs.md).
 
 ## The web console (optional)
 
 Prefer buttons to terminals? Run `./console/run.sh`, open http://localhost:8077, and pick
 the demo under **Missions**. Each demo gets its own window with a 3D view, its settings
 and **Abort & land** (the same as Ctrl-C). Every button shows the exact command it runs.
-More: [details/console.md](details/console.md) and
-[details/mission-window.md](details/mission-window.md).
+More: [rig/console.md](rig/console.md) and
+[rig/mission-window.md](rig/mission-window.md).

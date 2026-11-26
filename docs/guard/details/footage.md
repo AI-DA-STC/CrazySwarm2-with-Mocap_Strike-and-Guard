@@ -1,11 +1,11 @@
 # Guard clips: how the simulator footage is made
 
-The animated clips in [guard/how-it-works.md](../guard/how-it-works.md) (one per strategy,
+The animated clips in [guard/how-it-works.md](../how-it-works.md) (one per strategy,
 plus two rule sets) are real simulator matches, seen in the mission console's 3D view.
 Everything that makes them is in `scripts/footage/`, so they can be made again when a
 strategy changes. This page is how, and why it is built the way it is.
 
-For a **hardware** flight, see [flight-replay-footage.md](flight-replay-footage.md). The
+For a **hardware** flight, see [flight-replay.md](flight-replay.md). The
 same rig films its console view, rebuilt from the flight log, and the hall camera's
 footage gets every drone circled.
 
@@ -44,7 +44,7 @@ strategy is a new line.
    on top and the legend (`overlay.py`) underneath; WebP for the docs (GitHub shows it
    inline; an MP4 in the repository only shows as a link), an MP4 and a contact sheet.
 
-The console runs with `&clean=1` ([mission-window.md](mission-window.md)): no trails,
+The console runs with `&clean=1` ([mission-window.md](../../rig/mission-window.md)): no trails,
 parking marks, escort circle or console overlays.
 
 ## Why the half-speed replay

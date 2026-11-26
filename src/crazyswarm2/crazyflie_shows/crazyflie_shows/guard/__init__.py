@@ -16,5 +16,5 @@ flown-for-guests demo). Four layers, each replaceable without the others:
 ``engine``        one tick of all three, pure Python. ``plan_guard`` runs it
                   offline over many seeds; ``guard_show`` runs it on drones.
 
-Nothing here imports ROS. Design notes: docs/details/guard-design-notes.md.
+Nothing here imports ROS. Design notes: docs/guard/details/design-notes.md.
 """

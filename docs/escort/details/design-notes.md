@@ -1,13 +1,13 @@
 # Escort: design notes (what was decided, what broke, what is open)
 
 The engineering record of the escort. For the ideas and the maths, read
-[escort-theory.md](escort-theory.md) first; this page is the history and the open decisions.
+[theory.md](theory.md) first; this page is the history and the open decisions.
 
 Built for the area-denial demo of **8 Oct 2026**, which took place: see
 [What flew, and what broke](#what-flew-and-what-broke-as-of-2026-10-08).
 
 > **Frame warning.** The 2026-10-08 Motive recalibration rotated the world frame
-> by +91.59 degrees ([mocap.md 2c](mocap.md#2c-the-world-frame-the-measured-arena-and-what-a-recalibration-breaks)).
+> by +91.59 degrees ([mocap.md 2c](../../rig/mocap.md#2c-the-world-frame-the-measured-arena-and-what-a-recalibration-breaks)).
 > Some worked numbers below were written in the OLD frame and say so where they
 > are known to be stale; **for any current mark, offset or radius, print it**
 > (`plan_escort --marks`, `plan_escort`, the `EscortConfig` source) rather than
@@ -112,7 +112,7 @@ and outcomes as the best available record, not a data set.
   The same morning Motive was recalibrated and the frame rotated 91.59
   degrees, which silently broke `vip_offset`, the adversary's absolute bearings
   and a private copy of the arena centre (a point transforms with rotation and
-  translation, a direction with rotation only: [mocap.md 2c](mocap.md#2c-the-world-frame-the-measured-arena-and-what-a-recalibration-breaks)).
+  translation, a direction with rotation only: [mocap.md 2c](../../rig/mocap.md#2c-the-world-frame-the-measured-arena-and-what-a-recalibration-breaks)).
   The fixes are `f6ab833` and `c38f0ab` (both 2026-10-08).
 * **Not cleared:** the walking VIP. With the shipped numbers `plan_escort
   --sweep` (re-run 2026-10-12) clears **0.00 m/s** against the reactive
@@ -156,7 +156,7 @@ Added after this document's first draft; the code comments in `escort.py` and
   it stays `track_error_m` off its own command for `track_error_s`. It
   covers the adversary and an `adversary:=external` drone too.
 * **Lights.** Colours are `LED_*` constants in `escort_show.py`; the legend an
-  audience is told is in [escort/presenting.md](../escort/presenting.md). Cyan is reserved for
+  audience is told is in [escort/presenting.md](../presenting.md). Cyan is reserved for
   the geofence hold. Cues are sent after motion commands, may never stop the
   show, and are off under `use_sim_time`.
 * **Monitoring.** `scripts/watch_escort.py` is read-only by construction
@@ -167,7 +167,7 @@ Added after this document's first draft; the code comments in `escort.py` and
 
 ## The big arena (2026-11-03)
 
-The rig moved to the big arena on 2026-11-02 ([mocap.md](mocap.md), section 2c).
+The rig moved to the big arena on 2026-11-02 ([mocap.md](../../rig/mocap.md), section 2c).
 Its usable floor is a polygon in `arena.yaml`, about twice the area of the largest
 circle that fits in it, and the escort now uses the polygon rather than a circle.
 
@@ -577,7 +577,7 @@ and the `_live` path get their first real exercise on hardware, at stage 2.
   thing to end a demo.
 * **The radio budget** was assumed on 2026-09-23 (no Crazyradio plugged in
   then). Since then it has been measured on the rig: a healthy drone shows
-  ~175 packets/s sent and ~168 unicast received ([known-issues.md](known-issues.md), 2026-10-05, a
+  ~175 packets/s sent and ~168 unicast received ([known-issues.md](../../rig/known-issues.md), 2026-10-05, a
   Crazyradio 2.0), so four drones at 20 Hz of setpoints on top is a real
   fraction of the link, not a rounding error. Whether the setpoint stream
   contributed to any telemetry stall is unmeasured.

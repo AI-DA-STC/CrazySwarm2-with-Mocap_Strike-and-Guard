@@ -1,6 +1,6 @@
 # The docs clips: name<TAB>mission values (JSON)<TAB>title headline<TAB>title line.
 # Seeds were picked from `plan_guard --matrix` runs for each policy's typical outcome; the
-# simulator does not always agree (docs/details/guard-footage.md). Run: clips.sh [names...]
+# simulator does not always agree (docs/guard/details/footage.md). Run: clips.sh [names...]
 shell	{"rules":"tag","defense":"shell","attack":"coordinated","seed":0}	SHELL  (defence)  v coordinated  ·  rules: tag	Meet each attacker out on its line to the VIP, at its own height; with a spare defender, send one round the side (a pincer).
 zone	{"rules":"tag","defense":"zone","attack":"coordinated","seed":0}	ZONE  (defence)  v coordinated  ·  rules: tag	Each defender owns a slice of the sky round the VIP and only fights inside it. Weak when several attackers crowd one slice.
 hunter	{"rules":"tag","defense":"hunter","attack":"coordinated","seed":0}	HUNTER  (defence)  v coordinated  ·  rules: tag	Two defenders pair up to go out and outnumber one attacker; the rest guard the VIP close.

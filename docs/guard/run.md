@@ -152,6 +152,6 @@ prints any near misses and the closest pair, and says where the run's trace was 
 Ctrl-C (or the console's Abort) lands everything where it is.
 
 How it is put together, and how to write your own strategy or rule set:
-[../details/guard-modules.md](../details/guard-modules.md). Why it is built this way:
-[../details/guard-theory.md](../details/guard-theory.md). What was measured:
-[../details/guard-design-notes.md](../details/guard-design-notes.md).
+[details/modules.md](details/modules.md). Why it is built this way:
+[details/theory.md](details/theory.md). What was measured:
+[details/design-notes.md](details/design-notes.md).

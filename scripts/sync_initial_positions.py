@@ -82,7 +82,7 @@ HARD_MIN_SEPARATION_M = 0.30
 #: WARNING since 2026-11-06, not a refusal: the guard, escort and STL layouts
 #: legitimately start closer (guard attackers flew 0.72/0.82 m apart on 11-04),
 #: and every show's planner checks its own spacing after the sync.
-MIN_SEPARATION_M = 1.0         # docs/details/known-issues.md rig rule
+MIN_SEPARATION_M = 1.0         # docs/rig/known-issues.md rig rule
 Z_SANITY_M = 0.5               # a grounded drone should not be this high
 
 DEFAULT_YAML = os.path.join(

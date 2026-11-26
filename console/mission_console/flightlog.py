@@ -23,7 +23,7 @@ the live console with their exact command lines, like everything else here
 show is told where its folder is through $FLIGHT_LOG_DIR.
 
 scripts/record_flight.sh makes the same folder for a flight started from a
-terminal. docs/details/flight-logs.md says what is in it and how to read it.
+terminal. docs/rig/flight-logs.md says what is in it and how to read it.
 
 ``FLIGHT_LOG_ROOT`` moves the folders; ``MISSION_CONSOLE_FLIGHT_LOG=0`` turns
 recording off. Nothing is ever deleted automatically: a flight is about

@@ -19,7 +19,7 @@ attackers, plus choreographed shows:
   defence won one each. 2026-11-23: five matches at 1 m/s, four on Mellinger (lag
   ~0.1 s vs PID's ~0.56 s, no near misses); attack 3, defence 2.
 - **Serpent**: a one-minute choreographed big-arena show, five drones
-  (docs/details/serpent-show.md).
+  (docs/serpent/run.md).
 
 OptiTrack/Motive gives every position; one laptop commands every drone. All source is
 vendored in `src/` and committed; `build/`, `install/`, `log/` are generated and
@@ -47,9 +47,9 @@ Motive ──NatNet multicast 50 Hz──► motion_capture_tracking ──/pose
   - `swarm_show`, `constellation*`, `choreography`, `figures`, `demo_show`, `plan_show`
     belong to two older shows; the demos import a few helpers from them, so they stay.
   - `serpent.py` / `serpent_show.py` / `plan_serpent`: the one-minute big-arena show
-    (docs/details/serpent-show.md). It flies through `constellation_show.run()`.
+    (docs/serpent/run.md). It flies through `constellation_show.run()`.
   - `guard/` + `guard_show.py` / `plan_guard.py`: N defenders v M attackers with
-    strategies AND rule sets plugged in by name (docs/details/guard-modules.md). Every command
+    strategies AND rule sets plugged in by name (docs/guard/details/modules.md). Every command
     passes `guard/safety_layer.py`, built on `cbf.py`: AirStack's CBF solver copied
     byte for byte (`test/test_cbf.py` checks the hash) -- never edit it here.
     Tests: `PYTHONPATH=src/crazyswarm2/crazyflie_shows python3 -m pytest -q
@@ -60,21 +60,22 @@ Motive ──NatNet multicast 50 Hz──► motion_capture_tracking ──/pose
   the measured room
   (`measured: false` makes the escort planner refuse; the STL game ignores it).
 - `src/crazyswarm2/crazyflie/src/crazyflie_server.cpp`: heavily patched; read
-  `docs/details/server-changes.md` before touching it.
+  `docs/rig/server-changes.md` before touching it.
 - Flight logs: every console flight (and any run through `scripts/record_flight.sh`) gets
   `~/.ros/flight_logs/<stamp>_<script>/` with output, meta, config, a bag and
   `report.txt` (`ros2 run crazyflie_shows flight_report <folder>`). Read it before
-  guessing what happened in a flight: docs/details/flight-logs.md. To see a guard flight
+  guessing what happened in a flight: docs/rig/flight-logs.md. To see a guard flight
   again (console view rebuilt from the log, hall-camera footage with drones circled):
   `scripts/footage/replay_flight.py` and `camera_overlay.py`,
-  docs/details/flight-replay-footage.md.
+  docs/guard/details/flight-replay.md.
 - `console/`: optional web GUI, removable (`rm -rf console/` changes nothing else).
   Drives the `ros2` CLI as subprocesses, never in-process rclpy. Each demo's window is
   `src/crazyswarm2/crazyflie_shows/missions/<demo>.yaml`. Read `console/README.md` first.
-- `docs/01-setup.md`, `docs/02-flight-day.md`, `docs/escort/`, `docs/stl/`,
-  `docs/guard/`, `docs/troubleshooting.md`: beginner guides. `docs/details/`: everything
-  implementation-specific. `docs/diagrams/strike-and-guard-diagrams.pptx`: the source of
-  every diagram (no mermaid); `docs/diagrams/export_png.sh` regenerates the PNGs.
+- `docs/`: `docs/README.md` is the map. One folder per demo (`escort/`, `stl/`,
+  `guard/`, `serpent/`): its beginner guides at the top, its deep dives in `details/`.
+  `docs/rig/` is what every demo shares (mocap, console, server, radio, flight logs,
+  troubleshooting, known issues). `docs/diagrams/strike-and-guard-diagrams.pptx`: the
+  source of every diagram (no mermaid); `docs/diagrams/export_png.sh` regenerates the PNGs.
 
 ## Build and run
 
@@ -93,7 +94,7 @@ ros2 run crazyflie_shows plan_serpent   # then serpent_show: the one-minute big-
 
 ## Rules that prevent real accidents
 
-The evidence for each is in `docs/details/known-issues.md`; read the entry before
+The evidence for each is in `docs/rig/known-issues.md`; read the entry before
 re-investigating any of these.
 
 - **Scan before every launch** (`./scripts/scan_fleet.sh`). The server hangs silently
@@ -109,7 +110,7 @@ re-investigating any of these.
 - **Shows must use `abort.take_signals()`** and set `armed = True` before the arm loop;
   `ShowAborted` is a `BaseException`, so never wrap a gate in a bare `except Exception`.
 - **Do not edit the STL algorithm in place.** It is a port; a new version arrives as a
-  new file and is re-ported (`docs/details/stl-design-notes.md`, "When v4 arrives").
+  new file and is re-ported (`docs/stl/details/design-notes.md`, "When v4 arrives").
   Questions about its behaviour go to the colleague, not into a patch.
 - **Any new compiler warning in `src/crazyswarm2` or `src/natnet_ros2` is a regression.**
   The ~25 remaining warnings are in third-party deps and were reviewed; do not silence them.
@@ -119,7 +120,9 @@ re-investigating any of these.
 ## Writing docs here
 
 Beginner guides stay short, plain and free of implementation detail; anything that
-needs code names, history or maths goes in `docs/details/`. Shared steps live in
-`docs/02-flight-day.md`, demo-specific ones in `docs/<demo>/`. Never write the fleet
+needs code names, history or maths goes in the demo's `details/` (or `docs/rig/` when
+every demo shares it). Shared steps live in `docs/02-flight-day.md`, demo-specific ones
+in `docs/<demo>/`. Say each thing once, in its one home, and link to it; prefer a diagram
+to a paragraph, and never follow a diagram with text that repeats it. Never write the fleet
 roster, marks or arena numbers into prose: print them (`scan_fleet.sh --list`,
 `plan_escort --marks`, `plan_stl`). New diagrams go into the PowerPoint deck, not mermaid.

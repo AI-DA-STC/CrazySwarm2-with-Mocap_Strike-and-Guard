@@ -48,7 +48,7 @@ is the ground truth, this prose is not.
 | 8 | `launch.py` delta (`trace_cf`, `server:=False`) | 26 / 3 | mocap-up/server-down state that `sync_initial_positions.py` needs | yes |
 | 9 | Library changes the server depends on | 580 changed lines across `crazyflie_cpp` | identity-matched replies, bounded waits, `abandon()`, trace hooks | yes — section 9 contains the other strongest candidates |
 
-**Exact file totals [diff]:**
+**Exact file totals [diff]:../details/**
 
 | file | added | removed | note |
 |---|---|---|---|
@@ -133,7 +133,7 @@ restarted. **[diff]**
    (unbounded, deliberately) and non-zero only for the duration of a rebuild; every exit path
    resets it to 0.
 
-**Why — the failure, with evidence [known-issues]:** from 2026-10-02, five drones on one Crazyradio
+**Why — the failure, with evidence [known-issues]:../details/** from 2026-10-02, five drones on one Crazyradio
 2.0 would randomly publish **exactly 0.00 Hz** of `/cfX/pose`, `/cfX/status` and
 `/cfX/kalman_preflight` while still answering latency pings and accepting `ros2 param set`. Packet
 trace 2026-10-05: `log=0 null=~200 other=1` per second — zero log packets ever leave the drone.
@@ -150,7 +150,7 @@ declared — no server restart, no power cycle. What causes the ≥1 s receive g
 is **still OPEN** (known-issues.md "STILL OPEN"; the live unmeasured candidate is the broadcast-priority
 skip in `CrazyradioThread.cpp`).
 
-**Ruled out by measurement — do not re-chase [known-issues]:** telemetry rates, the console, CPU and
+**Ruled out by measurement — do not re-chase [known-issues]:../details/** telemetry rates, the console, CPU and
 graphics load, pty back-pressure, DDS config, the dongle, drone firmware, leftover log blocks, the
 radio loop skipping connections, and every host-side explanation (nothing arrives to drop).
 
@@ -165,7 +165,7 @@ Split the PR: builder refactor first (behaviour-neutral), watchdog second, defau
 A rig **without mocap** cannot use the airborne gate as written and needs a different interlock
 (see §3) before enabling this at all.
 
-**Known wart [inferred]:** a tier-2 rebuild runs on `callback_group_cf_srv`, which is fleet-wide
+**Known wart [inferred]:../details/** a tier-2 rebuild runs on `callback_group_cf_srv`, which is fleet-wide
 and mutually exclusive, so a worst-case rebuild freezes all five drones' services and telemetry for
 up to ~14 s. Tracked as OPEN in known-issues.md; not changed on purpose, because `processAllPackets` and
 `waitForResponse` pop the same per-connection queue and the `Crazyflie` object has no mutex.
@@ -191,7 +191,7 @@ try/catch, no success reporting; `start_trajectory` starts whatever id it is han
 - The set is mutex-guarded: written on `callback_group_cf_srv`, read from the broadcast handler on
   `callback_group_all_srv_`. Genuinely concurrent; an unguarded `std::set` is UB.
 
-**Why — the failure, with evidence [known-issues]:** 2026-10-05 mid-show, all five drones stopped
+**Why — the failure, with evidence [known-issues]:../details/** 2026-10-05 mid-show, all five drones stopped
 publishing during a trajectory upload and did **not** recover when the show was stopped, because
 the *server* was stuck. The chain: the upload saturates the radio and starves other connections
 (measured `[cf5] Low unicast receive rate (0.10 < 0.90). Sent: 2807. Received: 289`) → the starved
@@ -234,7 +234,7 @@ is the only signal that clears the latch; commands set it. Mocap rather than `/c
 telemetry is dead exactly when the status topic would be asked, and the latch covers `/all/*`
 because shows take off with a broadcast that no per-drone handler sees.
 
-**Evidence and history [known-issues + diff]:** `commanded_flight_` was declared false, set false and
+**Evidence and history [known-issues + diff]:../details/** `commanded_flight_` was declared false, set false and
 read once but **never set true** until 2026-10-06, so the gate was the mocap test alone while a
 comment implied more. The gate was also evaluated once, although the bounded worst case to the last
 builder is several seconds — hence the re-check between builders. The three fields were plain
@@ -250,7 +250,7 @@ rig without mocap needs a different "definitely on the ground" signal before ena
 supervisor's own `CAN_BE_ARMED` / flying bits from `/cfX/status`, which on this rig is unusable
 precisely because that topic is the one that went silent.
 
-**Gap, partly resolved 2026-10-08 [diff + source]:** the `/all/*` latch covers `takeoff`, `go_to`
+**Gap, partly resolved 2026-10-08 [diff + source]:../details/** the `/all/*` latch covers `takeoff`, `go_to`
 and `start_trajectory`. There is deliberately none in `land`/`emergency` (they must not latch). A
 read of `crazyflie_server.cpp` confirms `notify_setpoints_stop` and both `cmd_full_state_changed`
 handlers do NOT call `note_commanded_flight()`. The escort demo streams `cmdFullState`, but
@@ -268,7 +268,7 @@ rebuild cannot silence it.
 
 **Upstream:** no such timer.
 
-**Why [known-issues]:** a guaranteed per-drone unicast floor (4/s) under the firmware's 1000 ms
+**Why [known-issues]:../details/** a guaranteed per-drone unicast floor (4/s) under the firmware's 1000 ms
 activity timeout. **Honest status: insurance, not a fix.** A healthy drone on this rig already
 receives ~168 unicast/s (`num_rx_unicast`, measured 2026-10-05) because the link library's own
 auto-pings refresh the same tick, and a connection starved for a full second starves the keep-alive
@@ -290,7 +290,7 @@ line. **launch.py:** `LaunchConfiguration('trace_cf')` folded into
 `CrazyradioThread.cpp` (a relaxed atomic load per ack when off), and `Crazyflie::m_trace*` in
 `processPacket`.
 
-**Why [known-issues]:** this is what localised the stall to the drone. The link layer reads
+**Why [known-issues]:../details/** this is what localised the stall to the drone. The link layer reads
 `log=0 null=~200`, the host layer agrees (`log=0 dispatched=0`). One summary per second per drone,
 because per-packet printing from the radio thread would be ~825 lines/s across five drones and
 would perturb the very timing under measurement; per-packet lines appear only for anomalies (a
@@ -298,7 +298,7 @@ valid-but-unregistered log packet, a port-5 packet failing `valid()`).
 
 **Traps:** it is a **launch argument**, not `--ros-args` (`ros2 launch` has no such flag), and it is
 read **at connect only**, because this rig's `/parameter_events` never loop back.
-**Stale comment [diff]:** the code comment above the parser still shows
+**Stale comment [diff]:../details/** the code comment above the parser still shows
 `--ros-args -p debug.trace_cf:=cf1`, which does not work through `ros2 launch` — trust `launch.py`.
 The same hunk also reads oddly: the `telemetry_watchdog_s` declaration sits in the middle of the
 trace section. Cosmetic, but a reviewer will notice.

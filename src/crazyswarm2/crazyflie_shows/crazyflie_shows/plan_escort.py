@@ -468,7 +468,7 @@ def main():
         return 1
     if bad_walk:
         print('  static case OK; the walking case is NOT cleared with these '
-              'numbers.\n  That is the open decision (docs/details/escort-design-notes.md): raise v_max, '
+              'numbers.\n  That is the open decision (docs/escort/details/design-notes.md): raise v_max, '
               'slow the ring,\n  shrink the radius, or walk slower. Stages 1-2 '
               'can fly as-is.\n')
         return 0

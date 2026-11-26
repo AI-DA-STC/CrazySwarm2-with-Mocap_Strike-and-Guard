@@ -49,7 +49,7 @@ over is the behaviour: turning the ring, picking the blocker, and the safety rul
 **"How does it know where everything is?"** Motion-capture cameras track reflective
 markers. All decisions are made on this laptop and sent out over one radio.
 
-More answers, sorted by audience: [details/escort-qna.md](../details/escort-qna.md).
+More answers, sorted by audience: [details/qna.md](details/qna.md).
 
 ## When something goes wrong, live
 

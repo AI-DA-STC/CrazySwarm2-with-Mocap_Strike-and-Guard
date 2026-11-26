@@ -86,7 +86,7 @@ mission: 1                      # spec version; the console refuses others
 title: Escort demo
 summary: >                      # shown on the mission card
   One paragraph: what it is, what to check first.
-docs: docs/details/escort-reference.md   # shown as a pointer, nothing reads it
+docs: docs/escort/details/reference.md   # shown as a pointer, nothing reads it
 run: escort_show                # executable in THIS package, or "pkg exe"
 flight: true                    # moves drones -> confirm step shows the commands
 abort: sigint                   # how "Abort & land" ends it: sigint | q

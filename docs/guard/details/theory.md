@@ -1,9 +1,9 @@
 # Guard: theory and design
 
 The ideas behind each algorithm, and why each design decision was taken. The plain-language
-version is [../guard/how-it-works.md](../guard/how-it-works.md); this page adds the maths.
-What was measured is in [guard-design-notes.md](guard-design-notes.md); the modules are
-described in [guard-modules.md](guard-modules.md).
+version is [../guard/how-it-works.md](../how-it-works.md); this page adds the maths.
+What was measured is in [design-notes.md](design-notes.md); the modules are
+described in [modules.md](modules.md).
 
 One warning about what this page contains. The guard borrows its machinery on purpose: the
 safety solver is AirStack's, copied byte for byte; the way the strategies play comes from
@@ -15,7 +15,7 @@ wrong command is a collision. The borrowed pieces are §3 (AirStack's solver) an
 STL game's playing theory); the contract (§2) and the constraint set built for the borrowed
 solver (§4) are what this project adds.
 
-![Borrowed pieces, one system](../diagrams/35-guard-borrowed.png)
+![Borrowed pieces, one system](../../diagrams/35-guard-borrowed.png)
 
 ---
 
@@ -87,7 +87,7 @@ ask for (§3–§5).
 
 ## 2. The stack and the contract
 
-![One decision, 20 times a second](../diagrams/27-guard-decision-loop.png)
+![One decision, 20 times a second](../../diagrams/27-guard-decision-loop.png)
 
 ### 2.1 The parties
 
@@ -98,7 +98,7 @@ ask for (§3–§5).
 | Referee | score: fills and drains every drone's meters from the measured positions | `guard/rules/` |
 
 The engine (`guard/engine.py`) runs them in one fixed order each tick (the steps are in
-[guard-modules.md](guard-modules.md#one-tick)). Two points of that order matter here:
+[modules.md](modules.md#one-tick)). Two points of that order matter here:
 **every request is projected at once onto the safe set**, after the caps and before
 integration; and the referee judges the *aircraft* positions, not the setpoints.
 
@@ -228,7 +228,7 @@ extension point its docstring names. This is the theory that is genuinely new he
 new algorithm, but the fitting together of a borrowed solver with this show's bodies, room
 and referee.
 
-![One solve keeps every rule at once](../diagrams/36-guard-one-solve.png)
+![One solve keeps every rule at once](../../diagrams/36-guard-one-solve.png)
 
 ### 4.1 Aircraft pairs: an ellipsoidal barrier
 
@@ -315,7 +315,7 @@ Three details that the corners forced:
 
 ## 5. What the filter guarantees, and what it does not
 
-![How close is too close](../diagrams/37-guard-how-close.png)
+![How close is too close](../../diagrams/37-guard-how-close.png)
 
 ### 5.1 It holds setpoints apart, not aircraft
 
@@ -389,11 +389,11 @@ earliest warning there is.
 
 ## 6. Playing well: the STL game's theory, turned round
 
-![From the STL game to the guard](../diagrams/44-stl-to-guard.png)
+![From the STL game to the guard](../../diagrams/44-stl-to-guard.png)
 
 The default strategies re-use the STL game's ideas, not its code: `stl_game.py` is a port
 of a colleague's algorithm and is never edited, and how it decides is in
-[stl-design-notes.md](stl-design-notes.md#the-algorithm). The guard adds height, a team on
+[../../stl/details/design-notes.md](../../stl/details/design-notes.md#the-algorithm). The guard adds height, a team on
 each side, a moving VIP and scoring that reads the rules. Nothing here affects safety: these
 are requests, and §2's contract holds however good or bad they are.
 
@@ -453,7 +453,7 @@ attack never committed.
 
 The default defence is the same theory played the other way (`policies/defense_shell.py`):
 
-![The shell defence, from above](../diagrams/38-guard-shell.png)
+![The shell defence, from above](../../diagrams/38-guard-shell.png)
 
 * **Urgency** ranks threats: $0.6\,(1 - \mathrm{clip}(r/4.0)) + 0.4\,\mathrm{clip}(\text{closing}, 0, 1)$
   — how close ($r$, against $d_{\text{ref}}$ = 4.0 m) and how fast it closes
@@ -477,7 +477,7 @@ The default defence is the same theory played the other way (`policies/defense_s
 
 ### 6.6 The team play: lanes, commit, decoy, regroup
 
-![The attack plays as a team](../diagrams/39-guard-attack-play.png)
+![The attack plays as a team](../../diagrams/39-guard-attack-play.png)
 
 The default attack (`policies/attack_coordinated.py`) plays as a team: **STAGE** on lanes —
 bearings spread round the VIP, each at its own height, outside the defence's reach (4.2 m) —
@@ -504,7 +504,7 @@ converge on that defender.
 
 ## 7. Rules as rates
 
-![Rules: everything is a meter](../diagrams/34-guard-rules.png)
+![Rules: everything is a meter](../../diagrams/34-guard-rules.png)
 
 ### 7.1 Meters
 
@@ -579,7 +579,7 @@ is *safe*.
 
 ## 8. The tracking lag, and why the speed caps follow
 
-![Why the drones run late](../diagrams/30-guard-lag.png)
+![Why the drones run late](../../diagrams/30-guard-lag.png)
 
 Offline, `plan_guard` models each aircraft as a **pure delay** $t_d$ followed by a
 **first-order lag** $\tau$ behind its setpoint. At speed $v$ the aircraft then sits
@@ -605,7 +605,7 @@ The honest check is a sweep, and the sweep is why the speed caps follow:
   (111 of 128) — a wider keep-out makes the constraints themselves conflict, so the gap
   cannot be bought with distance alone.
 
-![Why the advice is 0.6 m/s](../diagrams/40-guard-speed-sweep.png)
+![Why the advice is 0.6 m/s](../../diagrams/40-guard-speed-sweep.png)
 
 Hence the advice until 2026-11-23: fly 0.6 m/s until a different onboard controller
 (Mellinger, full-state tracking) is tried, and then re-measure the lag rather than

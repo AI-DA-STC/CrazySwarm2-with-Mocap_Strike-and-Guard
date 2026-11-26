@@ -3,9 +3,9 @@
 ![The guard game seen from above](../diagrams/26-guard-at-a-glance.png)
 
 This page uses no maths. The maths, and the reason behind every design choice, are in
-[details/guard-theory.md](../details/guard-theory.md). How the code is put together is in
-[details/guard-modules.md](../details/guard-modules.md); what was
-measured is in [details/guard-design-notes.md](../details/guard-design-notes.md).
+[details/theory.md](details/theory.md). How the code is put together is in
+[details/modules.md](details/modules.md); what was
+measured is in [details/design-notes.md](details/design-notes.md).
 
 ## The game
 
@@ -166,7 +166,7 @@ are:
 - shell against wolfpack under **pressure**: defenders really do get taken out.
 - shell against coordinated under **pressure**.
 
-The full table is in [details/guard-design-notes.md](../details/guard-design-notes.md).
+The full table is in [details/design-notes.md](details/design-notes.md).
 
 ## What you see on the map
 
@@ -226,7 +226,7 @@ No single check is trusted.
     everything lands.
   - A drone that stops following its command, or that the cameras lose, lands the show.
 - **Every flight is recorded**, so any of the above can be explained afterwards
-  ([details/flight-logs.md](../details/flight-logs.md)).
+  ([../rig/flight-logs.md](../rig/flight-logs.md)).
 
 ## Why the drones run late (and what to do about it)
 
@@ -254,6 +254,6 @@ comfortable margin.
 |---|---|
 | To run it | [run.md](run.md) |
 | To present it to guests | [presenting.md](presenting.md) |
-| How the code is put together | [details/guard-modules.md](../details/guard-modules.md) |
-| Why it is built this way, with the maths | [details/guard-theory.md](../details/guard-theory.md) |
-| What was measured, match by match | [details/guard-design-notes.md](../details/guard-design-notes.md) |
+| How the code is put together | [details/modules.md](details/modules.md) |
+| Why it is built this way, with the maths | [details/theory.md](details/theory.md) |
+| What was measured, match by match | [details/design-notes.md](details/design-notes.md) |

@@ -1,7 +1,7 @@
 # Troubleshooting
 
 The problems people actually hit, most common first. The full list, with causes, is in
-[details/troubleshooting.md](details/troubleshooting.md).
+[rig/troubleshooting.md](rig/troubleshooting.md).
 
 ## Starting up
 
@@ -52,13 +52,13 @@ The problems people actually hit, most common first. The full list, with causes,
 | Abort in the match: `cf10: 0.64 m from where it was commanded for 0.9 s` | The drone flew its path, about half a second late. With the standard controller, every drone trails its setpoint by ~0.56 s, so at 1 m/s it sits over half a metre behind. Mellinger, the default since 2026-11-24, runs ~0.1 s behind. Check the show's header says `controller mellinger`, not `pid`. To fly PID, fly 0.6 m/s (`-p v_max_defense:=0.6 -p v_max_attack:=0.6`). Why: [guard/how-it-works.md](guard/how-it-works.md#why-the-drones-run-late-and-what-to-do-about-it). |
 | `no /poses entry for 'operator'` right after the header | The VIP's rigid-body name is wrong. Set it to the DJI's name in Motive (`-p vip_name:=<name>`, or the console's VIP field). |
 | `FORM-UP NOT A FAIR START yet: attacker ... inside reach` | An attacker is within a defender's reach. The pilot flies the DJI further from the attackers until the show prints `fair start`, and then you press START. |
-| The match pauses and every drone holds | A near miss: the safety layer is keeping the drones apart, and play resumes by itself. If the pause does not clear in a few seconds, everything lands. Expected, not a fault. The long story: [details/guard-design-notes.md](details/guard-design-notes.md). |
+| The match pauses and every drone holds | A near miss: the safety layer is keeping the drones apart, and play resumes by itself. If the pause does not clear in a few seconds, everything lands. Expected, not a fault. The long story: [guard/details/design-notes.md](guard/details/design-notes.md). |
 
 ## The preflight window
 
 | What you see | What to do |
 |---|---|
-| It never opens | `sudo apt install python3-tk libxcb-cursor0`; if it still fails, see [details/troubleshooting.md](details/troubleshooting.md#preflight-gui). |
+| It never opens | `sudo apt install python3-tk libxcb-cursor0`; if it still fails, see [rig/troubleshooting.md](rig/troubleshooting.md#preflight-gui). |
 | A drone is missing from it | That drone is `enabled: false` in `crazyflies.yaml`. |
 
 ## Quick checks
@@ -69,5 +69,5 @@ ros2 topic hz /poses                   # camera data: about 50 Hz expected
 ros2 topic echo /cf1/status --once     # battery, link, and the "locked" flag
 ```
 
-Still stuck: [details/troubleshooting.md](details/troubleshooting.md), then
-[details/known-issues.md](details/known-issues.md) for the long story behind each one.
+Still stuck: [rig/troubleshooting.md](rig/troubleshooting.md), then
+[rig/known-issues.md](rig/known-issues.md) for the long story behind each one.

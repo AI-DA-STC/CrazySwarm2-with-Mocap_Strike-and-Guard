@@ -112,7 +112,7 @@ To look at the raw data, open the bag in Foxglove (`foxglove_bridge` is in the
 launch), or play it back with `ros2 bag play`.
 
 To watch a guard_show flight again, two tools turn its folder back into pictures; see
-[flight-replay-footage.md](flight-replay-footage.md):
+[../guard/details/flight-replay.md](../guard/details/flight-replay.md):
 - **The console's 3D view:** rebuilt from the log, intents included.
 - **The hall camera's footage:** synced to the log, with every drone circled.
 

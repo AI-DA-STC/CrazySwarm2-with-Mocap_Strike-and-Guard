@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Record a flight started from a TERMINAL, the way the mission console records
 # every flight it starts: one folder with the show's output, a ros2 bag, the
-# config as it was, and a report at the end. docs/details/flight-logs.md.
+# config as it was, and a report at the end. docs/rig/flight-logs.md.
 #
 #   ./scripts/record_flight.sh ros2 run crazyflie_shows guard_show --ros-args \
 #       -p defenders:=cf1,cf2 -p attackers:=cf10 -p paced:=true

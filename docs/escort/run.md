@@ -68,5 +68,5 @@ inside the flying area (the ring needs about a metre of room on every side), and
 ## Testing without a DJI
 
 You can steer a pretend VIP, or the attacker, with the keyboard instead. See
-[details/escort-reference.md](../details/escort-reference.md#teleop-no-dji-nobody-in-the-room).
+[details/reference.md](details/reference.md#teleop-no-dji-nobody-in-the-room).
 All show settings are listed in the same file.

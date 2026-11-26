@@ -5,8 +5,8 @@ defender sits on the threat bearing. **Reactive, not choreographed** — the
 only show here whose path is not known before takeoff.
 
 Every command, argument and number, on one page, for an operator who has done the
-[step-by-step guide](../escort/run.md) once. Why any of it is the way it is:
-[escort-design-notes.md](escort-design-notes.md).
+[step-by-step guide](../run.md) once. Why any of it is the way it is:
+[design-notes.md](design-notes.md).
 
 ---
 
@@ -66,7 +66,7 @@ In **sim**, add `-p use_sim_time:=true` to this *and* to any teleop. On
 hardware, never.
 
 **Or from the console:** Dashboard → Missions → **Escort demo** opens the
-escort's own window ([console.md](console.md)). The defaults there ARE the paced command
+escort's own window ([console.md](../../rig/console.md)). The defaults there ARE the paced command
 above; every gate is a button (Continue = Enter, Land now = `q`), the VIP /
 adversary keyboard starts with it and stays locked until `ESCORT LIVE`, the
 simulation clock follows the running stack, and **Abort & land** is one Ctrl-C.

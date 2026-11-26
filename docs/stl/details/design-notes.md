@@ -2,7 +2,7 @@
 
 5 defenders vs 5 intruders: a colleague's Signal-Temporal-Logic game, flown
 on ten Crazyflies. Added 2026-10-13. The plain-language version is
-[../stl/how-it-works.md](../stl/how-it-works.md); code is under
+[../stl/how-it-works.md](../how-it-works.md); code is under
 `src/crazyswarm2/crazyflie_shows/` and `src/crazyswarm2/crazyflie_examples/`.
 
 | File | What it is |
@@ -18,7 +18,7 @@ only ever read as a file, by `plan_stl --against`.
 
 ## The algorithm
 
-![How the STL game decides](../diagrams/43-stl-decision-loop.png)
+![How the STL game decides](../../diagrams/43-stl-decision-loop.png)
 
 Each step of the diagram, in `stl_game.py` (all in one plane, at `CRUISE_ALTITUDE`):
 
@@ -34,7 +34,7 @@ the way is clear, and fake a move now and then (`DECEPTION_*`). A defender withi
 `BLOCK_RADIUS` freezes an intruder; from tick 50, a frozen intruder is BLOCKED.
 
 The guard re-uses several of these ideas, not the code:
-[guard-theory.md §6](guard-theory.md#6-playing-well-the-stl-games-theory-turned-round).
+[../../guard/details/theory.md §6](../../guard/details/theory.md#6-playing-well-the-stl-games-theory-turned-round).
 
 ## Why the flight can be checked before takeoff
 
@@ -47,7 +47,7 @@ its seed, and `seed:=N` replays it.
 
 If a later version closes the loop on mocap, this property is gone, and with
 it the pre-flight proof. The port would then need the escort's approach
-(clamp at flight time, [escort-design-notes.md](escort-design-notes.md)).
+(clamp at flight time, [../../escort/details/design-notes.md](../../escort/details/design-notes.md)).
 
 ## What the show adds, and what it deliberately does not
 

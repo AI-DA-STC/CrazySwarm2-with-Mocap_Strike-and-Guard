@@ -65,4 +65,4 @@ to landing). **Ctrl-C** lands all ten at any time.
 happens, the seed and the closest approach. It has no gates; **Abort & land** is Ctrl-C.
 
 More settings and the procedure for a new version of the game:
-[details/stl-design-notes.md](../details/stl-design-notes.md).
+[details/design-notes.md](details/design-notes.md).

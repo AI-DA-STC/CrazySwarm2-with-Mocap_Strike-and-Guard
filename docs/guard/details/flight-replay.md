@@ -1,6 +1,6 @@
 # Watching a hardware flight again
 
-The flight log ([flight-logs.md](flight-logs.md)) gives numbers. This page covers two tools
+The flight log ([flight-logs.md](../../rig/flight-logs.md)) gives numbers. This page covers two tools
 that turn a guard_show flight back into pictures. Both live in `scripts/footage/`:
 
 - `replay_flight.py`: rebuilds the console's 3D view of the match from the flight-log
@@ -8,7 +8,7 @@ that turn a guard_show flight back into pictures. Both live in `scripts/footage/
 - `camera_overlay.py`: takes the hall camera's footage of the same flight and circles
   every drone in its team colour. The positions come from mocap.
 
-![Left: the hall camera, every drone circled. Right: the console view for the same instant](../img/flight-replay/camera-and-console.jpg)
+![Left: the hall camera, every drone circled. Right: the console view for the same instant](../../img/flight-replay/camera-and-console.jpg)
 
 *24 Nov 2026, shell v coordinated under pressure: the moment before cf4 takes down cf10.*
 
@@ -44,7 +44,7 @@ scripts/footage/replay_flight.py ~/.ros/flight_logs/<stamp>_guard_show /tmp/repl
 - Before START there is no plan to show: the gates and form-up draw the drones with the
   HOLDING and FORM-UP titles only.
 
-**Filming it.** Use the recording rig from [guard-footage.md](guard-footage.md):
+**Filming it.** Use the recording rig from [footage.md](footage.md):
 `rig.sh up`, then `ros2 bag play <bag> --rate 0.5` while ffmpeg grabs the 3D scene, then
 speed the capture back up 2x (as `film.sh` does). Two differences from the simulator
 clips:

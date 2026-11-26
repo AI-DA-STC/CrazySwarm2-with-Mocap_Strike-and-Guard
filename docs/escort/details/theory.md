@@ -1,12 +1,12 @@
 # Escort: theory and design
 
 The ideas behind each algorithm, and why each design decision was taken. The plain-language
-version is [escort/how-it-works.md](../escort/how-it-works.md); this page adds the maths. For exact
+version is [escort/how-it-works.md](../how-it-works.md); this page adds the maths. For exact
 numbers, run `ros2 run crazyflie_shows plan_escort`, which reads the live config.
 
 The plots (ring geometry, potential field, angular race, one encounter) are computed by
 calling the real escort code ([`escort_figures.py`](escort_figures.py)), so they show what
-flies. The block diagrams are in [`../diagrams/strike-and-guard-diagrams.pptx`](../diagrams/strike-and-guard-diagrams.pptx).
+flies. The block diagrams are in [`../diagrams/strike-and-guard-diagrams.pptx`](../../diagrams/strike-and-guard-diagrams.pptx).
 
 ---
 
@@ -62,7 +62,7 @@ that is trying to reach it. Two facts constrain everything:
 
 The design splits the problem into four layers, each answering one question:
 
-![Sense, decide, formation, safety check, act](../diagrams/03-decision-loop.png)
+![Sense, decide, formation, safety check, act](../../diagrams/03-decision-loop.png)
 
 Each layer is replaceable on its own. The safety filter does not care how the formation was
 chosen, and the formation does not care how the threat was detected. This separation is the
@@ -74,7 +74,7 @@ main architectural decision, and it is what lets one offline verifier check the 
 
 ### 2.1 Who computes what
 
-![Who computes what](../diagrams/02-system.png)
+![Who computes what](../../diagrams/02-system.png)
 
 ### 2.2 A cascade of control loops on separate time scales
 
@@ -111,7 +111,7 @@ planner, so the first one silently takes over. `notifySetpointsStop` hands contr
 also tells the planner where the drone *really* is, so the landing starts from the right
 place:
 
-![Two ways to command a Crazyflie](../diagrams/14-command-modes.png)
+![Two ways to command a Crazyflie](../../diagrams/14-command-modes.png)
 
 **Design consequence:** once a drone is streaming, *every* code path must keep feeding it,
 including while the show waits on a human. That is why the "waiting" gates in §7 keep the
@@ -119,7 +119,7 @@ whole control loop running instead of sleeping.
 
 ### 2.4 One control tick, end to end
 
-![One control tick, end to end](../diagrams/17-control-tick.png)
+![One control tick, end to end](../../diagrams/17-control-tick.png)
 
 ---
 
@@ -152,7 +152,7 @@ Olfati-Saber line). The potential fields those papers use were dropped. With moc
 position is known exactly, so a direct slot target plus a saturated tracking law does the
 same job with nothing to tune.
 
-![Ring geometry at rest and while blocking](../img/escort/ring_geometry.svg)
+![Ring geometry at rest and while blocking](../../img/escort/ring_geometry.svg)
 
 ### 3.2 Why rotate instead of reassigning
 
@@ -160,7 +160,7 @@ The textbook way to "put a defender in front of the threat" is **reassignment**:
 assignment problem (e.g. the Hungarian algorithm) and send the best-placed drone there. Here
 that is the wrong move:
 
-![Rotate instead of reassigning](../diagrams/04-rotate-not-swap.png)
+![Rotate instead of reassigning](../../diagrams/04-rotate-not-swap.png)
 
 **The invariant:** slot order is fixed once, at the gather, from the drones' bearings around
 the VIP (counter-clockwise order). After that, rotation preserves cyclic order. Two drones
@@ -214,7 +214,7 @@ Blocking engages when the attacker comes within an **alert radius** of the VIP a
 only beyond a **larger** release radius. This is a Schmitt trigger. The gap between the two
 thresholds absorbs noise and small oscillations, so the mode cannot chatter.
 
-![The engagement latch: alert and release radii](../diagrams/06-when-to-block.png)
+![The engagement latch: alert and release radii](../../diagrams/06-when-to-block.png)
 
 **Choosing the threshold is a timing problem, not a geometry problem.** The ring needs a few
 seconds to turn, so it must start turning while the attacker is still out of reach. The
@@ -288,7 +288,7 @@ near people).
 
 ### 4.4 The controller step, as a flowchart
 
-![Inside one controller step](../diagrams/16-controller-step.png)
+![Inside one controller step](../../diagrams/16-controller-step.png)
 
 The validation gate is the same idea as gating in target tracking. A measurement wildly
 inconsistent with what you expect is more likely a bad measurement (a stale pose, a flipped
@@ -303,7 +303,7 @@ rigid body) than a real event, so it is not acted on.
 Every target, for every drone, every tick, goes through the same three stages in a fixed
 order:
 
-![The safety filter stages](../diagrams/13-safety-filter.png)
+![The safety filter stages](../../diagrams/13-safety-filter.png)
 
 ### 5.2 The theory behind it
 
@@ -362,7 +362,7 @@ Moving to a CBF is open future work.
 No single mechanism is trusted. Each layer catches what the one before it can miss, and the
 layers are ordered by *when they can act*:
 
-![Defence in depth](../diagrams/09-safety-layers.png)
+![Defence in depth](../../diagrams/09-safety-layers.png)
 
 Three design ideas worth naming:
 
@@ -397,7 +397,7 @@ wall clock forces everyone to be ready at a moment nobody chose. The show is the
 **operator-paced**: the attacker's progress waits for the operator, but **the defence never
 waits for anybody**.
 
-![The show, step by step](../diagrams/10-show-sequence.png)
+![The show, step by step](../../diagrams/10-show-sequence.png)
 
 Design decisions here:
 
@@ -447,7 +447,7 @@ $$
 | wall term | the same shape of push away from the arena edge, within 0.40 m of it |
 | $v^{\text{att}}_{\max}$ | the planner's speed cap (0.80 m/s). The command then passes the defenders' safety filter, so the drone flies at $v_{\max}$ = 0.60 m/s at most (§8.3) |
 
-![Attacker potential field](../img/escort/potential_field.svg)
+![Attacker potential field](../../img/escort/potential_field.svg)
 
 Potential fields have well-known failure modes: local minima and oscillation (Koren &
 Borenstein, 1991). This one had a specific one, visible in the figure. **Inside the ring, the
@@ -459,7 +459,7 @@ idea as §5. **Forces make it look like it is avoiding; projections make it actu
 
 ### 8.2 Behaviour on top of the field
 
-![The reactive attacker](../diagrams/15-attacker.png)
+![The reactive attacker](../../diagrams/15-attacker.png)
 
 * **Gap seeking.** Instead of driving straight at the VIP (which only bounced it in and out on
   one line and never made the ring move), it aims at the **widest gap** between defenders,
@@ -473,7 +473,7 @@ idea as §5. **Forces make it look like it is avoiding; projections make it actu
 
 ### 8.3 Why the defence can win: the race is angular
 
-![Angular race](../img/escort/angular_race.svg)
+![Angular race](../../img/escort/angular_race.svg)
 
 The defenders do not need to be faster. They need to **turn** faster. Both sides are
 contesting a *bearing* around the VIP, and the defenders sit on the inside track. To cover
@@ -511,7 +511,7 @@ the one that flies.
 
 ## 9. One encounter, end to end
 
-![One simulated encounter](../img/escort/encounter.svg)
+![One simulated encounter](../../img/escort/encounter.svg)
 
 Read it as the theory in action:
 
@@ -527,7 +527,7 @@ Read it as the theory in action:
 
 ## 10. How it is verified
 
-![How it is verified](../diagrams/18-verification.png)
+![How it is verified](../../diagrams/18-verification.png)
 
 * **Software-in-the-loop with the identical code.** `escort.py` is pure (no ROS, no radio), and
   both the verifier and the flight script import the *same* objects. What passes offline is
@@ -546,7 +546,7 @@ Read it as the theory in action:
 
 ## 11. Lessons that generalise
 
-![Design lessons](../diagrams/19-lessons.png)
+![Design lessons](../../diagrams/19-lessons.png)
 
 The last item came from a real failure. On 2026-10-08 Motive was recalibrated and the world
 frame rotated by about 92°. **A point transforms with rotation and translation; a direction

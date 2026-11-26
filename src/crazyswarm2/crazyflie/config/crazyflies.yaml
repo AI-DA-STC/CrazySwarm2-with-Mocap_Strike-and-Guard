@@ -190,7 +190,7 @@ all:
       # log-block budget; every var checked in this fleet's log TOC
       # (cache/E46BE59F.json): stock firmware groups. Keep this var ORDER
       # (flight_report reads it from the flight's config copy).
-      # docs/details/flight-logs.md, "The downwash detector".
+      # docs/rig/flight-logs.md, "The downwash detector".
       # downwash:
       #   frequency: 10 # Hz
       #   vars:

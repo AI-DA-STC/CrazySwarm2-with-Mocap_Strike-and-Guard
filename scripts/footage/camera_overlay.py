@@ -12,7 +12,7 @@ The camera model (camera01.json, next to this script) maps a mocap position to a
 pixel: a 3x4 projection plus radial distortion, fitted 2026-11-25 to ~350 LED
 detections over a whole flight (median error 2.6 px). It holds while Camera 01 is
 not moved or re-zoomed; `calibrate` refits it from a flight's LEDs, starting from the
-current model. Read docs/details/flight-replay-footage.md first.
+current model. Read docs/guard/details/flight-replay.md first.
 
 Time: a hall-camera export starts at the time in its name (D04_YYYYmmddHHMMSS), but
 the camera's clock and the laptop's differ by a fraction of a second, so `sync`

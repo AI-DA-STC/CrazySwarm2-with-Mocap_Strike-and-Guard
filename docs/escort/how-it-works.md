@@ -3,7 +3,7 @@
 ![The escort demo seen from above](../diagrams/01-at-a-glance.png)
 
 This page uses no maths. The maths, and the reason behind every design choice, are in
-[details/escort-theory.md](../details/escort-theory.md).
+[details/theory.md](details/theory.md).
 
 ## The pieces
 
@@ -85,7 +85,7 @@ while, it gives up on its own. Run the demo ten times and you get ten different 
 
 The attacker also obeys the safety rules: it keeps away from the VIP and the defenders,
 and its speed is capped like theirs. The defenders hold their line, and the attacker is
-the one that gives way. Details: [details/escort-theory.md, part 8](../details/escort-theory.md#8-the-adversary-a-deliberately-beatable-opponent).
+the one that gives way. Details: [details/theory.md, part 8](details/theory.md#8-the-adversary-a-deliberately-beatable-opponent).
 
 ## Layers of safety
 
@@ -113,6 +113,6 @@ on what is happening.
 
 | You want | Read |
 |---|---|
-| The maths and the design reasons | [details/escort-theory.md](../details/escort-theory.md) |
-| What was tried, what broke, what is still open | [details/escort-design-notes.md](../details/escort-design-notes.md) |
-| Every setting and number | [details/escort-reference.md](../details/escort-reference.md) |
+| The maths and the design reasons | [details/theory.md](details/theory.md) |
+| What was tried, what broke, what is still open | [details/design-notes.md](details/design-notes.md) |
+| Every setting and number | [details/reference.md](details/reference.md) |

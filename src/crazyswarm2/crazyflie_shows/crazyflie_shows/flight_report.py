@@ -4,7 +4,7 @@
     ros2 run crazyflie_shows flight_report ~/.ros/flight_logs/20261105_163111_guard
     ros2 run crazyflie_shows flight_report <dir> --json      # also print report.json
 
-A flight folder (docs/details/flight-logs.md) holds ``bag/`` (a ros2 bag of
+A flight folder (docs/rig/flight-logs.md) holds ``bag/`` (a ros2 bag of
 /poses, every drone's commands, onboard pose and status, and /rosout),
 ``output.log`` (everything the show printed) and ``meta.json``. This reads
 them offline -- no ROS graph, no node -- and writes ``report.txt`` and

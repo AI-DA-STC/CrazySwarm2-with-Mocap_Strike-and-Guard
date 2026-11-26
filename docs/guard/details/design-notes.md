@@ -1,8 +1,8 @@
 # Guard: design notes
 
 The dated log: what was decided, measured and learned, oldest first. The current design
-is in [guard-theory.md](guard-theory.md) (why) and [guard-modules.md](guard-modules.md)
-(the code); the beginner guide is [../guard/run.md](../guard/run.md). Numbers are as
+is in [theory.md](theory.md) (why) and [modules.md](modules.md)
+(the code); the beginner guide is [../guard/run.md](../run.md). Numbers are as
 measured on the day: run `plan_guard` for current ones.
 
 Built 2026-11-03 for the big arena, as the successor experiment to the escort (which
@@ -22,7 +22,7 @@ stays the demo flown for guests). It has flown on hardware since early November 
   (`test_a_held_drone_still_dodges_the_dji`).
 - **Two lessons from building `coordinated`.** Gating the attempt on a provably open
   lane meant it never went at all, so robustness now chooses the line instead
-  ([theory §6.3](guard-theory.md#63-robustness-chooses-the-line-it-does-not-gate-the-attempt)).
+  ([theory §6.3](theory.md#63-robustness-chooses-the-line-it-does-not-gate-the-attempt)).
   Fleeing on the first approach of a defender made striking impossible.
 - **"Not following" is judged against the last 1.0 s of setpoints (11-17).** Against the
   current setpoint, the ~0.6 s lag read as 0.6 m off at 1 m/s and aborted the 17-11
@@ -110,7 +110,7 @@ was kept. The stand-in aircraft in `plan_guard` (first-order lag, 0.25 s) never
 comes inside the floor, so the cause is something it does not model: real
 tracking, mocap glitches, or both. Every near miss now prints the setpoint gap
 and each drone's tracking error at that tick. Each run writes a trace to
-its flight folder (`guard_trace.csv`, next to the bag the console records: [flight-logs.md](flight-logs.md)). The next hardware session should answer it.
+its flight folder (`guard_trace.csv`, next to the bag the console records: [flight-logs.md](../../rig/flight-logs.md)). The next hardware session should answer it.
 
 **The finale (guard/finale.py)** makes the result visible on the drones:
 - losers dark, low, home, landed;
@@ -163,7 +163,7 @@ tell apart.
 
 Seven Crazyflies (cf1-cf4 defend, cf10-cf12 attack), the DJI as the VIP (rigid body
 `dji`), `pressure` rules, paced from the console. Every run has a flight folder
-([flight-logs.md](flight-logs.md)); that is where all the numbers below come from.
+([flight-logs.md](../../rig/flight-logs.md)); that is where all the numbers below come from.
 
 | Run | Ended | Why |
 |---|---|---|
@@ -197,7 +197,7 @@ Consequences:
 - At 0.6 m/s, 113 of 128 are.
 - Widening `d_cc` to 0.60 m moved the problem into solver emergencies (111 of 128).
 
-![Why the advice is 0.6 m/s](../diagrams/40-guard-speed-sweep.png)
+![Why the advice is 0.6 m/s](../../diagrams/40-guard-speed-sweep.png)
 
 The fix to try was `-p controller:=mellinger` (full-state tracking); until then the
 advice was 0.6 m/s. It was flown on 2026-11-23, with a lag of 0.08-0.14 s: see the last
@@ -235,7 +235,7 @@ laptop load).
 ## More strategies (2026-11-06)
 
 `zone` and `hunter` (defence), `flood` and `wolfpack` (attack); what each does is in
-[guard-modules.md](guard-modules.md). They were designed to be different ideas, not
+[modules.md](modules.md). They were designed to be different ideas, not
 parameter variants, and checked offline on every pairing with all eight strategies.
 
 **Safety** (`plan_guard`, 12 seeds per cell; `tag` and `pressure`; 4 v 3, 2 v 1, 5 v 5
@@ -386,7 +386,7 @@ acceleration-level CBF.
 ## The form-up (2026-11-17 to 11-23)
 
 Until 11-17 a match started over the floor marks, so where the pilot parked the DJI
-decided the geometry, and often the game. The form-up (`guard/formation.py`, guard-modules.md
+decided the geometry, and often the game. The form-up (`guard/formation.py`, modules.md
 7b) moves the start into the air, round the VIP's live position. It went through three
 versions, each one driven by a flight:
 
@@ -418,7 +418,7 @@ at 0.42 m or more.
 
 Four defenders (cf1-cf4) against three attackers (cf10-cf12), the DJI as the VIP,
 `pressure` rules, 1 m/s for both teams, paced from the console. Every run has a flight
-folder ([flight-logs.md](flight-logs.md)), and the numbers below come from their reports.
+folder ([flight-logs.md](../../rig/flight-logs.md)), and the numbers below come from their reports.
 
 | Run | Controller | Set-up | Ended |
 |---|---|---|---|
@@ -445,7 +445,7 @@ cautious verdict. Use `--delay 0.1 --tau 0.1` for the Mellinger plant.
 
 **2. The strike that prompted contested strikes.** At 13:57, cf10 struck 1.40 m from the
 DJI with cf4 shadowing it about 0.45 m away for the whole second. Under the rules as they
-were, the block counted for nothing. `strike_block` (every rule set, guard-modules.md
+were, the block counted for nothing. `strike_block` (every rule set, modules.md
 section 4) makes a defender that close contest the strike. Measured in `plan_guard`
 (Mellinger plant, hold layout with the DJI moved 1 m, finale on, 12 seeds × 64 cells):
 

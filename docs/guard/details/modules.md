@@ -2,12 +2,12 @@
 
 How the guard show is put together: what each module does, what it may and may not
 do, and how one tick flows through them. Why it is built this way:
-[guard-theory.md](guard-theory.md). What was measured: [guard-design-notes.md](guard-design-notes.md).
-To run it: [../guard/run.md](../guard/run.md).
+[theory.md](theory.md). What was measured: [design-notes.md](design-notes.md).
+To run it: [../guard/run.md](../run.md).
 
 All the code is under `src/crazyswarm2/crazyflie_shows/crazyflie_shows/`.
 
-![How the guard code fits together](../diagrams/41-guard-modules.png)
+![How the guard code fits together](../../diagrams/41-guard-modules.png)
 
 ## One tick
 
@@ -40,7 +40,7 @@ Every 50 ms (20 Hz), in this order:
   - Status is active or retiring. Outcome is downed or struck. A retiring drone first
     *exits* under the engine's command (`Match.exiting`; brake, then clear of the VIP)
     and is handed to the caller to land by `Match.pop_landing()`; see
-    guard-design-notes.md, "Landing out of the way".
+    design-notes.md, "Landing out of the way".
 - **`View`:** the time, the VIP's position and velocity, every agent, the arena, the
   config (limits and safety), the rule set in play, everybody's meters, and the public
   events so far.
@@ -118,7 +118,7 @@ Rule sets plug in by name like strategies (`-p rules:=...`, `--rules`), and
 `plan_guard --list` names them.
 
 The model (meters, the five built-in sets, `pressure`'s counting) is
-[guard-theory.md §7](guard-theory.md#7-rules-as-rates). In code, a rule set is a `Rules`
+[theory.md §7](theory.md#7-rules-as-rates). In code, a rule set is a `Rules`
 subclass with:
 - `down_rates`, `strike_rates`: how fast each meter fills, per second, vectorised so a
   planner can call them on whole rollouts;
@@ -268,7 +268,7 @@ Tests: `test/test_guard_formup.py`.
 ## 7c. `guard/watch.py`: the near-miss watch
 
 It runs on the *measured* aircraft every tick in `guard_show`, gates included. The
-thresholds and why they are where they are: [guard-theory.md §5.2](guard-theory.md#52-defence-in-depth-on-the-aircraft-themselves).
+thresholds and why they are where they are: [theory.md §5.2](theory.md#52-defence-in-depth-on-the-aircraft-themselves).
 The parameters:
 - `mocap_jump_m`: a glitch, not a near miss; the drone flies on its setpoint for two
   ticks;
@@ -320,7 +320,7 @@ them there" from "the aircraft lagged the plan".
   `controller` = `mellinger` (the default since 2026-11-24) sets
   `stabilizer.controller` 2 on the flying drones before arming and back to 1 (PID)
   after, landing or abort (`set_controller`, in a `finally`). On 2026-11-23 it cut
-  the lag to 0.08-0.14 s from PID's ~0.56 s (guard-design-notes.md). With
+  the lag to 0.08-0.14 s from PID's ~0.56 s (design-notes.md). With
   `use_sim_time` nothing is switched: the simulator runs Mellinger from `server.yaml`,
   and restoring PID after would leave it on PID. `controller:=pid` leaves the server's
   setting alone.
@@ -337,4 +337,4 @@ them there" from "the aircraft lagged the plan".
   `escort_show.py`), so `/poses` is never queued behind the drones' own pose and status
   topics. `trace:=true` (the default) writes every tick's measured and commanded position, phase and intent
   per drone to `guard_trace.csv` in the flight's folder
-  ([flight-logs.md](flight-logs.md)).
+  ([flight-logs.md](../../rig/flight-logs.md)).

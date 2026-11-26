@@ -59,7 +59,7 @@ class GuardConfig:
     #: arena.yaml's 0.80 m (which every other show keeps), relaxed 2026-11-03
     #: at the user's request: the STL game is designed to 0.20 m between
     #: drones at ONE cruise height ("closest approach 0.18-0.20 m",
-    #: stl-design-notes.md). Side by side at one height is the regime that is
+    #: docs/stl/details/design-notes.md). Side by side at one height is the regime that is
     #: fine; one drone over another is the separate DOWNWASH hazard, so the
     #: vertical floor stays escort.DOWNWASH_DZ (0.62 m, measured).
     min_separation: float = 0.35

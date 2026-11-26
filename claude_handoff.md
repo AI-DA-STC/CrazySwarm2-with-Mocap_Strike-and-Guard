@@ -3,9 +3,9 @@
 > **How to use this file.** Read it at the start of a session, after [CLAUDE.md](CLAUDE.md).
 > §1 is the current state, §2 is what is waiting on people, §3 is the next steps.
 > Update all three before you stop. The history behind them lives in the docs, not here:
-> [docs/details/guard-design-notes.md](docs/details/guard-design-notes.md) (the last three
+> [docs/guard/details/design-notes.md](docs/guard/details/design-notes.md) (the last three
 > sections: landing out of the way, the form-up, 2026-11-23) and
-> [docs/details/radio-link-2026-11-17.md](docs/details/radio-link-2026-11-17.md).
+> [docs/rig/radio-link-2026-11-17.md](docs/rig/radio-link-2026-11-17.md).
 > Last updated: 24 November 2026.
 
 ## 1. Current state (as of 23-11)

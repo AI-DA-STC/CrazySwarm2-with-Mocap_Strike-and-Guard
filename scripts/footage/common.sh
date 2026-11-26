@@ -1,5 +1,5 @@
 # Sourced by every scripts/footage/ script: one private, isolated recording setup.
-# Read docs/details/guard-footage.md first. Everything is overridable:
+# Read docs/guard/details/footage.md first. Everything is overridable:
 #
 #   FOOTAGE_DIR      work folder: bags, raw takes, clips, logs   (~/.cache/guard-footage)
 #   FOOTAGE_DOMAIN   ROS_DOMAIN_ID of the sim, NEVER the lab's    (87)

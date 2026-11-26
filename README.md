@@ -35,7 +35,7 @@ motion capture.
 3. **Pick a demo** from the table above. Run it in the simulator first.
 
 Something not working? See [docs/troubleshooting.md](docs/troubleshooting.md).
-Want the full detail? [docs/details/](docs/details/README.md).
+Everything else: [the docs map](docs/README.md).
 
 ## Safety first
 
@@ -51,7 +51,7 @@ Want the full detail? [docs/details/](docs/details/README.md).
 ## What is in this repo
 
 ```
-docs/                    the guides above, plus docs/details/ for the deep dives
+docs/                    one folder per demo (guides + details/), rig/ for the shared parts
   diagrams/              every diagram, as an editable PowerPoint file + PNGs
 scripts/                 setup, build, radio scan, drone placement helpers
 console/                 optional web GUI (start it with ./console/run.sh)
@@ -66,7 +66,7 @@ src/motion_capture_tracking/, src/natnet_ros2/   camera drivers
 
 The show package also contains code for older choreographed shows: carousel and
 constellation, and the newer one-minute serpent, flown in the big arena on
-2 November 2026 ([details](docs/details/serpent-show.md)). The demos share some helpers
+2 November 2026 ([details](docs/serpent/run.md)). The demos share some helpers
 with them, so that code is still here.
 This repo documents only the three demos.
 
@@ -80,4 +80,4 @@ OptiTrack's NatNet SDK, so build once on a network with internet.
 The STL game's algorithm is a colleague's, used with permission; its original script is
 kept unchanged in `crazyflie_examples`. The escort, the safety layer and the tools are
 this project's own. Who owns which layer, measured file by file:
-[docs/details/provenance.md](docs/details/provenance.md).
+[docs/rig/provenance.md](docs/rig/provenance.md).

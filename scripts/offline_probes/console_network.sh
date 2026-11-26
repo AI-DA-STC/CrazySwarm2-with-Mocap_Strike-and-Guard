@@ -6,7 +6,7 @@
 #   scripts/offline_window.sh console_network
 #
 # Sim backend only, on the wrapper's private ROS_DOMAIN_ID; never touches a radio.
-# Found 2026-11-05 (docs/details/known-issues.md, "console blind after a Wi-Fi
+# Found 2026-11-05 (docs/rig/known-issues.md, "console blind after a Wi-Fi
 # switch"): the ros2 daemon started before the switch lists NO nodes afterwards,
 # so console health says "crazyflie_server not running" while RViz works.
 #

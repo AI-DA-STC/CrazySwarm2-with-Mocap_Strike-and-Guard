@@ -1,6 +1,6 @@
 # Mission view for the guard show (guard_show) -- read by the mission console
 # (console/mission_console/missions.py), never by the show itself. Delete this
-# file and guard_show is unchanged. Format: docs/details/mission-window.md.
+# file and guard_show is unchanged. Format: docs/rig/mission-window.md.
 #
 # N defenders v M attackers, strategies and rule sets chosen by name. One
 # window: the choices made before takeoff, the Enter gates of a paced run

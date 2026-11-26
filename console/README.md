@@ -161,7 +161,7 @@ view (three.js, fed straight from foxglove_bridge on :8765, read-only), the
 prompts as buttons, the teleop as a key pad, and an **Abort & land** that sends
 exactly one SIGINT so the show's own `abort.py` landing is never chased by a
 SIGTERM. A new demo is a new YAML file, not a console change. The spec
-format: [`docs/details/mission-window.md`](../docs/details/mission-window.md).
+format: [`docs/rig/mission-window.md`](../docs/rig/mission-window.md).
 `/mission` alone lists them; a spec that does not validate is listed with its
 error. The built-in **Any flight script** window runs any discovered script
 with the generic `>>>` gate.
@@ -254,7 +254,7 @@ says commands drones gets its own folder under `~/.ros/flight_logs/`:
 The recorder and the report run as ordinary processes in the live console. The
 show gets `$FLIGHT_LOG_DIR`. `FLIGHT_LOG_ROOT` moves the folders, and
 `MISSION_CONSOLE_FLIGHT_LOG=0` turns recording off. Contents and how to read
-them: [../docs/details/flight-logs.md](../docs/details/flight-logs.md).
+them: [../docs/rig/flight-logs.md](../docs/rig/flight-logs.md).
 
 ---
 
@@ -291,7 +291,7 @@ title, explanation, fix) makes any matching line in any process output surface
 on that box.
 
 *Add a mission window:* **do not touch the console.** Write
-`missions/<name>.yaml` in the show's package ([`docs/details/mission-window.md`](../docs/details/mission-window.md));
+`missions/<name>.yaml` in the show's package ([`docs/rig/mission-window.md`](../docs/rig/mission-window.md));
 a widget the stock set lacks goes in a `view:` module next to the spec. Change
 the console only for something every mission needs — a new stock widget in
 `static/mission/app.mjs` (register it in `STOCK`, and add its name to
@@ -304,7 +304,7 @@ POST `{values: {key: value|null}}`, broadcast as an SSE `settings` event),
 a pid the census lists as an OUTSIDE rig process), `GET /api/journal`; SSE
 `fleet` events carry each journal entry. Health facts gain `system`,
 `server_any`, `mocap_any`, `stack_any` (machine-wide) beside the per-domain
-`server_running` / `mocap_running`. See docs/details/console.md 5.0.
+`server_running` / `mocap_running`. See docs/rig/console.md 5.0.
 
 *Mission API* (`server.py`): `GET /api/missions` (cards), `GET /api/mission?id=`
 (spec + its processes), `POST /api/mission/preview` and `/api/mission/start`
@@ -357,7 +357,7 @@ Flight scripts are discovered, not hard-coded: `catalog.discover_scripts()` scan
 every `crazyflie_py`-dependent package under `install/` (so the `crazyflie_shows`
 scripts appear automatically, with an escort-specific stdin note in `catalog.py`).
 The operator-facing GUI-action-to-command table lives in
-[../docs/details/console.md](../docs/details/console.md); this file is for editing the console.
+[../docs/rig/console.md](../docs/rig/console.md); this file is for editing the console.
 
 Tests (stdlib `unittest`, no ROS needed — the spec checks read the installed
 packages, so source the workspace first):

@@ -3,7 +3,7 @@
 Five intruders try to cross the room to a goal line. Five defenders try to stop them.
 It is the escort's problem turned around: instead of guarding one moving VIP, the team
 guards a line. The algorithm is a colleague's; this repo flies it and checks it. The
-maths and the history are in [details/stl-design-notes.md](../details/stl-design-notes.md).
+maths and the history are in [details/design-notes.md](details/design-notes.md).
 
 ![The STL game at a glance](../diagrams/22-stl-at-a-glance.png)
 
@@ -55,7 +55,7 @@ one is bumped, the others do not react to it.
 - **As shipped, the check refuses to fly it.** On every seed tried, defender cf5 passes
   10.8 cm from intruder cf13 just after cf13 was blocked and started landing. The safety
   floor is 15 cm. Flying it anyway means choosing a lower floor (`min_sep:=0.10`) on
-  purpose. Why it happens: [details/stl-design-notes.md](../details/stl-design-notes.md#measured-2026-10-13-v3-current-yaml).
+  purpose. Why it happens: [details/design-notes.md](details/design-notes.md#measured-2026-10-13-v3-current-yaml).
 - **Drones pass close by design.** Defenders get within about 20 cm of intruders, which
   is how blocking works. The escort keeps 80 cm.
 - **Part of the game square is outside the measured tracking area.** The square is
